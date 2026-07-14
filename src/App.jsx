@@ -30,6 +30,11 @@ const PJ_PRIORITIES = [
   { v: 4, label: "軽微・不急", color: "#8B8578" },
 ];
 
+const PJ_STATUSES = [
+  { v: "done", label: "完了", color: "#6B7F6E" },
+  { v: "hold", label: "保留", color: "#A39D8C" },
+];
+
 const MINUTE_OPTIONS = Array.from({ length: 16 }, (_, i) => (i + 1) * 15);
 const WORK_MINUTES = 8 * 60;
 
@@ -419,7 +424,7 @@ export default function App() {
   const [addText, setAddText] = useState("");
   const [addPriority, setAddPriority] = useState(2);
   const [addPJPriority, setAddPJPriority] = useState(2);
-  const [collapsedPrioritySection, setCollapsedPrioritySection] = useState(() => new Set(PJ_PRIORITIES.map((p) => p.v)));
+  const [collapsedPrioritySection, setCollapsedPrioritySection] = useState(() => new Set([...PJ_PRIORITIES.map((p) => p.v), ...PJ_STATUSES.map((s) => s.v)]));
   const [addDate, setAddDate] = useState("");
   const [addStartTime, setAddStartTime] = useState("");
   const [addEstMinutes, setAddEstMinutes] = useState("");
@@ -610,6 +615,22 @@ export default function App() {
 
   function updatePJPriority(pjId, priority) {
     setProjects((prev) => prev.map((p) => (p.id === pjId ? { ...p, priority } : p)));
+  }
+
+  function updatePJStatus(pjId, status) {
+    setProjects((prev) => prev.map((p) => (p.id === pjId ? { ...p, status: status || null } : p)));
+  }
+
+  function updatePJName(pjId, name) {
+    setProjects((prev) => prev.map((p) => (p.id === pjId ? { ...p, name } : p)));
+  }
+
+  function updateTaskName(pjId, taskId, name) {
+    setProjects((prev) => prev.map((p) => p.id !== pjId ? p : { ...p, tasks: p.tasks.map((t) => (t.id === taskId ? { ...t, name } : t)) }));
+  }
+
+  function updateSubtaskText(pjId, taskId, subId, text) {
+    setProjects((prev) => prev.map((p) => p.id !== pjId ? p : { ...p, tasks: p.tasks.map((t) => t.id !== taskId ? t : { ...t, subtasks: t.subtasks.map((s) => (s.id === subId ? { ...s, text } : s)) }) }));
   }
 
   function addItem(e) {
@@ -1018,15 +1039,18 @@ export default function App() {
           <div style={styles.tree}>
             {projects === null && <p style={styles.empty}>読み込み中…</p>}
             {projects !== null && visibleProjects.length === 0 && <p style={styles.empty}>まだPJがない。上のフォームから作成できる。</p>}
-            {projects !== null && visibleProjects.length > 0 && PJ_PRIORITIES.map((pri) => {
-              const group = visibleProjects.filter((pp) => (pp.priority || 2) === pri.v);
+            {projects !== null && visibleProjects.length > 0 && [
+              ...PJ_PRIORITIES.map((pri) => ({ key: pri.v, label: pri.label, color: pri.color, small: false, group: visibleProjects.filter((pp) => !pp.status && (pp.priority || 2) === pri.v) })),
+              ...PJ_STATUSES.map((st) => ({ key: st.v, label: st.label, color: st.color, small: true, group: visibleProjects.filter((pp) => pp.status === st.v) })),
+            ].map((sec) => {
+              const group = sec.group;
               if (group.length === 0) return null;
-              const sectionOpen = !collapsedPrioritySection.has(pri.v);
+              const sectionOpen = !collapsedPrioritySection.has(sec.key);
               return (
-                <div key={pri.v} style={styles.prioritySection}>
-                  <button type="button" onClick={() => togglePrioritySection(pri.v)} style={{ ...styles.prioritySectionHeader, color: pri.color, borderColor: pri.color }}>
+                <div key={sec.key} style={sec.small ? styles.statusSection : styles.prioritySection}>
+                  <button type="button" onClick={() => togglePrioritySection(sec.key)} style={{ ...(sec.small ? styles.statusSectionHeader : styles.prioritySectionHeader), color: sec.color, borderColor: sec.color }}>
                     <span>{sectionOpen ? "▾" : "▸"}</span>
-                    <span>{pri.label}</span>
+                    <span>{sec.label}</span>
                     <span style={styles.prioritySectionCount}>{group.length}</span>
                   </button>
                   {sectionOpen && (
@@ -1039,9 +1063,15 @@ export default function App() {
                 <div key={p.id} style={{ ...styles.pjCard, borderLeftColor: oColor }} className="row-in">
                   <div style={styles.pjHeader}>
                     <button onClick={() => toggleOpenPJ(p.id)} style={styles.collapseBtn} aria-label={pjOpen ? "折りたたむ" : "展開する"}>{pjOpen ? "▾" : "▸"}</button>
-                    <button onClick={() => toggleGantt(p.id)} style={{ ...styles.pjName, background: ganttPJId === p.id ? "#EAE6DB" : "transparent" }} aria-label="ガントチャートを表示">{p.name}</button>
+                    <input type="text" value={p.name} onChange={(e) => updatePJName(p.id, e.target.value)} style={styles.pjNameInput} aria-label="PJ名を編集" />
+                    {pt > 0 && pd === pt && <span style={styles.doneMark}>✅</span>}
+                    <button type="button" onClick={() => toggleGantt(p.id)} style={{ ...styles.ganttToggleBtn, background: ganttPJId === p.id ? "#EAE6DB" : "transparent" }} aria-label="ガントチャートを表示">📊</button>
                     <select value={p.priority || 2} onChange={(e) => updatePJPriority(p.id, Number(e.target.value))} style={styles.moveSelect} aria-label="優先度を変更">
                       {PJ_PRIORITIES.map((pr) => <option key={pr.v} value={pr.v}>{pr.label}</option>)}
+                    </select>
+                    <select value={p.status || ""} onChange={(e) => updatePJStatus(p.id, e.target.value)} style={styles.moveSelect} aria-label="状態を変更">
+                      <option value="">進行中</option>
+                      {PJ_STATUSES.map((st) => <option key={st.v} value={st.v}>{st.label}</option>)}
                     </select>
                     {topTab === "総合" && <span style={{ ...styles.metaTag, borderColor: oColor, color: oColor }}>{TOP_TABS.find((c) => c.key === p.owner)?.label}</span>}
                     {(topTab === "総合" || subTab === "総合") && p.subcategory && (
@@ -1062,7 +1092,8 @@ export default function App() {
                           <div key={t.id} style={styles.taskCard} className="row-in">
                             <div style={styles.taskHeader}>
                               <button onClick={() => toggleOpenTask(t.id)} style={styles.collapseBtnSm} aria-label={taskOpen ? "折りたたむ" : "展開する"}>{taskOpen ? "▾" : "▸"}</button>
-                              <span style={styles.taskName}>{t.name}</span>
+                              <input type="text" value={t.name} onChange={(e) => updateTaskName(p.id, t.id, e.target.value)} style={styles.taskNameInput} aria-label="タスク名を編集" />
+                              {tt > 0 && td === tt && <span style={styles.doneMark}>✅</span>}
                               <span style={styles.progressTagSm}>{td}/{tt}</span>
                               <select value={p.id} onChange={(e) => moveTask(p.id, t.id, e.target.value)} style={styles.moveSelect} aria-label="PJを変更">
                                 {projects.map((pp) => <option key={pp.id} value={pp.id}>{pp.name}</option>)}
@@ -1082,7 +1113,7 @@ export default function App() {
                                           {s.done ? <span style={styles.hankoStamp} className={stamping === s.id ? "hanko-pop" : ""}>済</span> : <span style={styles.hankoEmpty} />}
                                         </button>
                                         <div style={styles.subBody}>
-                                          <span style={{ ...styles.subText, textDecoration: s.done ? "line-through" : "none", color: s.done ? "#A39D8C" : "#2C3645" }}>{s.text}</span>
+                                          <input type="text" value={s.text} onChange={(e) => updateSubtaskText(p.id, t.id, s.id, e.target.value)} style={{ ...styles.subTextInput, textDecoration: s.done ? "line-through" : "none", color: s.done ? "#A39D8C" : "#2C3645" }} aria-label="サブタスク名を編集" />
                                           <div style={styles.scheduleEditRow}>
                                             <label style={styles.scheduleEditField}>
                                               <span style={styles.scheduleEditLabel}>予定日</span>
@@ -1213,14 +1244,18 @@ const styles = {
   prioritySectionHeader: { display: "flex", alignItems: "center", gap: 6, width: "100%", background: "transparent", border: "none", borderBottom: "1.5px solid", padding: "0 0 4px", cursor: "pointer", fontFamily: "inherit", fontSize: 12.5, fontWeight: 700, textAlign: "left" },
   prioritySectionCount: { marginLeft: "auto", fontSize: 10.5, fontWeight: 700, color: "#8B8578" },
   prioritySectionBody: { display: "flex", flexDirection: "column", gap: 10 },
+  statusSection: { display: "flex", flexDirection: "column", gap: 6, marginTop: 4, paddingTop: 10, borderTop: "1px dashed #C9C2B2" },
+  statusSectionHeader: { display: "flex", alignItems: "center", gap: 6, width: "100%", background: "transparent", border: "none", borderBottom: "1px dashed", padding: "0 0 3px", cursor: "pointer", fontFamily: "inherit", fontSize: 11, fontWeight: 700, textAlign: "left", opacity: 0.85 },
   empty: { padding: "18px 4px", color: "#A39D8C", fontSize: 13, textAlign: "center" },
   emptySmall: { padding: "6px 4px", color: "#A39D8C", fontSize: 11.5, margin: 0 },
   pjCard: { background: "#FDFCF8", border: "1px solid #DAD4C4", borderLeft: "4px solid", borderRadius: 8, padding: 10 },
   pjHeader: { display: "flex", alignItems: "center", gap: 6 },
   collapseBtn: { background: "none", border: "none", fontSize: 13, color: "#2C3645", cursor: "pointer", width: 18, padding: 0, flexShrink: 0 },
   collapseBtnSm: { background: "none", border: "none", fontSize: 11, color: "#3E5C76", cursor: "pointer", width: 16, padding: 0, flexShrink: 0 },
-  pjName: { flex: 1, fontSize: 14, fontWeight: 700, color: "#2C3645", minWidth: 0, textAlign: "left", border: "none", cursor: "pointer", fontFamily: "inherit", padding: "3px 5px", borderRadius: 5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
-  taskName: { flex: 1, fontSize: 13, fontWeight: 600, color: "#2C3645", minWidth: 0 },
+  pjNameInput: { flex: 1, fontSize: 14, fontWeight: 700, color: "#2C3645", minWidth: 0, textAlign: "left", border: "none", background: "transparent", fontFamily: "inherit", padding: "3px 5px", borderRadius: 5 },
+  taskNameInput: { flex: 1, fontSize: 13, fontWeight: 600, color: "#2C3645", minWidth: 0, border: "none", background: "transparent", fontFamily: "inherit", padding: "2px 4px", borderRadius: 5 },
+  ganttToggleBtn: { flexShrink: 0, border: "none", borderRadius: 5, padding: "3px 6px", fontSize: 13, cursor: "pointer", fontFamily: "inherit", lineHeight: 1 },
+  doneMark: { flexShrink: 0, fontSize: 12 },
   progressTag: { fontSize: 10.5, fontWeight: 700, color: "#6B7F6E", background: "#EAE6DB", padding: "2px 6px", borderRadius: 8, flexShrink: 0 },
   progressTagSm: { fontSize: 10, fontWeight: 700, color: "#6B7F6E", background: "#EAE6DB", padding: "1px 5px", borderRadius: 8, flexShrink: 0 },
   taskList: { marginTop: 8, display: "flex", flexDirection: "column", gap: 6, paddingLeft: 18 },
@@ -1263,6 +1298,7 @@ const styles = {
   hankoEmpty: { width: 20, height: 20, borderRadius: "50%", border: "2px solid #C9C2B2", display: "block" },
   hankoStamp: { width: 22, height: 22, borderRadius: "50%", border: "2px solid #A63D34", color: "#A63D34", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Shippori Mincho', serif", fontWeight: 700, fontSize: 9.5, transform: "rotate(-10deg)" },
   subText: { flex: 1, fontSize: 13, lineHeight: 1.4, wordBreak: "break-word", minWidth: 0 },
+  subTextInput: { flex: 1, fontSize: 13, lineHeight: 1.4, minWidth: 0, border: "none", background: "transparent", fontFamily: "inherit", padding: "2px 4px", borderRadius: 5, width: "100%" },
   metaTag: { fontSize: 9.5, fontWeight: 700, padding: "1px 6px", borderRadius: 10, border: "1px solid", flexShrink: 0 },
   deleteBtn: { background: "none", border: "none", color: "#C9C2B2", fontSize: 16, cursor: "pointer", padding: "0 2px", flexShrink: 0, lineHeight: 1 },
 };
