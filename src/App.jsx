@@ -591,6 +591,69 @@ export default function App() {
   };
   const removeWeekAdj = (date) => setWeekAdj((prev) => prev.filter((a) => a.date !== date));
 
+  // 来週のタスク(今週のタスクと同じ内容、期間のみ+7日)
+  const [nextWeekAdj, setNextWeekAdj] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("tm_next_week_adj") || "[]"); } catch { return []; }
+  });
+  const [nextAdjDateVal, setNextAdjDateVal] = useState(() => {
+    const today = new Date(); const day = today.getDay();
+    const monday = startOfWeek(today);
+    if (day >= 1 && day <= 5) { const d = new Date(today); d.setDate(today.getDate() + 7); return toDateStr(d); }
+    const nextMonday = new Date(monday); nextMonday.setDate(monday.getDate() + 7);
+    return toDateStr(nextMonday);
+  });
+  const [nextAdjHoursVal, setNextAdjHoursVal] = useState(1);
+  const [nextWeekCollapsed, setNextWeekCollapsed] = useState(true);
+
+  useEffect(() => { localStorage.setItem("tm_next_week_adj", JSON.stringify(nextWeekAdj)); }, [nextWeekAdj]);
+
+  const nextWeekDates = useMemo(() => {
+    const monday = startOfWeek(new Date());
+    return Array.from({ length: 5 }, (_, i) => {
+      const d = new Date(monday); d.setDate(monday.getDate() + 7 + i); return toDateStr(d);
+    });
+  }, []);
+
+  const nextWeekTasks = useMemo(() => {
+    if (!showPersonSections) return [];
+    const tasks = [];
+    for (const p of categoryProjects) {
+      for (const t of p.tasks) {
+        for (const s of t.subtasks) {
+          if (nextWeekDates.includes(s.scheduledDate))
+            tasks.push({ pjId: p.id, pjName: p.name, taskId: t.id, taskName: t.name, sub: s });
+        }
+      }
+    }
+    tasks.sort((a, b) => {
+      if (a.sub.scheduledDate !== b.sub.scheduledDate) return a.sub.scheduledDate.localeCompare(b.sub.scheduledDate);
+      if (!a.sub.startTime && !b.sub.startTime) return 0;
+      if (!a.sub.startTime) return 1; if (!b.sub.startTime) return -1;
+      return a.sub.startTime.localeCompare(b.sub.startTime);
+    });
+    return tasks;
+  }, [categoryProjects, nextWeekDates, showPersonSections]);
+
+  const nextWeekSummary = useMemo(() => {
+    const futureDates = nextWeekDates.filter(d => d >= todayStr);
+    const baseMinutes = futureDates.length * 8 * 60;
+    const adjMinutes = nextWeekAdj.filter(a => futureDates.includes(a.date)).reduce((sum, a) => sum + a.hours * 60, 0);
+    const effectiveMinutes = Math.max(0, baseMinutes - adjMinutes);
+    const estMinutes = nextWeekTasks.filter(t => t.sub.scheduledDate >= todayStr).reduce((sum, t) => sum + (t.sub.estimatedMinutes || 0), 0);
+    const ratio = effectiveMinutes > 0 ? estMinutes / effectiveMinutes : 0;
+    const warnLevel = ratio >= 0.8 ? "red" : ratio >= 0.6 ? "black" : null;
+    return { baseMinutes, adjMinutes, effectiveMinutes, estMinutes, ratio, warnLevel };
+  }, [nextWeekTasks, nextWeekAdj, nextWeekDates, todayStr]);
+
+  const addNextWeekAdj = () => {
+    if (!nextAdjDateVal || !nextAdjHoursVal) return;
+    setNextWeekAdj((prev) => {
+      const others = prev.filter((a) => a.date !== nextAdjDateVal);
+      return [...others, { date: nextAdjDateVal, hours: Number(nextAdjHoursVal) }].sort((a, b) => a.date.localeCompare(b.date));
+    });
+  };
+  const removeNextWeekAdj = (date) => setNextWeekAdj((prev) => prev.filter((a) => a.date !== date));
+
   const openCountFor = (owner, subcat) => {
     if (!projects) return 0;
     let open = 0;
@@ -957,6 +1020,81 @@ export default function App() {
                   ) : (
                     <ul style={styles.todayList}>
                       {weekTasks.map(({ pjId, pjName, taskId, taskName, sub: s }) => {
+                        const dt = new Date(s.scheduledDate + "T00:00:00");
+                        return (
+                          <li key={s.id} style={styles.calendarCard} className="row-in">
+                            <div style={styles.calendarLine1}>
+                              <button onClick={() => toggleSubtaskDone(pjId, taskId, s.id)} aria-label={s.done ? "未完了に戻す" : "完了にする"} style={styles.stampWrap}>
+                                {s.done ? <span style={styles.hankoStamp} className={stamping === s.id ? "hanko-pop" : ""}>済</span> : <span style={styles.hankoEmpty} />}
+                              </button>
+                              <span style={{ ...styles.calTimeCol, width: 60 }}>{formatDate(s.scheduledDate)}({DAY_JP[dt.getDay()]})</span>
+                              <span style={styles.calEstTag}>想定{s.estimatedMinutes ? formatDuration(s.estimatedMinutes) : "―"}</span>
+                              <span style={{ ...styles.calSubCol, textDecoration: s.done ? "line-through" : "none", color: s.done ? "#A39D8C" : "#2C3645" }} title={s.text}>{s.text}</span>
+                            </div>
+                            <div style={styles.calendarLine2}>
+                              <span style={styles.calPjCol} title={pjName}>{pjName}</span>
+                              <span style={styles.calTaskCol} title={taskName}>{taskName}</span>
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </>
+              )}
+
+              <h3 style={styles.sectionTitle}>来週のタスク</h3>
+              <div style={styles.workSummaryBar}>
+                <span style={styles.workSummaryItem}>稼働可能 {formatDuration(nextWeekSummary.effectiveMinutes) || "0分"}</span>
+                <span style={styles.workSummaryItem}>
+                  想定時間計 {nextWeekSummary.estMinutes ? formatDuration(nextWeekSummary.estMinutes) : "0分"}
+                  {nextWeekSummary.warnLevel && <span style={{ ...styles.workWarnIcon, color: nextWeekSummary.warnLevel === "red" ? "#A63D34" : "#2C3645" }}>⚠</span>}
+                </span>
+                <button type="button" onClick={() => setNextWeekCollapsed((v) => !v)} style={styles.collapseBtnSm} aria-label={nextWeekCollapsed ? "詳細を展開する" : "詳細を折りたたむ"}>
+                  {nextWeekCollapsed ? "▸" : "▾"}
+                </button>
+              </div>
+
+              {!nextWeekCollapsed && (
+                <>
+                  <div style={styles.scheduleEditRow}>
+                    <label style={styles.scheduleEditField}>
+                      <span style={styles.scheduleEditLabel}>稼働調整日</span>
+                      <select value={nextAdjDateVal} onChange={(e) => setNextAdjDateVal(e.target.value)} style={styles.scheduleEditInput}>
+                        {nextWeekDates.map((d) => {
+                          const dt = new Date(d + "T00:00:00");
+                          return <option key={d} value={d}>{formatDate(d)}({DAY_JP[dt.getDay()]})</option>;
+                        })}
+                      </select>
+                    </label>
+                    <label style={styles.scheduleEditField}>
+                      <span style={styles.scheduleEditLabel}>減らす時間</span>
+                      <select value={nextAdjHoursVal} onChange={(e) => setNextAdjHoursVal(Number(e.target.value))} style={{ ...styles.scheduleEditInput, width: 64 }}>
+                        {[1, 2, 3, 4, 5, 6, 7, 8].map((h) => <option key={h} value={h}>{h}時間</option>)}
+                      </select>
+                    </label>
+                    <button type="button" onClick={addNextWeekAdj} style={styles.addBtn}>調整を追加</button>
+                  </div>
+
+                  {nextWeekAdj.filter((a) => nextWeekDates.includes(a.date)).length > 0 && (
+                    <ul style={styles.todayList}>
+                      {nextWeekAdj.filter((a) => nextWeekDates.includes(a.date)).map((a) => {
+                        const dt = new Date(a.date + "T00:00:00");
+                        return (
+                          <li key={a.date} style={{ ...styles.calendarLine1, justifyContent: "space-between" }}>
+                            <span style={styles.calSubCol}>{formatDate(a.date)}({DAY_JP[dt.getDay()]}) 稼働 -{a.hours}時間</span>
+                            <button type="button" onClick={() => removeNextWeekAdj(a.date)} style={styles.deleteBtn} aria-label="調整を削除">×</button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+
+                  {nextWeekTasks.length === 0 ? (
+                    <p style={styles.emptySmall}>来週の予定日が入ってるサブタスクはない。</p>
+                  ) : (
+                    <ul style={styles.todayList}>
+                      {nextWeekTasks.map(({ pjId, pjName, taskId, taskName, sub: s }) => {
                         const dt = new Date(s.scheduledDate + "T00:00:00");
                         return (
                           <li key={s.id} style={styles.calendarCard} className="row-in">
