@@ -522,6 +522,8 @@ export default function App() {
     });
   }
 
+  const visibleTodayTasks = todayTasks.filter((t) => !t.sub.done);
+
   const showWorkSummary = topTab === "kkr" && subTab === "仕事";
   const totalEstMin = todayTasks.reduce((sum, t) => sum + (t.sub.estimatedMinutes || 0), 0);
   const totalActualMin = todayTasks.reduce((sum, t) => sum + (t.sub.actualMinutes || 0), 0);
@@ -796,11 +798,11 @@ export default function App() {
                   <span style={styles.workSummaryItem}>実績計 {totalActualMin ? formatDuration(totalActualMin) : "0分"}</span>
                 </div>
               )}
-              {todayTasks.length === 0 ? (
+              {visibleTodayTasks.length === 0 ? (
                 <p style={styles.emptySmall}>今日の予定日が入ってるサブタスクはない。</p>
               ) : (
                 <ul style={styles.todayList}>
-                  {todayTasks.map(({ pjId, pjName, taskId, taskName, sub: s }) => (
+                  {visibleTodayTasks.map(({ pjId, pjName, taskId, taskName, sub: s }) => (
                     <li key={s.id} style={styles.calendarCard} className="row-in">
                       <div style={styles.calendarLine1}>
                         <button onClick={() => toggleSubtaskDone(pjId, taskId, s.id)} aria-label={s.done ? "未完了に戻す" : "完了にする"} style={styles.stampWrap}>
