@@ -2,7 +2,7 @@
  * タスクマニア - スプレッドシート連携バックエンド (GAS Web App)
  *
  * シート構成:
- *   Projects: id | owner | name | subcategory | priority
+ *   Projects: id | owner | name | subcategory | priority | status
  *   Tasks:    id | projectId | name
  *   Subtasks: id | taskId | text | done | priority | scheduledDate | startTime | estimatedMinutes | actualMinutes | createdAt
  *
@@ -31,13 +31,18 @@
  *   このスクリプトは既存シートに自動で列を追加しないため、既存のProjectsシートの
  *   E1セルに手動で "priority" と入力しておくこと。既存行のE列が空欄でも
  *   読み込み時に既定値2(重要・不急)として扱われるので、値が入っていなくても壊れない。
+ *
+ * 既存スプレッドシートを使っている場合の移行手順(Projectsにstatus列を追加した際):
+ *   同様に既存のProjectsシートのF1セルに手動で "status" と入力しておくこと。
+ *   既存行のF列が空欄の場合はstatus未設定(null)として扱われるので、
+ *   値が入っていなくても壊れない。
  */
 
 const SHEET_PROJECTS = "Projects";
 const SHEET_TASKS = "Tasks";
 const SHEET_SUBTASKS = "Subtasks";
 
-const PROJECTS_HEADERS = ["id", "owner", "name", "subcategory", "priority"];
+const PROJECTS_HEADERS = ["id", "owner", "name", "subcategory", "priority", "status"];
 const TASKS_HEADERS = ["id", "projectId", "name"];
 const SUBTASKS_HEADERS = [
   "id",
@@ -137,13 +142,15 @@ function readProjects_() {
         owner = r[1],
         name = r[2],
         subcategory = r[3],
-        priority = r[4];
+        priority = r[4],
+        status = r[5];
       return {
         id: String(id),
         owner: owner || "",
         name: name || "",
         subcategory: subcategory || null,
         priority: Number(priority) || 2,
+        status: status || null,
         tasks: tasksByProject[id] || [],
       };
     });
@@ -167,7 +174,7 @@ function writeProjects_(projects) {
   const subRows = [];
 
   (projects || []).forEach(function (p) {
-    projRows.push([p.id, p.owner || "", p.name || "", p.subcategory || "", p.priority || 2]);
+    projRows.push([p.id, p.owner || "", p.name || "", p.subcategory || "", p.priority || 2, p.status || ""]);
     (p.tasks || []).forEach(function (t) {
       taskRows.push([t.id, p.id, t.name || ""]);
       (t.subtasks || []).forEach(function (s) {

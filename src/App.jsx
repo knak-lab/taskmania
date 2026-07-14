@@ -632,6 +632,18 @@ export default function App() {
     });
   }
 
+  function moveTaskInPJ(pjId, taskId, direction) {
+    setProjects((prev) => prev.map((p) => {
+      if (p.id !== pjId) return p;
+      const idx = p.tasks.findIndex((t) => t.id === taskId);
+      const swapIdx = direction === "up" ? idx - 1 : idx + 1;
+      if (idx === -1 || swapIdx < 0 || swapIdx >= p.tasks.length) return p;
+      const tasks = [...p.tasks];
+      [tasks[idx], tasks[swapIdx]] = [tasks[swapIdx], tasks[idx]];
+      return { ...p, tasks };
+    }));
+  }
+
   function updatePJStatus(pjId, status) {
     setProjects((prev) => prev.map((p) => (p.id === pjId ? { ...p, status: status || null } : p)));
   }
@@ -1105,12 +1117,16 @@ export default function App() {
                   {pjOpen && (
                     <div style={styles.taskList}>
                       {p.tasks.length === 0 && <p style={styles.emptySmall}>タスクなし</p>}
-                      {p.tasks.map((t) => {
+                      {p.tasks.map((t, tIdx) => {
                         const taskOpen = openTask.has(t.id);
                         const { done: td, total: tt } = taskProgress(t);
                         return (
                           <div key={t.id} style={styles.taskCard} className="row-in">
                             <div style={styles.taskHeader}>
+                              <div style={styles.reorderBtns}>
+                                <button type="button" onClick={() => moveTaskInPJ(p.id, t.id, "up")} disabled={tIdx === 0} style={{ ...styles.reorderBtn, opacity: tIdx === 0 ? 0.3 : 1, cursor: tIdx === 0 ? "default" : "pointer" }} aria-label="上へ移動">▲</button>
+                                <button type="button" onClick={() => moveTaskInPJ(p.id, t.id, "down")} disabled={tIdx === p.tasks.length - 1} style={{ ...styles.reorderBtn, opacity: tIdx === p.tasks.length - 1 ? 0.3 : 1, cursor: tIdx === p.tasks.length - 1 ? "default" : "pointer" }} aria-label="下へ移動">▼</button>
+                              </div>
                               <button onClick={() => toggleOpenTask(t.id)} style={styles.collapseBtnSm} aria-label={taskOpen ? "折りたたむ" : "展開する"}>{taskOpen ? "▾" : "▸"}</button>
                               <input type="text" value={t.name} onChange={(e) => updateTaskName(p.id, t.id, e.target.value)} style={styles.taskNameInput} aria-label="タスク名を編集" />
                               {tt > 0 && td === tt && <span style={styles.doneMark}>✅</span>}
