@@ -532,6 +532,7 @@ export default function App() {
     return toDateStr(next);
   });
   const [adjHoursVal, setAdjHoursVal] = useState(1);
+  const [weekCollapsed, setWeekCollapsed] = useState(false);
 
   useEffect(() => { localStorage.setItem("tm_week_adj", JSON.stringify(weekAdj)); }, [weekAdj]);
 
@@ -825,65 +826,72 @@ export default function App() {
                   想定時間計 {weekSummary.estMinutes ? formatDuration(weekSummary.estMinutes) : "0分"}
                   {weekSummary.warnLevel && <span style={{ ...styles.workWarnIcon, color: weekSummary.warnLevel === "red" ? "#A63D34" : "#2C3645" }}>⚠</span>}
                 </span>
+                <button type="button" onClick={() => setWeekCollapsed((v) => !v)} style={styles.collapseBtnSm} aria-label={weekCollapsed ? "詳細を展開する" : "詳細を折りたたむ"}>
+                  {weekCollapsed ? "▸" : "▾"}
+                </button>
               </div>
 
-              <div style={styles.scheduleEditRow}>
-                <label style={styles.scheduleEditField}>
-                  <span style={styles.scheduleEditLabel}>稼働調整日</span>
-                  <select value={adjDateVal} onChange={(e) => setAdjDateVal(e.target.value)} style={styles.scheduleEditInput}>
-                    {weekDates.map((d) => {
-                      const dt = new Date(d + "T00:00:00");
-                      return <option key={d} value={d}>{formatDate(d)}({DAY_JP[dt.getDay()]})</option>;
-                    })}
-                  </select>
-                </label>
-                <label style={styles.scheduleEditField}>
-                  <span style={styles.scheduleEditLabel}>減らす時間</span>
-                  <select value={adjHoursVal} onChange={(e) => setAdjHoursVal(Number(e.target.value))} style={{ ...styles.scheduleEditInput, width: 64 }}>
-                    {[1, 2, 3, 4, 5, 6, 7, 8].map((h) => <option key={h} value={h}>{h}時間</option>)}
-                  </select>
-                </label>
-                <button type="button" onClick={addWeekAdj} style={styles.addBtn}>調整を追加</button>
-              </div>
+              {!weekCollapsed && (
+                <>
+                  <div style={styles.scheduleEditRow}>
+                    <label style={styles.scheduleEditField}>
+                      <span style={styles.scheduleEditLabel}>稼働調整日</span>
+                      <select value={adjDateVal} onChange={(e) => setAdjDateVal(e.target.value)} style={styles.scheduleEditInput}>
+                        {weekDates.map((d) => {
+                          const dt = new Date(d + "T00:00:00");
+                          return <option key={d} value={d}>{formatDate(d)}({DAY_JP[dt.getDay()]})</option>;
+                        })}
+                      </select>
+                    </label>
+                    <label style={styles.scheduleEditField}>
+                      <span style={styles.scheduleEditLabel}>減らす時間</span>
+                      <select value={adjHoursVal} onChange={(e) => setAdjHoursVal(Number(e.target.value))} style={{ ...styles.scheduleEditInput, width: 64 }}>
+                        {[1, 2, 3, 4, 5, 6, 7, 8].map((h) => <option key={h} value={h}>{h}時間</option>)}
+                      </select>
+                    </label>
+                    <button type="button" onClick={addWeekAdj} style={styles.addBtn}>調整を追加</button>
+                  </div>
 
-              {weekAdj.filter((a) => weekDates.includes(a.date)).length > 0 && (
-                <ul style={styles.todayList}>
-                  {weekAdj.filter((a) => weekDates.includes(a.date)).map((a) => {
-                    const dt = new Date(a.date + "T00:00:00");
-                    return (
-                      <li key={a.date} style={{ ...styles.calendarLine1, justifyContent: "space-between" }}>
-                        <span style={styles.calSubCol}>{formatDate(a.date)}({DAY_JP[dt.getDay()]}) 稼働 -{a.hours}時間</span>
-                        <button type="button" onClick={() => removeWeekAdj(a.date)} style={styles.deleteBtn} aria-label="調整を削除">×</button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
+                  {weekAdj.filter((a) => weekDates.includes(a.date)).length > 0 && (
+                    <ul style={styles.todayList}>
+                      {weekAdj.filter((a) => weekDates.includes(a.date)).map((a) => {
+                        const dt = new Date(a.date + "T00:00:00");
+                        return (
+                          <li key={a.date} style={{ ...styles.calendarLine1, justifyContent: "space-between" }}>
+                            <span style={styles.calSubCol}>{formatDate(a.date)}({DAY_JP[dt.getDay()]}) 稼働 -{a.hours}時間</span>
+                            <button type="button" onClick={() => removeWeekAdj(a.date)} style={styles.deleteBtn} aria-label="調整を削除">×</button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
 
-              {weekTasks.length === 0 ? (
-                <p style={styles.emptySmall}>今週の予定日が入ってるサブタスクはない。</p>
-              ) : (
-                <ul style={styles.todayList}>
-                  {weekTasks.map(({ pjId, pjName, taskId, taskName, sub: s }) => {
-                    const dt = new Date(s.scheduledDate + "T00:00:00");
-                    return (
-                      <li key={s.id} style={styles.calendarCard} className="row-in">
-                        <div style={styles.calendarLine1}>
-                          <button onClick={() => toggleSubtaskDone(pjId, taskId, s.id)} aria-label={s.done ? "未完了に戻す" : "完了にする"} style={styles.stampWrap}>
-                            {s.done ? <span style={styles.hankoStamp} className={stamping === s.id ? "hanko-pop" : ""}>済</span> : <span style={styles.hankoEmpty} />}
-                          </button>
-                          <span style={{ ...styles.calTimeCol, width: 60 }}>{formatDate(s.scheduledDate)}({DAY_JP[dt.getDay()]})</span>
-                          <span style={styles.calEstTag}>想定{s.estimatedMinutes ? formatDuration(s.estimatedMinutes) : "―"}</span>
-                          <span style={{ ...styles.calSubCol, textDecoration: s.done ? "line-through" : "none", color: s.done ? "#A39D8C" : "#2C3645" }} title={s.text}>{s.text}</span>
-                        </div>
-                        <div style={styles.calendarLine2}>
-                          <span style={styles.calPjCol} title={pjName}>{pjName}</span>
-                          <span style={styles.calTaskCol} title={taskName}>{taskName}</span>
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
+                  {weekTasks.length === 0 ? (
+                    <p style={styles.emptySmall}>今週の予定日が入ってるサブタスクはない。</p>
+                  ) : (
+                    <ul style={styles.todayList}>
+                      {weekTasks.map(({ pjId, pjName, taskId, taskName, sub: s }) => {
+                        const dt = new Date(s.scheduledDate + "T00:00:00");
+                        return (
+                          <li key={s.id} style={styles.calendarCard} className="row-in">
+                            <div style={styles.calendarLine1}>
+                              <button onClick={() => toggleSubtaskDone(pjId, taskId, s.id)} aria-label={s.done ? "未完了に戻す" : "完了にする"} style={styles.stampWrap}>
+                                {s.done ? <span style={styles.hankoStamp} className={stamping === s.id ? "hanko-pop" : ""}>済</span> : <span style={styles.hankoEmpty} />}
+                              </button>
+                              <span style={{ ...styles.calTimeCol, width: 60 }}>{formatDate(s.scheduledDate)}({DAY_JP[dt.getDay()]})</span>
+                              <span style={styles.calEstTag}>想定{s.estimatedMinutes ? formatDuration(s.estimatedMinutes) : "―"}</span>
+                              <span style={{ ...styles.calSubCol, textDecoration: s.done ? "line-through" : "none", color: s.done ? "#A39D8C" : "#2C3645" }} title={s.text}>{s.text}</span>
+                            </div>
+                            <div style={styles.calendarLine2}>
+                              <span style={styles.calPjCol} title={pjName}>{pjName}</span>
+                              <span style={styles.calTaskCol} title={taskName}>{taskName}</span>
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </>
               )}
             </>
           )}
@@ -1022,23 +1030,6 @@ export default function App() {
                                           <span style={{ ...styles.subText, textDecoration: s.done ? "line-through" : "none", color: s.done ? "#A39D8C" : "#2C3645" }}>{s.text}</span>
                                           <div style={styles.scheduleEditRow}>
                                             <label style={styles.scheduleEditField}>
-                                              <span style={styles.scheduleEditLabel}>PJ</span>
-                                              <select value={p.id} onChange={(e) => {
-                                                const toPjId = e.target.value;
-                                                const toPj = projects.find((pp) => pp.id === toPjId);
-                                                const toTaskId = toPj?.tasks[0]?.id;
-                                                if (toTaskId) moveSubtask(p.id, t.id, s.id, toPjId, toTaskId);
-                                              }} style={styles.moveSelect}>
-                                                {projects.map((pp) => <option key={pp.id} value={pp.id}>{pp.name}</option>)}
-                                              </select>
-                                            </label>
-                                            <label style={styles.scheduleEditField}>
-                                              <span style={styles.scheduleEditLabel}>タスク</span>
-                                              <select value={t.id} onChange={(e) => moveSubtask(p.id, t.id, s.id, p.id, e.target.value)} style={styles.moveSelect} disabled={p.tasks.length <= 1}>
-                                                {p.tasks.map((tt) => <option key={tt.id} value={tt.id}>{tt.name}</option>)}
-                                              </select>
-                                            </label>
-                                            <label style={styles.scheduleEditField}>
                                               <span style={styles.scheduleEditLabel}>予定日</span>
                                               <input type="date" value={s.scheduledDate || ""} onChange={(e) => updateSubtaskSchedule(p.id, t.id, s.id, "scheduledDate", e.target.value)} style={styles.scheduleEditInput} />
                                             </label>
@@ -1062,6 +1053,23 @@ export default function App() {
                                                   {runningTarget?.subId === s.id ? (() => { const sec = Math.max(0, Math.floor((Date.now() - runningTarget.startAt) / 1000)); return `■ ${String(Math.floor(sec / 60)).padStart(2, "0")}:${String(sec % 60).padStart(2, "0")}`; })() : "▶"}
                                                 </button>
                                               </div>
+                                            </label>
+                                            <label style={styles.scheduleEditField}>
+                                              <span style={styles.scheduleEditLabel}>PJ</span>
+                                              <select value={p.id} onChange={(e) => {
+                                                const toPjId = e.target.value;
+                                                const toPj = projects.find((pp) => pp.id === toPjId);
+                                                const toTaskId = toPj?.tasks[0]?.id;
+                                                if (toTaskId) moveSubtask(p.id, t.id, s.id, toPjId, toTaskId);
+                                              }} style={styles.moveSelect}>
+                                                {projects.map((pp) => <option key={pp.id} value={pp.id}>{pp.name}</option>)}
+                                              </select>
+                                            </label>
+                                            <label style={styles.scheduleEditField}>
+                                              <span style={styles.scheduleEditLabel}>タスク</span>
+                                              <select value={t.id} onChange={(e) => moveSubtask(p.id, t.id, s.id, p.id, e.target.value)} style={styles.moveSelect} disabled={p.tasks.length <= 1}>
+                                                {p.tasks.map((tt) => <option key={tt.id} value={tt.id}>{tt.name}</option>)}
+                                              </select>
                                             </label>
                                           </div>
                                         </div>
