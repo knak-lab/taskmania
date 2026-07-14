@@ -519,6 +519,69 @@ export default function App() {
   const estRatio = totalEstMin / WORK_MINUTES;
   const estWarnLevel = estRatio >= 0.8 ? "red" : estRatio >= 0.6 ? "amber" : null;
 
+  // 今週のタスク
+  const DAY_JP = ["日", "月", "火", "水", "木", "金", "土"];
+
+  const [weekAdj, setWeekAdj] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("tm_week_adj") || "[]"); } catch { return []; }
+  });
+  const [adjDateVal, setAdjDateVal] = useState(() => {
+    const today = new Date(); const day = today.getDay();
+    if (day >= 1 && day <= 5) return toDateStr(today);
+    const next = new Date(today); next.setDate(today.getDate() + (day === 0 ? 1 : 8 - day));
+    return toDateStr(next);
+  });
+  const [adjHoursVal, setAdjHoursVal] = useState(1);
+
+  useEffect(() => { localStorage.setItem("tm_week_adj", JSON.stringify(weekAdj)); }, [weekAdj]);
+
+  const weekDates = useMemo(() => {
+    const monday = startOfWeek(new Date());
+    return Array.from({ length: 5 }, (_, i) => {
+      const d = new Date(monday); d.setDate(monday.getDate() + i); return toDateStr(d);
+    });
+  }, []);
+
+  const weekTasks = useMemo(() => {
+    if (!showPersonSections) return [];
+    const tasks = [];
+    for (const p of categoryProjects) {
+      for (const t of p.tasks) {
+        for (const s of t.subtasks) {
+          if (weekDates.includes(s.scheduledDate))
+            tasks.push({ pjId: p.id, pjName: p.name, taskId: t.id, taskName: t.name, sub: s });
+        }
+      }
+    }
+    tasks.sort((a, b) => {
+      if (a.sub.scheduledDate !== b.sub.scheduledDate) return a.sub.scheduledDate.localeCompare(b.sub.scheduledDate);
+      if (!a.sub.startTime && !b.sub.startTime) return 0;
+      if (!a.sub.startTime) return 1; if (!b.sub.startTime) return -1;
+      return a.sub.startTime.localeCompare(b.sub.startTime);
+    });
+    return tasks;
+  }, [categoryProjects, weekDates, showPersonSections]);
+
+  const weekSummary = useMemo(() => {
+    const futureDates = weekDates.filter(d => d >= todayStr);
+    const baseMinutes = futureDates.length * 8 * 60;
+    const adjMinutes = weekAdj.filter(a => futureDates.includes(a.date)).reduce((sum, a) => sum + a.hours * 60, 0);
+    const effectiveMinutes = Math.max(0, baseMinutes - adjMinutes);
+    const estMinutes = weekTasks.filter(t => t.sub.scheduledDate >= todayStr).reduce((sum, t) => sum + (t.sub.estimatedMinutes || 0), 0);
+    const ratio = effectiveMinutes > 0 ? estMinutes / effectiveMinutes : 0;
+    const warnLevel = ratio >= 0.8 ? "red" : ratio >= 0.6 ? "black" : null;
+    return { baseMinutes, adjMinutes, effectiveMinutes, estMinutes, ratio, warnLevel };
+  }, [weekTasks, weekAdj, weekDates, todayStr]);
+
+  const addWeekAdj = () => {
+    if (!adjDateVal || !adjHoursVal) return;
+    setWeekAdj((prev) => {
+      const others = prev.filter((a) => a.date !== adjDateVal);
+      return [...others, { date: adjDateVal, hours: Number(adjHoursVal) }].sort((a, b) => a.date.localeCompare(b.date));
+    });
+  };
+  const removeWeekAdj = (date) => setWeekAdj((prev) => prev.filter((a) => a.date !== date));
+
   const openCountFor = (owner, subcat) => {
     if (!projects) return 0;
     let open = 0;
@@ -598,7 +661,7 @@ export default function App() {
   const saveLabel = { idle: "", loading: "読込中…", saving: "保存中…", saved: "保存済み", error: "保存失敗" }[saveState];
 
   return (
-    <div style={styles.page}>
+    <div style={styles.page} className="tm-page">
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@500;700&family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap');
         * { box-sizing: border-box; }
@@ -614,6 +677,9 @@ export default function App() {
         .hanko-pop { animation: stampIn 0.5s cubic-bezier(.2,.9,.3,1.2); }
         input:focus, select:focus, button:focus-visible { outline: 2px solid #3E5C76; outline-offset: 2px; }
         ::placeholder { color: #A39D8C; }
+        @media (min-width: 768px) {
+          .tm-page { padding: 24px 32px 60px !important; }
+        }
       `}</style>
 
       <div style={styles.shell}>
@@ -711,6 +777,74 @@ export default function App() {
                       </div>
                     </li>
                   ))}
+                </ul>
+              )}
+
+              <h3 style={styles.sectionTitle}>今週のタスク</h3>
+              <div style={styles.workSummaryBar}>
+                <span style={styles.workSummaryItem}>稼働可能 {formatDuration(weekSummary.effectiveMinutes) || "0分"}</span>
+                <span style={styles.workSummaryItem}>
+                  想定時間計 {weekSummary.estMinutes ? formatDuration(weekSummary.estMinutes) : "0分"}
+                  {weekSummary.warnLevel && <span style={{ ...styles.workWarnIcon, color: weekSummary.warnLevel === "red" ? "#A63D34" : "#2C3645" }}>⚠</span>}
+                </span>
+              </div>
+
+              <div style={styles.scheduleEditRow}>
+                <label style={styles.scheduleEditField}>
+                  <span style={styles.scheduleEditLabel}>稼働調整日</span>
+                  <select value={adjDateVal} onChange={(e) => setAdjDateVal(e.target.value)} style={styles.scheduleEditInput}>
+                    {weekDates.map((d) => {
+                      const dt = new Date(d + "T00:00:00");
+                      return <option key={d} value={d}>{formatDate(d)}({DAY_JP[dt.getDay()]})</option>;
+                    })}
+                  </select>
+                </label>
+                <label style={styles.scheduleEditField}>
+                  <span style={styles.scheduleEditLabel}>減らす時間</span>
+                  <select value={adjHoursVal} onChange={(e) => setAdjHoursVal(Number(e.target.value))} style={{ ...styles.scheduleEditInput, width: 64 }}>
+                    {[1, 2, 3, 4, 5, 6, 7, 8].map((h) => <option key={h} value={h}>{h}時間</option>)}
+                  </select>
+                </label>
+                <button type="button" onClick={addWeekAdj} style={styles.addBtn}>調整を追加</button>
+              </div>
+
+              {weekAdj.filter((a) => weekDates.includes(a.date)).length > 0 && (
+                <ul style={styles.todayList}>
+                  {weekAdj.filter((a) => weekDates.includes(a.date)).map((a) => {
+                    const dt = new Date(a.date + "T00:00:00");
+                    return (
+                      <li key={a.date} style={{ ...styles.calendarLine1, justifyContent: "space-between" }}>
+                        <span style={styles.calSubCol}>{formatDate(a.date)}({DAY_JP[dt.getDay()]}) 稼働 -{a.hours}時間</span>
+                        <button type="button" onClick={() => removeWeekAdj(a.date)} style={styles.deleteBtn} aria-label="調整を削除">×</button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+
+              {weekTasks.length === 0 ? (
+                <p style={styles.emptySmall}>今週の予定日が入ってるサブタスクはない。</p>
+              ) : (
+                <ul style={styles.todayList}>
+                  {weekTasks.map(({ pjId, pjName, taskId, taskName, sub: s }) => {
+                    const dt = new Date(s.scheduledDate + "T00:00:00");
+                    return (
+                      <li key={s.id} style={styles.calendarCard} className="row-in">
+                        <div style={styles.calendarLine1}>
+                          <button onClick={() => toggleSubtaskDone(pjId, taskId, s.id)} aria-label={s.done ? "未完了に戻す" : "完了にする"} style={styles.stampWrap}>
+                            {s.done ? <span style={styles.hankoStamp} className={stamping === s.id ? "hanko-pop" : ""}>済</span> : <span style={styles.hankoEmpty} />}
+                          </button>
+                          <span style={{ ...styles.calTimeCol, width: 60 }}>{formatDate(s.scheduledDate)}({DAY_JP[dt.getDay()]})</span>
+                          <span style={styles.calEstTag}>想定{s.estimatedMinutes ? formatDuration(s.estimatedMinutes) : "―"}</span>
+                          <span style={{ ...styles.calSubCol, textDecoration: s.done ? "line-through" : "none", color: s.done ? "#A39D8C" : "#2C3645" }} title={s.text}>{s.text}</span>
+                        </div>
+                        <div style={styles.calendarLine2}>
+                          <span style={styles.calPjCol} title={pjName}>{pjName}</span>
+                          <span style={styles.calTaskCol} title={taskName}>{taskName}</span>
+                        </div>
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </>
@@ -851,10 +985,6 @@ export default function App() {
                                               <input type="date" value={s.scheduledDate || ""} onChange={(e) => updateSubtaskSchedule(p.id, t.id, s.id, "scheduledDate", e.target.value)} style={styles.scheduleEditInput} />
                                             </label>
                                             <label style={styles.scheduleEditField}>
-                                              <span style={styles.scheduleEditLabel}>開始</span>
-                                              <TimeDropdown value={s.startTime || ""} onChange={(v) => updateSubtaskSchedule(p.id, t.id, s.id, "startTime", v)} style={styles.scheduleEditInput} />
-                                            </label>
-                                            <label style={styles.scheduleEditField}>
                                               <span style={styles.scheduleEditLabel}>想定(分)</span>
                                               <select value={s.estimatedMinutes || ""} onChange={(e) => updateSubtaskSchedule(p.id, t.id, s.id, "estimatedMinutes", e.target.value ? Number(e.target.value) : "")} style={{ ...styles.scheduleEditInput, width: 64 }}>
                                                 <option value="">―</option>
@@ -901,8 +1031,8 @@ export default function App() {
 }
 
 const styles = {
-  page: { minHeight: "100vh", background: "#EAE6DB", backgroundImage: "repeating-linear-gradient(0deg, rgba(44,54,69,0.025) 0px, rgba(44,54,69,0.025) 1px, transparent 1px, transparent 28px)", fontFamily: "'Zen Kaku Gothic New', sans-serif", padding: "20px 12px 60px", display: "flex", justifyContent: "center" },
-  shell: { width: "100%", maxWidth: 480 },
+  page: { minHeight: "100vh", background: "#EAE6DB", backgroundImage: "repeating-linear-gradient(0deg, rgba(44,54,69,0.025) 0px, rgba(44,54,69,0.025) 1px, transparent 1px, transparent 28px)", fontFamily: "'Zen Kaku Gothic New', sans-serif", padding: "20px 12px 60px" },
+  shell: { width: "100%" },
   header: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 18 },
   logoRow: { display: "flex", alignItems: "center", gap: 12 },
   logoMark: { fontFamily: "'Shippori Mincho', serif", fontWeight: 700, fontSize: 22, color: "#F5F2E9", background: "#A63D34", width: 40, height: 40, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, boxShadow: "0 2px 0 rgba(44,54,69,0.25)" },
