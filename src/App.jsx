@@ -649,6 +649,40 @@ export default function App() {
     setRunningTarget({ pjId, taskId, subId, startAt: Date.now() });
   }
 
+  function moveSubtask(fromPjId, fromTaskId, subId, toPjId, toTaskId) {
+    setProjects((prev) => {
+      let moved = null;
+      const removed = prev.map((p) => {
+        if (p.id !== fromPjId) return p;
+        return { ...p, tasks: p.tasks.map((t) => {
+          if (t.id !== fromTaskId) return t;
+          const idx = t.subtasks.findIndex((s) => s.id === subId);
+          if (idx === -1) return t;
+          moved = t.subtasks[idx];
+          return { ...t, subtasks: t.subtasks.filter((s) => s.id !== subId) };
+        }) };
+      });
+      if (!moved) return prev;
+      return removed.map((p) => (p.id !== toPjId ? p : { ...p, tasks: p.tasks.map((t) => (t.id === toTaskId ? { ...t, subtasks: [...t.subtasks, moved] } : t)) }));
+    });
+  }
+
+  function moveTask(fromPjId, taskId, toPjId) {
+    if (fromPjId === toPjId) return;
+    setProjects((prev) => {
+      let moved = null;
+      const removed = prev.map((p) => {
+        if (p.id !== fromPjId) return p;
+        const idx = p.tasks.findIndex((t) => t.id === taskId);
+        if (idx === -1) return p;
+        moved = p.tasks[idx];
+        return { ...p, tasks: p.tasks.filter((t) => t.id !== taskId) };
+      });
+      if (!moved) return prev;
+      return removed.map((p) => (p.id === toPjId ? { ...p, tasks: [...p.tasks, moved] } : p));
+    });
+  }
+
   function removePJ(id) { setProjects((prev) => prev.filter((p) => p.id !== id)); }
   function removeTask(pjId, taskId) { setProjects((prev) => prev.map((p) => (p.id === pjId ? { ...p, tasks: p.tasks.filter((t) => t.id !== taskId) } : p))); }
   function removeSubtask(pjId, taskId, subId) {
@@ -757,8 +791,12 @@ export default function App() {
                         <button onClick={() => toggleSubtaskDone(pjId, taskId, s.id)} aria-label={s.done ? "未完了に戻す" : "完了にする"} style={styles.stampWrap}>
                           {s.done ? <span style={styles.hankoStamp} className={stamping === s.id ? "hanko-pop" : ""}>済</span> : <span style={styles.hankoEmpty} />}
                         </button>
-                        <span style={{ ...styles.calTimeCol, color: s.startTime ? "#2C3645" : "#C9C2B2" }}>{s.startTime || "--:--"}</span>
-                        <span style={styles.calEstTag}>想定{s.estimatedMinutes ? formatDuration(s.estimatedMinutes) : "―"}</span>
+                        <TimeDropdown value={s.startTime || ""} onChange={(v) => updateSubtaskSchedule(pjId, taskId, s.id, "startTime", v)} style={{ width: 54 }} />
+                        <span style={styles.calendarLine2Label}>想定</span>
+                        <select value={s.estimatedMinutes || ""} onChange={(e) => updateSubtaskSchedule(pjId, taskId, s.id, "estimatedMinutes", e.target.value ? Number(e.target.value) : "")} style={{ ...styles.scheduleEditInput, width: 64 }}>
+                          <option value="">―</option>
+                          {MINUTE_OPTIONS.map((m) => <option key={m} value={m}>{formatDuration(m)}</option>)}
+                        </select>
                         <span style={{ ...styles.calSubCol, textDecoration: s.done ? "line-through" : "none", color: s.done ? "#A39D8C" : "#2C3645" }} title={s.text}>{s.text}</span>
                       </div>
                       <div style={styles.calendarLine2}>
@@ -964,6 +1002,9 @@ export default function App() {
                               <button onClick={() => toggleCollapseTask(t.id)} style={styles.collapseBtnSm} aria-label={taskOpen ? "折りたたむ" : "展開する"}>{taskOpen ? "▾" : "▸"}</button>
                               <span style={styles.taskName}>{t.name}</span>
                               <span style={styles.progressTagSm}>{td}/{tt}</span>
+                              <select value={p.id} onChange={(e) => moveTask(p.id, t.id, e.target.value)} style={styles.moveSelect} aria-label="PJを変更">
+                                {projects.map((pp) => <option key={pp.id} value={pp.id}>{pp.name}</option>)}
+                              </select>
                               <button onClick={() => removeTask(p.id, t.id)} aria-label="タスクを削除" style={styles.deleteBtn}>×</button>
                             </div>
                             {taskOpen && (
@@ -980,6 +1021,23 @@ export default function App() {
                                         <div style={styles.subBody}>
                                           <span style={{ ...styles.subText, textDecoration: s.done ? "line-through" : "none", color: s.done ? "#A39D8C" : "#2C3645" }}>{s.text}</span>
                                           <div style={styles.scheduleEditRow}>
+                                            <label style={styles.scheduleEditField}>
+                                              <span style={styles.scheduleEditLabel}>PJ</span>
+                                              <select value={p.id} onChange={(e) => {
+                                                const toPjId = e.target.value;
+                                                const toPj = projects.find((pp) => pp.id === toPjId);
+                                                const toTaskId = toPj?.tasks[0]?.id;
+                                                if (toTaskId) moveSubtask(p.id, t.id, s.id, toPjId, toTaskId);
+                                              }} style={styles.moveSelect}>
+                                                {projects.map((pp) => <option key={pp.id} value={pp.id}>{pp.name}</option>)}
+                                              </select>
+                                            </label>
+                                            <label style={styles.scheduleEditField}>
+                                              <span style={styles.scheduleEditLabel}>タスク</span>
+                                              <select value={t.id} onChange={(e) => moveSubtask(p.id, t.id, s.id, p.id, e.target.value)} style={styles.moveSelect} disabled={p.tasks.length <= 1}>
+                                                {p.tasks.map((tt) => <option key={tt.id} value={tt.id}>{tt.name}</option>)}
+                                              </select>
+                                            </label>
                                             <label style={styles.scheduleEditField}>
                                               <span style={styles.scheduleEditLabel}>予定日</span>
                                               <input type="date" value={s.scheduledDate || ""} onChange={(e) => updateSubtaskSchedule(p.id, t.id, s.id, "scheduledDate", e.target.value)} style={styles.scheduleEditInput} />
@@ -1119,6 +1177,7 @@ const styles = {
   scheduleEditField: { display: "flex", flexDirection: "column", gap: 1 },
   scheduleEditLabel: { fontSize: 9, color: "#A39D8C", fontWeight: 700 },
   scheduleEditInput: { fontSize: 11, padding: "3px 5px", borderRadius: 5, border: "1.5px solid #E3DECF", background: "#FDFCF8", color: "#2C3645", fontFamily: "inherit" },
+  moveSelect: { fontSize: 10, padding: "2px 4px", borderRadius: 5, border: "1.5px solid #C9C2B2", background: "#FDFCF8", color: "#2C3645", fontFamily: "inherit", maxWidth: 92 },
   timeDropdownList: { position: "absolute", top: "100%", left: 0, zIndex: 10, marginTop: 2, width: 90, maxHeight: 180, overflowY: "auto", background: "#FDFCF8", border: "1.5px solid #C9C2B2", borderRadius: 6, boxShadow: "0 4px 12px rgba(44,54,69,0.18)" },
   timeDropdownItem: { padding: "5px 8px", fontSize: 11.5, cursor: "pointer", borderBottom: "1px solid #EAE6DB" },
   actualRow: { display: "flex", gap: 3, alignItems: "center" },
