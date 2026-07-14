@@ -298,10 +298,14 @@ function OverviewGanttChart({ projects }) {
   const [granularity, setGranularity] = useState("day");
   const [openPJ, setOpenPJ] = useState(() => new Set());
 
+  const todayStr = toDateStr(new Date());
+  const monthLater = new Date(); monthLater.setMonth(monthLater.getMonth() + 1);
+  const monthLaterStr = toDateStr(monthLater);
+
   const pjData = projects.map((p) => {
     const taskRows = [];
     for (const t of p.tasks) {
-      const dated = t.subtasks.filter((s) => s.scheduledDate);
+      const dated = t.subtasks.filter((s) => s.scheduledDate && s.scheduledDate >= todayStr && s.scheduledDate <= monthLaterStr);
       if (dated.length === 0) continue;
       const dates = dated.map((s) => s.scheduledDate).sort();
       const { done, total } = taskProgress(t);
@@ -313,13 +317,11 @@ function OverviewGanttChart({ projects }) {
   }).filter((p) => p.taskRows.length > 0);
 
   if (pjData.length === 0) {
-    return <p style={styles.ganttEmpty}>予定日が設定されたサブタスクがまだない。各カテゴリでサブタスクに予定日を入れると、ここに全PJ分がまとまって並ぶ。</p>;
+    return <p style={styles.ganttEmpty}>本日から1ヶ月以内に予定日が設定されたサブタスクがまだない。各カテゴリでサブタスクに予定日を入れると、ここに全PJ分がまとまって並ぶ。</p>;
   }
 
-  const today = new Date(); const todayStr = toDateStr(today);
-  const yearLater = new Date(); yearLater.setDate(yearLater.getDate() + 365);
   const allTaskDates = pjData.flatMap((p) => p.taskRows.flatMap((r) => [r.startDate, r.endDate]));
-  const allDates = [todayStr, toDateStr(yearLater), ...allTaskDates].sort();
+  const allDates = [todayStr, monthLaterStr, ...allTaskDates].sort();
   const buckets = generateBuckets(allDates[0], allDates[allDates.length - 1], granularity);
   const colWidth = { day: 44, week: 60, month: 68, quarter: 78, year: 72 }[granularity];
 
