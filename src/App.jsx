@@ -119,6 +119,13 @@ function formatDuration(mins) {
   return `${m}分`;
 }
 
+function addMinutesToTime(time, minutes) {
+  if (!time || !minutes) return "";
+  const [h, m] = time.split(":").map(Number);
+  const total = (h * 60 + m + minutes + 24 * 60) % (24 * 60);
+  return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
+}
+
 function task(name, subtasks) {
   return { id: uid(), name, subtasks };
 }
@@ -823,14 +830,15 @@ export default function App() {
                           {s.done ? <span style={styles.hankoStamp} className={stamping === s.id ? "hanko-pop" : ""}>済</span> : <span style={styles.hankoEmpty} />}
                         </button>
                         <TimeDropdown value={s.startTime || ""} onChange={(v) => updateSubtaskSchedule(pjId, taskId, s.id, "startTime", v)} style={{ width: 54 }} />
+                        <span style={{ ...styles.calTimeCol, width: 40 }}>{addMinutesToTime(s.startTime, s.estimatedMinutes) || "―"}</span>
+                        <span style={{ ...styles.calSubCol, textDecoration: s.done ? "line-through" : "none", color: s.done ? "#A39D8C" : "#2C3645" }} title={s.text}>{s.text}</span>
+                      </div>
+                      <div style={styles.calendarLine2}>
                         <span style={styles.calendarLine2Label}>想定</span>
                         <select value={s.estimatedMinutes || ""} onChange={(e) => updateSubtaskSchedule(pjId, taskId, s.id, "estimatedMinutes", e.target.value ? Number(e.target.value) : "")} style={{ ...styles.scheduleEditInput, width: 64 }}>
                           <option value="">―</option>
                           {MINUTE_OPTIONS.map((m) => <option key={m} value={m}>{formatDuration(m)}</option>)}
                         </select>
-                        <span style={{ ...styles.calSubCol, textDecoration: s.done ? "line-through" : "none", color: s.done ? "#A39D8C" : "#2C3645" }} title={s.text}>{s.text}</span>
-                      </div>
-                      <div style={styles.calendarLine2}>
                         <span style={styles.calendarLine2Label}>実績</span>
                         <select value={s.actualMinutes || ""} onChange={(e) => updateSubtaskSchedule(pjId, taskId, s.id, "actualMinutes", e.target.value ? Number(e.target.value) : "")} style={{ ...styles.scheduleEditInput, width: 64 }}>
                           <option value="">―</option>
