@@ -8,12 +8,6 @@ const TOP_TABS = [
   { key: "acco", label: "acco", color: "#A63D34" },
 ];
 
-const LEVELS = [
-  { key: "pj", label: "PJ" },
-  { key: "task", label: "タスク" },
-  { key: "subtask", label: "サブタスク" },
-];
-
 const PERSON_KEYS = ["kkr", "acco"];
 const SUB_TABS = [
   { key: "総合", label: "総合" },
@@ -420,6 +414,9 @@ export default function App() {
   const [addDate, setAddDate] = useState("");
   const [addStartTime, setAddStartTime] = useState("");
   const [addEstMinutes, setAddEstMinutes] = useState("");
+  const [addModalOpen, setAddModalOpen] = useState(false);
+  const [modalPJName, setModalPJName] = useState("");
+  const [modalTaskName, setModalTaskName] = useState("");
 
   const inputRef = useRef(null);
   const saveTimer = useRef(null);
@@ -465,7 +462,6 @@ export default function App() {
 
   const effectiveOwner = topTab === "総合" ? addOwner : topTab;
   const ownerHasSub = PERSON_KEYS.includes(effectiveOwner);
-  const addFormHidden = PERSON_KEYS.includes(topTab) && subTab === "総合";
   const showPersonSections = PERSON_KEYS.includes(topTab);
   const ownerProjects = useMemo(
     () => (projects || []).filter((p) => p.owner === effectiveOwner),
@@ -476,24 +472,11 @@ export default function App() {
     [ownerProjects, subTab]
   );
 
-  useEffect(() => { if (addFormHidden && addLevel === "task") setAddLevel("pj"); }, [addFormHidden, addLevel]);
-
   useEffect(() => {
     if (!ownerHasSub) return;
     if (topTab === effectiveOwner && subTab !== "総合") setAddSub(subTab);
     else setAddSub((prev) => (REAL_SUBS.some((s) => s.key === prev) ? prev : REAL_SUBS[0].key));
   }, [effectiveOwner, subTab, topTab, ownerHasSub]);
-
-  useEffect(() => {
-    if (!categoryProjects.some((p) => p.id === addPJId)) setAddPJId(categoryProjects[0]?.id || "");
-  }, [effectiveOwner, subTab, projects]); // eslint-disable-line
-
-  const selectedPJ = categoryProjects.find((p) => p.id === addPJId) || null;
-  const pjTasks = selectedPJ ? selectedPJ.tasks : [];
-
-  useEffect(() => {
-    if (!pjTasks.some((t) => t.id === addTaskId)) setAddTaskId(pjTasks[0]?.id || "");
-  }, [addPJId, projects]); // eslint-disable-line
 
   const visibleProjects = useMemo(() => {
     if (!projects) return [];
@@ -637,7 +620,31 @@ export default function App() {
       }));
     }
     setAddText(""); setAddDate(""); setAddStartTime(""); setAddEstMinutes("");
-    inputRef.current?.focus();
+    setAddModalOpen(false);
+  }
+
+  function openAddPJModal() {
+    setAddLevel("pj");
+    setAddText("");
+    setAddModalOpen(true);
+  }
+
+  function openAddTaskModal(pjId, pjName) {
+    setAddLevel("task");
+    setAddPJId(pjId);
+    setModalPJName(pjName);
+    setAddText("");
+    setAddModalOpen(true);
+  }
+
+  function openAddSubtaskModal(pjId, taskId, pjName, taskName) {
+    setAddLevel("subtask");
+    setAddPJId(pjId);
+    setAddTaskId(taskId);
+    setModalPJName(pjName);
+    setModalTaskName(taskName);
+    setAddText(""); setAddDate(""); setAddStartTime(""); setAddEstMinutes("");
+    setAddModalOpen(true);
   }
 
   function toggleSubtaskDone(pjId, taskId, subId) {
@@ -744,9 +751,14 @@ export default function App() {
           </div>
           <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
             <div style={styles.saveIndicator} aria-live="polite">{saveLabel}</div>
-            <button type="button" onClick={handleLoad} disabled={saveState === "loading"} style={styles.reloadBtn}>
-              読込
-            </button>
+            <div style={{ display: "flex", gap: 6 }}>
+              <button type="button" onClick={openAddPJModal} style={styles.reloadBtn}>
+                PJ追加
+              </button>
+              <button type="button" onClick={handleLoad} disabled={saveState === "loading"} style={styles.reloadBtn}>
+                読込
+              </button>
+            </div>
           </div>
         </header>
 
@@ -914,93 +926,82 @@ export default function App() {
 
           {showPersonSections && <h3 style={styles.sectionTitle}>タスク一覧</h3>}
 
-          {!addFormHidden && (
-            <div style={styles.form}>
-              <div style={styles.levelGroup}>
-                {LEVELS.map((l) => (
-                  <button type="button" key={l.key} onClick={() => setAddLevel(l.key)}
-                    style={{ ...styles.levelBtn, background: addLevel === l.key ? "#2C3645" : "transparent", color: addLevel === l.key ? "#F5F2E9" : "#2C3645", borderColor: "#2C3645" }}>
-                    {l.label}
-                  </button>
-                ))}
-              </div>
-              <div style={styles.formRow}>
-                {topTab === "総合" && (
-                  <select value={addOwner} onChange={(e) => setAddOwner(e.target.value)} style={styles.select}>
-                    {TOP_TABS.filter((c) => c.key !== "総合").map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
-                  </select>
-                )}
-                {addLevel === "pj" && ownerHasSub && (
-                  <select value={addSub} onChange={(e) => setAddSub(e.target.value)} style={styles.select}>
-                    {REAL_SUBS.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
-                  </select>
-                )}
-                {(addLevel === "task" || addLevel === "subtask") && (
-                  <select value={addPJId} onChange={(e) => setAddPJId(e.target.value)} style={styles.select} disabled={categoryProjects.length === 0}>
-                    {categoryProjects.length === 0 && <option value="">PJ未作成</option>}
-                    {categoryProjects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                  </select>
-                )}
-                {addLevel === "subtask" && (
-                  <select value={addTaskId} onChange={(e) => setAddTaskId(e.target.value)} style={styles.select} disabled={pjTasks.length === 0}>
-                    {pjTasks.length === 0 && <option value="">タスク未作成</option>}
-                    {pjTasks.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-                  </select>
-                )}
-              </div>
-              {((addLevel === "task" && categoryProjects.length === 0) || (addLevel === "subtask" && (categoryProjects.length === 0 || pjTasks.length === 0))) && (
-                <p style={styles.hint}>{categoryProjects.length === 0 ? "先にPJを作ってから追加できる。" : "先にタスクを作ってから追加できる。"}</p>
-              )}
-              <div style={styles.inputRow}>
-                <input ref={inputRef} value={addText} onChange={(e) => setAddText(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") addItem(e); }}
-                  placeholder={addLevel === "pj" ? "新しいPJ名…" : addLevel === "task" ? "新しいタスク名…" : "新しいサブタスク…"}
-                  style={styles.input} />
-                {addLevel === "pj" && (
-                  <div style={styles.priorityGroup}>
-                    {PJ_PRIORITIES.map((p) => (
-                      <button type="button" key={p.v} onClick={() => setAddPJPriority(p.v)}
-                        style={{ ...styles.priorityBtn, background: addPJPriority === p.v ? p.color : "transparent", color: addPJPriority === p.v ? "#F5F2E9" : p.color, borderColor: p.color }}>
-                        {p.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
-                {addLevel === "subtask" && (
-                  <div style={styles.priorityGroup}>
-                    {PRIORITIES.map((p) => (
-                      <button type="button" key={p.v} onClick={() => setAddPriority(p.v)}
-                        style={{ ...styles.priorityBtn, background: addPriority === p.v ? p.color : "transparent", color: addPriority === p.v ? "#F5F2E9" : p.color, borderColor: p.color }}>
-                        {p.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
-                <button type="button" onClick={addItem}
-                  style={{ ...styles.addBtn, opacity: (addLevel === "task" && categoryProjects.length === 0) || (addLevel === "subtask" && (categoryProjects.length === 0 || pjTasks.length === 0)) ? 0.4 : 1 }}
-                  disabled={(addLevel === "task" && categoryProjects.length === 0) || (addLevel === "subtask" && (categoryProjects.length === 0 || pjTasks.length === 0))}>
-                  記す
-                </button>
-              </div>
-              {addLevel === "subtask" && (
-                <div style={styles.scheduleRow}>
-                  <label style={styles.scheduleField}>
-                    <span style={styles.scheduleLabel}>予定日</span>
-                    <input type="date" value={addDate} onChange={(e) => setAddDate(e.target.value)} style={styles.scheduleInput} />
-                  </label>
-                  <label style={styles.scheduleField}>
-                    <span style={styles.scheduleLabel}>開始</span>
-                    <TimeDropdown value={addStartTime} onChange={setAddStartTime} style={styles.scheduleInput} />
-                  </label>
-                  <label style={styles.scheduleField}>
-                    <span style={styles.scheduleLabel}>想定(分)</span>
-                    <select value={addEstMinutes} onChange={(e) => setAddEstMinutes(e.target.value)} style={{ ...styles.scheduleInput, width: 72 }}>
-                      <option value="">―</option>
-                      {MINUTE_OPTIONS.map((m) => <option key={m} value={m}>{formatDuration(m)}</option>)}
-                    </select>
-                  </label>
+          {addModalOpen && (
+            <div style={styles.modalOverlay} onClick={() => setAddModalOpen(false)}>
+              <div style={styles.modalBox} onClick={(e) => e.stopPropagation()}>
+                <div style={styles.modalHeader}>
+                  <h3 style={styles.modalTitle}>
+                    {addLevel === "pj" ? "PJを追加" : addLevel === "task" ? "タスクを追加" : "サブタスクを追加"}
+                  </h3>
+                  <button type="button" onClick={() => setAddModalOpen(false)} aria-label="閉じる" style={styles.modalCloseBtn}>×</button>
                 </div>
-              )}
+                {addLevel !== "pj" && (
+                  <p style={styles.modalContext}>
+                    {addLevel === "task" ? `PJ: ${modalPJName}` : `PJ: ${modalPJName} ／ タスク: ${modalTaskName}`}
+                  </p>
+                )}
+                <form onSubmit={addItem}>
+                  <div style={styles.formRow}>
+                    {addLevel === "pj" && topTab === "総合" && (
+                      <select value={addOwner} onChange={(e) => setAddOwner(e.target.value)} style={styles.select}>
+                        {TOP_TABS.filter((c) => c.key !== "総合").map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
+                      </select>
+                    )}
+                    {addLevel === "pj" && ownerHasSub && (
+                      <select value={addSub} onChange={(e) => setAddSub(e.target.value)} style={styles.select}>
+                        {REAL_SUBS.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+                      </select>
+                    )}
+                  </div>
+                  <div style={styles.inputRow}>
+                    <input ref={inputRef} autoFocus value={addText} onChange={(e) => setAddText(e.target.value)}
+                      placeholder={addLevel === "pj" ? "新しいPJ名…" : addLevel === "task" ? "新しいタスク名…" : "新しいサブタスク…"}
+                      style={styles.input} />
+                    {addLevel === "pj" && (
+                      <div style={styles.priorityGroup}>
+                        {PJ_PRIORITIES.map((p) => (
+                          <button type="button" key={p.v} onClick={() => setAddPJPriority(p.v)}
+                            style={{ ...styles.priorityBtn, background: addPJPriority === p.v ? p.color : "transparent", color: addPJPriority === p.v ? "#F5F2E9" : p.color, borderColor: p.color }}>
+                            {p.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {addLevel === "subtask" && (
+                      <div style={styles.priorityGroup}>
+                        {PRIORITIES.map((p) => (
+                          <button type="button" key={p.v} onClick={() => setAddPriority(p.v)}
+                            style={{ ...styles.priorityBtn, background: addPriority === p.v ? p.color : "transparent", color: addPriority === p.v ? "#F5F2E9" : p.color, borderColor: p.color }}>
+                            {p.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  {addLevel === "subtask" && (
+                    <div style={styles.scheduleRow}>
+                      <label style={styles.scheduleField}>
+                        <span style={styles.scheduleLabel}>予定日</span>
+                        <input type="date" value={addDate} onChange={(e) => setAddDate(e.target.value)} style={styles.scheduleInput} />
+                      </label>
+                      <label style={styles.scheduleField}>
+                        <span style={styles.scheduleLabel}>開始</span>
+                        <TimeDropdown value={addStartTime} onChange={setAddStartTime} style={styles.scheduleInput} />
+                      </label>
+                      <label style={styles.scheduleField}>
+                        <span style={styles.scheduleLabel}>想定(分)</span>
+                        <select value={addEstMinutes} onChange={(e) => setAddEstMinutes(e.target.value)} style={{ ...styles.scheduleInput, width: 72 }}>
+                          <option value="">―</option>
+                          {MINUTE_OPTIONS.map((m) => <option key={m} value={m}>{formatDuration(m)}</option>)}
+                        </select>
+                      </label>
+                    </div>
+                  )}
+                  <div style={styles.modalActions}>
+                    <button type="submit" style={styles.addBtn}>記す</button>
+                  </div>
+                </form>
+              </div>
             </div>
           )}
 
@@ -1037,6 +1038,7 @@ export default function App() {
                       <span style={{ ...styles.metaTag, borderColor: SUB_TABS.find((s) => s.key === p.subcategory)?.color, color: SUB_TABS.find((s) => s.key === p.subcategory)?.color }}>{p.subcategory}</span>
                     )}
                     <span style={styles.progressTag}>{pd}/{pt}</span>
+                    <button type="button" onClick={() => openAddTaskModal(p.id, p.name)} style={styles.inlineAddBtn}>＋タスク</button>
                     <button onClick={() => removePJ(p.id)} aria-label="PJを削除" style={styles.deleteBtn}>×</button>
                   </div>
                   {ganttPJId === p.id && <GanttChart project={p} />}
@@ -1055,6 +1057,7 @@ export default function App() {
                               <select value={p.id} onChange={(e) => moveTask(p.id, t.id, e.target.value)} style={styles.moveSelect} aria-label="PJを変更">
                                 {projects.map((pp) => <option key={pp.id} value={pp.id}>{pp.name}</option>)}
                               </select>
+                              <button type="button" onClick={() => openAddSubtaskModal(p.id, t.id, p.name, t.name)} style={styles.inlineAddBtn}>＋サブ</button>
                               <button onClick={() => removeTask(p.id, t.id)} aria-label="タスクを削除" style={styles.deleteBtn}>×</button>
                             </div>
                             {taskOpen && (
@@ -1161,10 +1164,15 @@ const styles = {
   subTabBtn: { flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "6px 2px", fontSize: 11.5, fontWeight: 700, fontFamily: "inherit", border: "1.5px solid", borderRadius: 6, cursor: "pointer" },
   subTabCount: { fontSize: 9.5, fontWeight: 700 },
   panel: { background: "#F5F2E9", border: "1.5px solid", borderRadius: "0 6px 10px 10px", padding: 16, boxShadow: "0 3px 14px rgba(44,54,69,0.08)" },
-  form: { marginBottom: 16 },
-  levelGroup: { display: "flex", gap: 4, marginBottom: 8 },
-  levelBtn: { flex: 1, padding: "7px 0", fontSize: 12, fontWeight: 700, border: "1.5px solid", borderRadius: 6, cursor: "pointer", fontFamily: "inherit" },
   formRow: { display: "flex", gap: 6, marginBottom: 6, flexWrap: "wrap" },
+  modalOverlay: { position: "fixed", inset: 0, background: "rgba(44,54,69,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16, zIndex: 50 },
+  modalBox: { width: "100%", maxWidth: 420, maxHeight: "86vh", overflowY: "auto", background: "#F5F2E9", border: "1.5px solid #2C3645", borderRadius: 10, padding: 18, boxShadow: "0 8px 28px rgba(44,54,69,0.3)" },
+  modalHeader: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 },
+  modalTitle: { fontFamily: "'Shippori Mincho', serif", fontSize: 16, fontWeight: 700, color: "#2C3645", margin: 0 },
+  modalCloseBtn: { background: "none", border: "none", fontSize: 20, lineHeight: 1, color: "#8B8578", cursor: "pointer", padding: 4 },
+  modalContext: { fontSize: 11.5, color: "#8B8578", margin: "0 0 12px" },
+  modalActions: { display: "flex", justifyContent: "flex-end", marginTop: 12 },
+  inlineAddBtn: { fontSize: 10.5, fontWeight: 700, color: "#3E5C76", background: "transparent", border: "1.5px solid #3E5C76", borderRadius: 5, padding: "2px 7px", cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap", flexShrink: 0 },
   select: { flex: 1, minWidth: 100, fontSize: 12.5, padding: "7px 6px", borderRadius: 6, border: "1.5px solid #C9C2B2", background: "#FDFCF8", color: "#2C3645", fontFamily: "inherit" },
   hint: { fontSize: 11.5, color: "#A63D34", margin: "0 0 6px" },
   sectionTitle: { fontSize: 12.5, fontWeight: 700, color: "#2C3645", margin: "14px 0 8px", paddingBottom: 4, borderBottom: "1.5px solid #DAD4C4" },
