@@ -29,6 +29,13 @@ const PRIORITIES = [
   { v: 3, label: "低", color: "#8B8578" },
 ];
 
+const PJ_PRIORITIES = [
+  { v: 1, label: "重要・緊急", color: "#A63D34" },
+  { v: 2, label: "重要・不急", color: "#8B6F3E" },
+  { v: 3, label: "軽微・緊急", color: "#3E5C76" },
+  { v: 4, label: "軽微・不急", color: "#8B8578" },
+];
+
 const MINUTE_OPTIONS = Array.from({ length: 16 }, (_, i) => (i + 1) * 15);
 const WORK_MINUTES = 8 * 60;
 
@@ -122,8 +129,8 @@ function task(name, subtasks) {
   return { id: uid(), name, subtasks };
 }
 
-function project(owner, name, tasks, subcategory) {
-  return { id: uid(), owner, name, tasks, subcategory: subcategory || null };
+function project(owner, name, tasks, subcategory, priority) {
+  return { id: uid(), owner, name, tasks, subcategory: subcategory || null, priority: priority || 2 };
 }
 
 function seedProjects() {
@@ -408,6 +415,8 @@ export default function App() {
   const [addTaskId, setAddTaskId] = useState("");
   const [addText, setAddText] = useState("");
   const [addPriority, setAddPriority] = useState(2);
+  const [addPJPriority, setAddPJPriority] = useState(2);
+  const [collapsedPrioritySection, setCollapsedPrioritySection] = useState(() => new Set());
   const [addDate, setAddDate] = useState("");
   const [addStartTime, setAddStartTime] = useState("");
   const [addEstMinutes, setAddEstMinutes] = useState("");
@@ -603,13 +612,18 @@ export default function App() {
   function toggleCollapsePJ(id) { setCollapsedPJ((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; }); }
   function toggleCollapseTask(id) { setCollapsedTask((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; }); }
   function toggleGantt(id) { setGanttPJId((prev) => (prev === id ? null : id)); }
+  function togglePrioritySection(v) { setCollapsedPrioritySection((prev) => { const next = new Set(prev); next.has(v) ? next.delete(v) : next.add(v); return next; }); }
+
+  function updatePJPriority(pjId, priority) {
+    setProjects((prev) => prev.map((p) => (p.id === pjId ? { ...p, priority } : p)));
+  }
 
   function addItem(e) {
     if (e && e.preventDefault) e.preventDefault();
     const trimmed = (inputRef.current ? inputRef.current.value : addText).trim();
     if (!trimmed) return;
     if (addLevel === "pj") {
-      setProjects((prev) => [...prev, project(effectiveOwner, trimmed, [], ownerHasSub ? addSub : null)]);
+      setProjects((prev) => [...prev, project(effectiveOwner, trimmed, [], ownerHasSub ? addSub : null, addPJPriority)]);
     } else if (addLevel === "task") {
       if (!addPJId) return;
       setProjects((prev) => prev.map((p) => (p.id === addPJId ? { ...p, tasks: [...p.tasks, task(trimmed, [])] } : p)));
@@ -940,6 +954,16 @@ export default function App() {
                   onKeyDown={(e) => { if (e.key === "Enter") addItem(e); }}
                   placeholder={addLevel === "pj" ? "新しいPJ名…" : addLevel === "task" ? "新しいタスク名…" : "新しいサブタスク…"}
                   style={styles.input} />
+                {addLevel === "pj" && (
+                  <div style={styles.priorityGroup}>
+                    {PJ_PRIORITIES.map((p) => (
+                      <button type="button" key={p.v} onClick={() => setAddPJPriority(p.v)}
+                        style={{ ...styles.priorityBtn, background: addPJPriority === p.v ? p.color : "transparent", color: addPJPriority === p.v ? "#F5F2E9" : p.color, borderColor: p.color }}>
+                        {p.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 {addLevel === "subtask" && (
                   <div style={styles.priorityGroup}>
                     {PRIORITIES.map((p) => (
@@ -981,7 +1005,20 @@ export default function App() {
           <div style={styles.tree}>
             {projects === null && <p style={styles.empty}>読み込み中…</p>}
             {projects !== null && visibleProjects.length === 0 && <p style={styles.empty}>まだPJがない。上のフォームから作成できる。</p>}
-            {visibleProjects.map((p) => {
+            {projects !== null && visibleProjects.length > 0 && PJ_PRIORITIES.map((pri) => {
+              const group = visibleProjects.filter((pp) => (pp.priority || 2) === pri.v);
+              if (group.length === 0) return null;
+              const sectionOpen = !collapsedPrioritySection.has(pri.v);
+              return (
+                <div key={pri.v} style={styles.prioritySection}>
+                  <button type="button" onClick={() => togglePrioritySection(pri.v)} style={{ ...styles.prioritySectionHeader, color: pri.color, borderColor: pri.color }}>
+                    <span>{sectionOpen ? "▾" : "▸"}</span>
+                    <span>{pri.label}</span>
+                    <span style={styles.prioritySectionCount}>{group.length}</span>
+                  </button>
+                  {sectionOpen && (
+                    <div style={styles.prioritySectionBody}>
+                      {group.map((p) => {
               const pjOpen = !collapsedPJ.has(p.id);
               const { done: pd, total: pt } = pjProgress(p);
               const oColor = ownerColorOf(p.owner);
@@ -990,6 +1027,9 @@ export default function App() {
                   <div style={styles.pjHeader}>
                     <button onClick={() => toggleCollapsePJ(p.id)} style={styles.collapseBtn} aria-label={pjOpen ? "折りたたむ" : "展開する"}>{pjOpen ? "▾" : "▸"}</button>
                     <button onClick={() => toggleGantt(p.id)} style={{ ...styles.pjName, background: ganttPJId === p.id ? "#EAE6DB" : "transparent" }} aria-label="ガントチャートを表示">{p.name}</button>
+                    <select value={p.priority || 2} onChange={(e) => updatePJPriority(p.id, Number(e.target.value))} style={styles.moveSelect} aria-label="優先度を変更">
+                      {PJ_PRIORITIES.map((pr) => <option key={pr.v} value={pr.v}>{pr.label}</option>)}
+                    </select>
                     {topTab === "総合" && <span style={{ ...styles.metaTag, borderColor: oColor, color: oColor }}>{TOP_TABS.find((c) => c.key === p.owner)?.label}</span>}
                     {(topTab === "総合" || subTab === "総合") && p.subcategory && (
                       <span style={{ ...styles.metaTag, borderColor: SUB_TABS.find((s) => s.key === p.subcategory)?.color, color: SUB_TABS.find((s) => s.key === p.subcategory)?.color }}>{p.subcategory}</span>
@@ -1088,6 +1128,11 @@ export default function App() {
                   )}
                 </div>
               );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
             })}
           </div>
         </section>
@@ -1143,7 +1188,11 @@ const styles = {
   scheduleLabel: { fontSize: 10, color: "#8B8578", fontWeight: 700 },
   scheduleInput: { fontSize: 12.5, padding: "6px 6px", borderRadius: 6, border: "1.5px solid #C9C2B2", background: "#FDFCF8", color: "#2C3645", fontFamily: "inherit" },
   addBtn: { padding: "9px 14px", fontSize: 13, fontWeight: 700, color: "#F5F2E9", background: "#2C3645", border: "none", borderRadius: 6, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" },
-  tree: { display: "flex", flexDirection: "column", gap: 10 },
+  tree: { display: "flex", flexDirection: "column", gap: 14 },
+  prioritySection: { display: "flex", flexDirection: "column", gap: 8 },
+  prioritySectionHeader: { display: "flex", alignItems: "center", gap: 6, width: "100%", background: "transparent", border: "none", borderBottom: "1.5px solid", padding: "0 0 4px", cursor: "pointer", fontFamily: "inherit", fontSize: 12.5, fontWeight: 700, textAlign: "left" },
+  prioritySectionCount: { marginLeft: "auto", fontSize: 10.5, fontWeight: 700, color: "#8B8578" },
+  prioritySectionBody: { display: "flex", flexDirection: "column", gap: 10 },
   empty: { padding: "18px 4px", color: "#A39D8C", fontSize: 13, textAlign: "center" },
   emptySmall: { padding: "6px 4px", color: "#A39D8C", fontSize: 11.5, margin: 0 },
   pjCard: { background: "#FDFCF8", border: "1px solid #DAD4C4", borderLeft: "4px solid", borderRadius: 8, padding: 10 },
