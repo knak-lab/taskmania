@@ -617,6 +617,21 @@ export default function App() {
     setProjects((prev) => prev.map((p) => (p.id === pjId ? { ...p, priority } : p)));
   }
 
+  function movePJInSection(groupIds, pjId, direction) {
+    const idx = groupIds.indexOf(pjId);
+    const swapIdx = direction === "up" ? idx - 1 : idx + 1;
+    if (idx === -1 || swapIdx < 0 || swapIdx >= groupIds.length) return;
+    const targetId = groupIds[swapIdx];
+    setProjects((prev) => {
+      const a = prev.findIndex((p) => p.id === pjId);
+      const b = prev.findIndex((p) => p.id === targetId);
+      if (a === -1 || b === -1) return prev;
+      const next = [...prev];
+      [next[a], next[b]] = [next[b], next[a]];
+      return next;
+    });
+  }
+
   function updatePJStatus(pjId, status) {
     setProjects((prev) => prev.map((p) => (p.id === pjId ? { ...p, status: status || null } : p)));
   }
@@ -1055,13 +1070,18 @@ export default function App() {
                   </button>
                   {sectionOpen && (
                     <div style={styles.prioritySectionBody}>
-                      {group.map((p) => {
+                      {group.map((p, pIdx) => {
+              const groupIds = group.map((gp) => gp.id);
               const pjOpen = openPJ.has(p.id);
               const { done: pd, total: pt } = pjProgress(p);
               const oColor = ownerColorOf(p.owner);
               return (
                 <div key={p.id} style={{ ...styles.pjCard, borderLeftColor: oColor }} className="row-in">
                   <div style={styles.pjHeader}>
+                    <div style={styles.reorderBtns}>
+                      <button type="button" onClick={() => movePJInSection(groupIds, p.id, "up")} disabled={pIdx === 0} style={{ ...styles.reorderBtn, opacity: pIdx === 0 ? 0.3 : 1, cursor: pIdx === 0 ? "default" : "pointer" }} aria-label="上へ移動">▲</button>
+                      <button type="button" onClick={() => movePJInSection(groupIds, p.id, "down")} disabled={pIdx === groupIds.length - 1} style={{ ...styles.reorderBtn, opacity: pIdx === groupIds.length - 1 ? 0.3 : 1, cursor: pIdx === groupIds.length - 1 ? "default" : "pointer" }} aria-label="下へ移動">▼</button>
+                    </div>
                     <button onClick={() => toggleOpenPJ(p.id)} style={styles.collapseBtn} aria-label={pjOpen ? "折りたたむ" : "展開する"}>{pjOpen ? "▾" : "▸"}</button>
                     <input type="text" value={p.name} onChange={(e) => updatePJName(p.id, e.target.value)} style={styles.pjNameInput} aria-label="PJ名を編集" />
                     {pt > 0 && pd === pt && <span style={styles.doneMark}>✅</span>}
@@ -1250,6 +1270,8 @@ const styles = {
   emptySmall: { padding: "6px 4px", color: "#A39D8C", fontSize: 11.5, margin: 0 },
   pjCard: { background: "#FDFCF8", border: "1px solid #DAD4C4", borderLeft: "4px solid", borderRadius: 8, padding: 10 },
   pjHeader: { display: "flex", alignItems: "center", gap: 6 },
+  reorderBtns: { display: "flex", flexDirection: "column", gap: 1, flexShrink: 0 },
+  reorderBtn: { background: "none", border: "none", fontSize: 8, lineHeight: 1, color: "#8B8578", cursor: "pointer", width: 14, height: 9, padding: 0 },
   collapseBtn: { background: "none", border: "none", fontSize: 13, color: "#2C3645", cursor: "pointer", width: 18, padding: 0, flexShrink: 0 },
   collapseBtnSm: { background: "none", border: "none", fontSize: 11, color: "#3E5C76", cursor: "pointer", width: 16, padding: 0, flexShrink: 0 },
   pjNameInput: { flex: 1, fontSize: 14, fontWeight: 700, color: "#2C3645", minWidth: 0, textAlign: "left", border: "none", background: "transparent", fontFamily: "inherit", padding: "3px 5px", borderRadius: 5 },
