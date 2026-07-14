@@ -302,7 +302,7 @@ function GanttChart({ project }) {
 
 function OverviewGanttChart({ projects }) {
   const [granularity, setGranularity] = useState("day");
-  const [collapsedPJ, setCollapsedPJ] = useState(() => new Set());
+  const [openPJ, setOpenPJ] = useState(() => new Set());
 
   const pjData = projects.map((p) => {
     const taskRows = [];
@@ -332,11 +332,11 @@ function OverviewGanttChart({ projects }) {
   const flatRows = [];
   for (const p of pjData) {
     flatRows.push({ type: "pj", id: p.id, name: p.name, count: p.taskRows.length });
-    if (!collapsedPJ.has(p.id)) for (const t of p.taskRows) flatRows.push({ type: "task", ...t });
+    if (openPJ.has(p.id)) for (const t of p.taskRows) flatRows.push({ type: "task", ...t });
   }
 
   function togglePJ(id) {
-    setCollapsedPJ((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
+    setOpenPJ((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
   }
 
   return (
@@ -359,7 +359,7 @@ function OverviewGanttChart({ projects }) {
           <div style={styles.ganttLabelHeaderCell} />
           {flatRows.map((r) => r.type === "pj" ? (
             <button key={r.id + "-pjlabel"} type="button" onClick={() => togglePJ(r.id)} style={styles.ganttPjRow}>
-              <span>{collapsedPJ.has(r.id) ? "▸" : "▾"}</span>
+              <span>{openPJ.has(r.id) ? "▾" : "▸"}</span>
               <span style={styles.ganttPjName}>{r.name}</span>
               <span style={styles.ganttPjCount}>{r.count}</span>
             </button>
@@ -393,8 +393,8 @@ export default function App() {
   const [projects, setProjects] = useState(null);
   const [topTab, setTopTab] = useState("kkr");
   const [subTab, setSubTab] = useState("仕事");
-  const [collapsedPJ, setCollapsedPJ] = useState(() => new Set());
-  const [collapsedTask, setCollapsedTask] = useState(() => new Set());
+  const [openPJ, setOpenPJ] = useState(() => new Set());
+  const [openTask, setOpenTask] = useState(() => new Set());
   const [ganttPJId, setGanttPJId] = useState(null);
   const [runningTarget, setRunningTarget] = useState(null);
   const [, setTick] = useState(0);
@@ -416,7 +416,7 @@ export default function App() {
   const [addText, setAddText] = useState("");
   const [addPriority, setAddPriority] = useState(2);
   const [addPJPriority, setAddPJPriority] = useState(2);
-  const [collapsedPrioritySection, setCollapsedPrioritySection] = useState(() => new Set());
+  const [collapsedPrioritySection, setCollapsedPrioritySection] = useState(() => new Set(PJ_PRIORITIES.map((p) => p.v)));
   const [addDate, setAddDate] = useState("");
   const [addStartTime, setAddStartTime] = useState("");
   const [addEstMinutes, setAddEstMinutes] = useState("");
@@ -541,7 +541,7 @@ export default function App() {
     return toDateStr(next);
   });
   const [adjHoursVal, setAdjHoursVal] = useState(1);
-  const [weekCollapsed, setWeekCollapsed] = useState(false);
+  const [weekCollapsed, setWeekCollapsed] = useState(true);
 
   useEffect(() => { localStorage.setItem("tm_week_adj", JSON.stringify(weekAdj)); }, [weekAdj]);
 
@@ -609,8 +609,8 @@ export default function App() {
     return openCountFor(key, null);
   };
 
-  function toggleCollapsePJ(id) { setCollapsedPJ((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; }); }
-  function toggleCollapseTask(id) { setCollapsedTask((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; }); }
+  function toggleOpenPJ(id) { setOpenPJ((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; }); }
+  function toggleOpenTask(id) { setOpenTask((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; }); }
   function toggleGantt(id) { setGanttPJId((prev) => (prev === id ? null : id)); }
   function togglePrioritySection(v) { setCollapsedPrioritySection((prev) => { const next = new Set(prev); next.has(v) ? next.delete(v) : next.add(v); return next; }); }
 
@@ -1019,13 +1019,13 @@ export default function App() {
                   {sectionOpen && (
                     <div style={styles.prioritySectionBody}>
                       {group.map((p) => {
-              const pjOpen = !collapsedPJ.has(p.id);
+              const pjOpen = openPJ.has(p.id);
               const { done: pd, total: pt } = pjProgress(p);
               const oColor = ownerColorOf(p.owner);
               return (
                 <div key={p.id} style={{ ...styles.pjCard, borderLeftColor: oColor }} className="row-in">
                   <div style={styles.pjHeader}>
-                    <button onClick={() => toggleCollapsePJ(p.id)} style={styles.collapseBtn} aria-label={pjOpen ? "折りたたむ" : "展開する"}>{pjOpen ? "▾" : "▸"}</button>
+                    <button onClick={() => toggleOpenPJ(p.id)} style={styles.collapseBtn} aria-label={pjOpen ? "折りたたむ" : "展開する"}>{pjOpen ? "▾" : "▸"}</button>
                     <button onClick={() => toggleGantt(p.id)} style={{ ...styles.pjName, background: ganttPJId === p.id ? "#EAE6DB" : "transparent" }} aria-label="ガントチャートを表示">{p.name}</button>
                     <select value={p.priority || 2} onChange={(e) => updatePJPriority(p.id, Number(e.target.value))} style={styles.moveSelect} aria-label="優先度を変更">
                       {PJ_PRIORITIES.map((pr) => <option key={pr.v} value={pr.v}>{pr.label}</option>)}
@@ -1042,12 +1042,12 @@ export default function App() {
                     <div style={styles.taskList}>
                       {p.tasks.length === 0 && <p style={styles.emptySmall}>タスクなし</p>}
                       {p.tasks.map((t) => {
-                        const taskOpen = !collapsedTask.has(t.id);
+                        const taskOpen = openTask.has(t.id);
                         const { done: td, total: tt } = taskProgress(t);
                         return (
                           <div key={t.id} style={styles.taskCard} className="row-in">
                             <div style={styles.taskHeader}>
-                              <button onClick={() => toggleCollapseTask(t.id)} style={styles.collapseBtnSm} aria-label={taskOpen ? "折りたたむ" : "展開する"}>{taskOpen ? "▾" : "▸"}</button>
+                              <button onClick={() => toggleOpenTask(t.id)} style={styles.collapseBtnSm} aria-label={taskOpen ? "折りたたむ" : "展開する"}>{taskOpen ? "▾" : "▸"}</button>
                               <span style={styles.taskName}>{t.name}</span>
                               <span style={styles.progressTagSm}>{td}/{tt}</span>
                               <select value={p.id} onChange={(e) => moveTask(p.id, t.id, e.target.value)} style={styles.moveSelect} aria-label="PJを変更">
