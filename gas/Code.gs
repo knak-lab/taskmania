@@ -3,7 +3,7 @@
  *
  * シート構成:
  *   Projects: id | owner | name | subcategory | priority | status
- *   Tasks:    id | projectId | name | startDate | endDate
+ *   Tasks:    id | projectId | name | startDate | endDate | estimatedMinutes
  *   Subtasks: id | taskId | text | done | priority | scheduledDate | startTime | estimatedMinutes | actualMinutes | createdAt
  *   Steps:    id | subtaskId | text | done
  *
@@ -42,6 +42,11 @@
  *   既存のTasksシートのD1・E1セルに手動で "startDate" "endDate" と入力しておくこと。
  *   既存行のD・E列が空欄の場合は未設定(null)として扱われるので、
  *   値が入っていなくても壊れない。
+ *
+ * 既存スプレッドシートを使っている場合の移行手順(TasksにestimatedMinutes列を追加した際):
+ *   既存のTasksシートのF1セルに手動で "estimatedMinutes" と入力しておくこと。
+ *   既存行のF列が空欄の場合は未設定(null)として扱われ、フロント側でサブタスクの
+ *   想定時間合計にフォールバックするので、値が入っていなくても壊れない。
  */
 
 const SHEET_PROJECTS = "Projects";
@@ -50,7 +55,7 @@ const SHEET_SUBTASKS = "Subtasks";
 const SHEET_STEPS = "Steps";
 
 const PROJECTS_HEADERS = ["id", "owner", "name", "subcategory", "priority", "status"];
-const TASKS_HEADERS = ["id", "projectId", "name", "startDate", "endDate"];
+const TASKS_HEADERS = ["id", "projectId", "name", "startDate", "endDate", "estimatedMinutes"];
 const SUBTASKS_HEADERS = [
   "id",
   "taskId",
@@ -152,7 +157,8 @@ function readProjects_() {
       projectId = r[1],
       name = r[2],
       startDate = r[3],
-      endDate = r[4];
+      endDate = r[4],
+      estimatedMinutes = r[5];
     if (!id || !projectId) return;
     if (!tasksByProject[projectId]) tasksByProject[projectId] = [];
     tasksByProject[projectId].push({
@@ -160,6 +166,7 @@ function readProjects_() {
       name: name || "",
       startDate: startDate ? String(startDate) : null,
       endDate: endDate ? String(endDate) : null,
+      estimatedMinutes: estimatedMinutes ? Number(estimatedMinutes) : null,
       subtasks: subtasksByTask[id] || [],
     });
   });
@@ -210,7 +217,7 @@ function writeProjects_(projects) {
   (projects || []).forEach(function (p) {
     projRows.push([p.id, p.owner || "", p.name || "", p.subcategory || "", p.priority || 2, p.status || ""]);
     (p.tasks || []).forEach(function (t) {
-      taskRows.push([t.id, p.id, t.name || "", t.startDate || "", t.endDate || ""]);
+      taskRows.push([t.id, p.id, t.name || "", t.startDate || "", t.endDate || "", t.estimatedMinutes || ""]);
       (t.subtasks || []).forEach(function (s) {
         subRows.push([
           s.id,

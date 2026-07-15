@@ -136,8 +136,8 @@ function addMinutesToTime(time, minutes) {
   return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
 }
 
-function task(name, subtasks, startDate, endDate) {
-  return { id: uid(), name, subtasks, startDate: startDate || null, endDate: endDate || null };
+function task(name, subtasks, startDate, endDate, estimatedMinutes) {
+  return { id: uid(), name, subtasks, startDate: startDate || null, endDate: endDate || null, estimatedMinutes: estimatedMinutes || null };
 }
 
 function project(owner, name, tasks, subcategory, priority) {
@@ -162,6 +162,18 @@ function countSubtasks(items) {
 }
 
 function taskProgress(t) { return countSubtasks(t.subtasks); }
+
+function taskEstimatedSubtotal(t) {
+  return t.subtasks.reduce((sum, s) => sum + (s.estimatedMinutes || 0), 0);
+}
+
+function taskActualSubtotal(t) {
+  return t.subtasks.reduce((sum, s) => sum + (s.actualMinutes || 0), 0);
+}
+
+function taskEstimatedEffective(t) {
+  return t.estimatedMinutes != null ? t.estimatedMinutes : taskEstimatedSubtotal(t);
+}
 
 function pjProgress(p) {
   let done = 0, total = 0;
@@ -441,25 +453,36 @@ export default function App() {
 
   const inputRef = useRef(null);
   const saveTimer = useRef(null);
+  // サーバーからの読み込みに一度でも成功するまでは自動保存を止める安全弁。
+  // これがないと、読み込み失敗時にサンプルデータへフォールバックした直後の
+  // 自動保存でスプレッドシートの実データを上書き消去してしまう。
+  const hasLoadedRef = useRef(false);
 
   // 初回ロード
   const handleLoad = async () => {
     setSaveState("loading");
     try {
       const data = await gasLoad();
-      setProjects(data.length > 0 ? data : seedProjects());
+      if (data.length > 0 || !hasLoadedRef.current) {
+        setProjects(data.length > 0 ? data : seedProjects());
+      }
+      hasLoadedRef.current = true;
       setSaveState("idle");
     } catch {
-      setProjects(seedProjects());
+      // 既に一度でも読み込みに成功していれば、今持っているデータを保持したまま
+      // エラー表示のみ行う(サンプルデータで上書きして自動保存させない)。
+      if (!hasLoadedRef.current) {
+        setProjects(seedProjects());
+      }
       setSaveState("error");
     }
   };
 
   useEffect(() => { handleLoad(); }, []);
 
-  // 変更時に自動保存
+  // 変更時に自動保存(初回読み込みが成功するまでは保存しない)
   useEffect(() => {
-    if (projects === null) return;
+    if (projects === null || !hasLoadedRef.current) return;
     setSaveState("saving");
     clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(async () => {
@@ -809,6 +832,11 @@ export default function App() {
 
   function updateTaskDate(pjId, taskId, field, value) {
     setProjects((prev) => prev.map((p) => p.id !== pjId ? p : { ...p, tasks: p.tasks.map((t) => (t.id === taskId ? { ...t, [field]: value || null } : t)) }));
+  }
+
+  function updateTaskEstimatedMinutes(pjId, taskId, value) {
+    const v = value === "" ? null : Number(value);
+    setProjects((prev) => prev.map((p) => p.id !== pjId ? p : { ...p, tasks: p.tasks.map((t) => (t.id === taskId ? { ...t, estimatedMinutes: v } : t)) }));
   }
 
   function commitStopwatch(target) {
@@ -1438,6 +1466,13 @@ export default function App() {
                                 <span style={styles.scheduleEditLabel}>終了日</span>
                                 <input type="date" value={t.endDate || ""} onChange={(e) => updateTaskDate(p.id, t.id, "endDate", e.target.value)} min={t.startDate || undefined} style={styles.scheduleEditInput} aria-label="タスク終了日" />
                               </label>
+                              <label style={styles.scheduleEditField}>
+                                <span style={styles.scheduleEditLabel}>想定(分・手入力優先)</span>
+                                <input type="number" min="0" step="15" value={t.estimatedMinutes ?? ""} onChange={(e) => updateTaskEstimatedMinutes(p.id, t.id, e.target.value)}
+                                  placeholder={taskEstimatedSubtotal(t) ? String(taskEstimatedSubtotal(t)) : "―"} style={{ ...styles.scheduleEditInput, width: 64 }} aria-label="タスク想定時間(分)" />
+                              </label>
+                              <span style={styles.calEstTag} title={t.estimatedMinutes != null ? "手入力値" : "サブタスクの想定(分)の合計"}>想定{taskEstimatedEffective(t) ? formatDuration(taskEstimatedEffective(t)) : "―"}</span>
+                              <span style={styles.calEstTag} title="サブタスクの実績(分)の合計">実績{taskActualSubtotal(t) ? formatDuration(taskActualSubtotal(t)) : "―"}</span>
                             </div>
                             {taskOpen && (
                               <ul style={styles.subList}>
