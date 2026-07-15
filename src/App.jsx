@@ -404,6 +404,7 @@ export default function App() {
   const [openPJ, setOpenPJ] = useState(() => new Set());
   const [openTask, setOpenTask] = useState(() => new Set());
   const [ganttPJId, setGanttPJId] = useState(null);
+  const [ganttCollapsed, setGanttCollapsed] = useState(true);
   const [runningTarget, setRunningTarget] = useState(null);
   const [, setTick] = useState(0);
 
@@ -917,8 +918,6 @@ export default function App() {
         <section style={{ ...styles.panel, borderColor: activeTopColor }}>
           {showPersonSections && (
             <>
-              <h3 style={styles.sectionTitle}>総合ガントチャート</h3>
-              <OverviewGanttChart projects={categoryProjects} />
               <h3 style={styles.sectionTitle}>今日のタスク</h3>
               {showWorkSummary && (
                 <div style={styles.workSummaryBar}>
@@ -1117,6 +1116,18 @@ export default function App() {
                   )}
                 </>
               )}
+            </>
+          )}
+
+          {showPersonSections && (
+            <>
+              <div style={styles.sectionTitleRow}>
+                <h3 style={styles.sectionTitleFlush}>総合ガントチャート</h3>
+                <button type="button" onClick={() => setGanttCollapsed((v) => !v)} style={styles.collapseBtnSm} aria-label={ganttCollapsed ? "総合ガントチャートを展開する" : "総合ガントチャートを折りたたむ"}>
+                  {ganttCollapsed ? "▸" : "▾"}
+                </button>
+              </div>
+              {!ganttCollapsed && <OverviewGanttChart projects={categoryProjects} />}
             </>
           )}
 
@@ -1391,6 +1402,8 @@ const styles = {
   select: { flex: 1, minWidth: 100, fontSize: 12.5, padding: "7px 6px", borderRadius: 6, border: "1.5px solid #C9C2B2", background: "#FDFCF8", color: "#2C3645", fontFamily: "inherit" },
   hint: { fontSize: 11.5, color: "#A63D34", margin: "0 0 6px" },
   sectionTitle: { fontSize: 12.5, fontWeight: 700, color: "#2C3645", margin: "14px 0 8px", paddingBottom: 4, borderBottom: "1.5px solid #DAD4C4" },
+  sectionTitleRow: { display: "flex", justifyContent: "space-between", alignItems: "center", margin: "14px 0 8px", paddingBottom: 4, borderBottom: "1.5px solid #DAD4C4" },
+  sectionTitleFlush: { fontSize: 12.5, fontWeight: 700, color: "#2C3645", margin: 0 },
   workSummaryBar: { display: "flex", gap: 10, flexWrap: "wrap", padding: "6px 8px", marginBottom: 8, background: "#F5F2E9", border: "1px solid #DAD4C4", borderRadius: 6 },
   workSummaryItem: { fontSize: 11, fontWeight: 700, color: "#2C3645", display: "flex", alignItems: "center" },
   workWarnIcon: { marginLeft: 4, fontSize: 13, fontWeight: 900 },
