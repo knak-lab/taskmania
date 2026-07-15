@@ -4,35 +4,35 @@ import { loadProjects as gasLoad, saveProjects as gasSave } from "./api/gas";
 const TOP_TABS = [
   { key: "総合", label: "総合", color: "#2C3645" },
   { key: "家族", label: "家族", color: "#6B7F6E" },
-  { key: "kkr", label: "kkr", color: "#3E5C76" },
-  { key: "acco", label: "acco", color: "#A63D34" },
+  { key: "kkr", label: "kkr", color: "#12314F" },
+  { key: "acco", label: "acco", color: "#F39800" },
 ];
 
 const PERSON_KEYS = ["kkr", "acco"];
 const SUB_TABS = [
   { key: "総合", label: "総合" },
   { key: "仕事", label: "仕事", color: "#8B6F3E" },
-  { key: "趣味", label: "趣味", color: "#A63D34" },
-  { key: "研鑽", label: "研鑽", color: "#3E5C76" },
+  { key: "趣味", label: "趣味", color: "#F39800" },
+  { key: "研鑽", label: "研鑽", color: "#12314F" },
 ];
 const REAL_SUBS = SUB_TABS.slice(1);
 
 const PRIORITIES = [
-  { v: 1, label: "急", color: "#A63D34" },
-  { v: 2, label: "並", color: "#3E5C76" },
-  { v: 3, label: "低", color: "#8B8578" },
+  { v: 1, label: "急", color: "#F39800" },
+  { v: 2, label: "並", color: "#12314F" },
+  { v: 3, label: "低", color: "#7A7A7A" },
 ];
 
 const PJ_PRIORITIES = [
-  { v: 1, label: "重要・緊急", color: "#A63D34" },
+  { v: 1, label: "重要・緊急", color: "#F39800" },
   { v: 2, label: "重要・不急", color: "#8B6F3E" },
-  { v: 3, label: "軽微・緊急", color: "#3E5C76" },
-  { v: 4, label: "軽微・不急", color: "#8B8578" },
+  { v: 3, label: "軽微・緊急", color: "#12314F" },
+  { v: 4, label: "軽微・不急", color: "#7A7A7A" },
 ];
 
 const PJ_STATUSES = [
   { v: "done", label: "完了", color: "#6B7F6E" },
-  { v: "hold", label: "保留", color: "#A39D8C" },
+  { v: "hold", label: "保留", color: "#9B9B9B" },
 ];
 
 const MINUTE_OPTIONS = Array.from({ length: 16 }, (_, i) => (i + 1) * 15);
@@ -67,7 +67,7 @@ function TimeDropdown({ value, onChange, style }) {
         <div style={styles.timeDropdownList}>
           <div
             onClick={() => { onChange(""); setOpen(false); }}
-            style={{ ...styles.timeDropdownItem, fontWeight: 700, color: "#A63D34" }}
+            style={{ ...styles.timeDropdownItem, fontWeight: 700, color: "#F39800" }}
           >
             ― (未設定)
           </div>
@@ -79,7 +79,7 @@ function TimeDropdown({ value, onChange, style }) {
               style={{
                 ...styles.timeDropdownItem,
                 background: tm === value ? "#2C3645" : "transparent",
-                color: tm === value ? "#F5F2E9" : "#2C3645",
+                color: tm === value ? "#FFFFFF" : "#2C3645",
               }}
             >
               {tm}
@@ -281,7 +281,7 @@ function GanttChart({ project }) {
         <div style={styles.granularityGroup}>
           {GRANULARITIES.map((g) => (
             <button type="button" key={g.key} onClick={() => setGranularity(g.key)}
-              style={{ ...styles.granularityBtn, background: granularity === g.key ? "#2C3645" : "transparent", color: granularity === g.key ? "#F5F2E9" : "#2C3645" }}>
+              style={{ ...styles.granularityBtn, background: granularity === g.key ? "#2C3645" : "transparent", color: granularity === g.key ? "#FFFFFF" : "#2C3645" }}>
               {g.label}
             </button>
           ))}
@@ -367,7 +367,7 @@ function OverviewGanttChart({ projects }) {
         <div style={styles.granularityGroup}>
           {GRANULARITIES.map((g) => (
             <button type="button" key={g.key} onClick={() => setGranularity(g.key)}
-              style={{ ...styles.granularityBtn, background: granularity === g.key ? "#2C3645" : "transparent", color: granularity === g.key ? "#F5F2E9" : "#2C3645" }}>
+              style={{ ...styles.granularityBtn, background: granularity === g.key ? "#2C3645" : "transparent", color: granularity === g.key ? "#FFFFFF" : "#2C3645" }}>
               {g.label}
             </button>
           ))}
@@ -393,7 +393,7 @@ function OverviewGanttChart({ projects }) {
           <div style={{ ...styles.ganttGrid, gridTemplateColumns: `repeat(${buckets.length}, ${colWidth}px)`, gridTemplateRows: `26px repeat(${flatRows.length}, 22px)` }}>
             {buckets.map((b, i) => <div key={b} style={{ ...styles.ganttDateCell, gridRow: 1, gridColumn: i + 1 }}>{bucketLabel(b, granularity)}</div>)}
             {flatRows.map((r, idx) => {
-              if (r.type === "pj") return <div key={r.id + "-pjband"} style={{ gridRow: idx + 2, gridColumn: `1 / ${buckets.length + 1}`, background: "#E3DECF", borderRadius: 5 }} />;
+              if (r.type === "pj") return <div key={r.id + "-pjband"} style={{ gridRow: idx + 2, gridColumn: `1 / ${buckets.length + 1}`, background: "#E5E5E5", borderRadius: 5 }} />;
               const startIdx = buckets.indexOf(bucketKeyFor(r.startDate, granularity));
               const endIdx = buckets.indexOf(bucketKeyFor(r.endDate, granularity));
               const pct = r.total ? Math.round((r.done / r.total) * 100) : 0;
@@ -971,8 +971,8 @@ export default function App() {
           100% { transform: scale(1) rotate(-10deg); opacity: 1; }
         }
         .hanko-pop { animation: stampIn 0.5s cubic-bezier(.2,.9,.3,1.2); }
-        input:focus, select:focus, button:focus-visible { outline: 2px solid #3E5C76; outline-offset: 2px; }
-        ::placeholder { color: #A39D8C; }
+        input:focus, select:focus, button:focus-visible { outline: 2px solid #12314F; outline-offset: 2px; }
+        ::placeholder { color: #9B9B9B; }
         @media (min-width: 768px) {
           .tm-page { padding: 24px 32px 60px !important; }
         }
@@ -1005,10 +1005,10 @@ export default function App() {
             const count = topBadge(c.key);
             return (
               <button key={c.key} role="tab" aria-selected={active} onClick={() => setTopTab(c.key)}
-                style={{ ...styles.tabBtn, color: active ? "#F5F2E9" : c.color, background: active ? c.color : "transparent", borderColor: c.color }}>
-                <span style={{ ...styles.tabDot, background: active ? "#F5F2E9" : c.color }} />
+                style={{ ...styles.tabBtn, color: active ? "#FFFFFF" : c.color, background: active ? c.color : "transparent", borderColor: c.color }}>
+                <span style={{ ...styles.tabDot, background: active ? "#FFFFFF" : c.color }} />
                 {c.label}
-                <span style={{ ...styles.tabCount, color: active ? "#F5F2E9" : c.color, opacity: count ? 1 : 0.35 }}>{count}</span>
+                <span style={{ ...styles.tabCount, color: active ? "#FFFFFF" : c.color, opacity: count ? 1 : 0.35 }}>{count}</span>
               </button>
             );
           })}
@@ -1022,9 +1022,9 @@ export default function App() {
               const count = s.key === "総合" ? topBadge(topTab) : openCountFor(topTab, s.key);
               return (
                 <button key={s.key} role="tab" aria-selected={active} onClick={() => setSubTab(s.key)}
-                  style={{ ...styles.subTabBtn, color: active ? "#F5F2E9" : color, background: active ? color : "transparent", borderColor: color }}>
+                  style={{ ...styles.subTabBtn, color: active ? "#FFFFFF" : color, background: active ? color : "transparent", borderColor: color }}>
                   {s.label}
-                  <span style={{ ...styles.subTabCount, color: active ? "#F5F2E9" : color, opacity: count ? 1 : 0.35 }}>{count}</span>
+                  <span style={{ ...styles.subTabCount, color: active ? "#FFFFFF" : color, opacity: count ? 1 : 0.35 }}>{count}</span>
                 </button>
               );
             })}
@@ -1040,7 +1040,7 @@ export default function App() {
                   <span style={styles.workSummaryItem}>業務時間 8時間</span>
                   <span style={styles.workSummaryItem}>
                     想定時間計 {totalEstMin ? formatDuration(totalEstMin) : "0分"}
-                    {estWarnLevel && <span style={{ ...styles.workWarnIcon, color: estWarnLevel === "red" ? "#A63D34" : "#2C3645" }}>⚠</span>}
+                    {estWarnLevel && <span style={{ ...styles.workWarnIcon, color: estWarnLevel === "red" ? "#F39800" : "#2C3645" }}>⚠</span>}
                   </span>
                   <span style={styles.workSummaryItem}>実績計 {totalActualMin ? formatDuration(totalActualMin) : "0分"}</span>
                 </div>
@@ -1057,7 +1057,7 @@ export default function App() {
                         </button>
                         <TimeDropdown value={s.startTime || ""} onChange={(v) => updateSubtaskSchedule(pjId, taskId, s.id, "startTime", v)} style={{ width: 54 }} />
                         <span style={{ ...styles.calTimeCol, width: 40 }}>{addMinutesToTime(s.startTime, s.estimatedMinutes) || "―"}</span>
-                        <span style={{ ...styles.calSubCol, textDecoration: s.done ? "line-through" : "none", color: s.done ? "#A39D8C" : "#2C3645" }} title={s.text}>{s.text}</span>
+                        <span style={{ ...styles.calSubCol, textDecoration: s.done ? "line-through" : "none", color: s.done ? "#9B9B9B" : "#2C3645" }} title={s.text}>{s.text}</span>
                       </div>
                       <div style={styles.calendarLine2}>
                         <span style={styles.calendarLine2Label}>想定</span>
@@ -1071,7 +1071,7 @@ export default function App() {
                           {MINUTE_OPTIONS.map((m) => <option key={m} value={m}>{formatDuration(m)}</option>)}
                         </select>
                         <button type="button" onClick={() => toggleStopwatch(pjId, taskId, s.id)}
-                          style={{ ...styles.stopwatchBtn, background: runningTarget?.subId === s.id ? "#A63D34" : "transparent", color: runningTarget?.subId === s.id ? "#F5F2E9" : "#3E5C76", borderColor: "#3E5C76" }}
+                          style={{ ...styles.stopwatchBtn, background: runningTarget?.subId === s.id ? "#F39800" : "transparent", color: runningTarget?.subId === s.id ? "#FFFFFF" : "#12314F", borderColor: "#12314F" }}
                           aria-label={runningTarget?.subId === s.id ? "計測を終了" : "計測を開始"}>
                           {runningTarget?.subId === s.id ? (() => { const sec = Math.max(0, Math.floor((Date.now() - runningTarget.startAt) / 1000)); return `■ ${String(Math.floor(sec / 60)).padStart(2, "0")}:${String(sec % 60).padStart(2, "0")}`; })() : "▶"}
                         </button>
@@ -1089,7 +1089,7 @@ export default function App() {
                 <span style={styles.workSummaryItem}>稼働可能 {formatDuration(weekSummary.effectiveMinutes) || "0分"}</span>
                 <span style={styles.workSummaryItem}>
                   想定時間計 {weekSummary.estMinutes ? formatDuration(weekSummary.estMinutes) : "0分"}
-                  {weekSummary.warnLevel && <span style={{ ...styles.workWarnIcon, color: weekSummary.warnLevel === "red" ? "#A63D34" : "#2C3645" }}>⚠</span>}
+                  {weekSummary.warnLevel && <span style={{ ...styles.workWarnIcon, color: weekSummary.warnLevel === "red" ? "#F39800" : "#2C3645" }}>⚠</span>}
                 </span>
                 <button type="button" onClick={() => setWeekCollapsed((v) => !v)} style={styles.collapseBtnSm} aria-label={weekCollapsed ? "詳細を展開する" : "詳細を折りたたむ"}>
                   {weekCollapsed ? "▸" : "▾"}
@@ -1145,7 +1145,7 @@ export default function App() {
                               </button>
                               <span style={{ ...styles.calTimeCol, width: 60 }}>{formatDate(s.scheduledDate)}({DAY_JP[dt.getDay()]})</span>
                               <span style={styles.calEstTag}>想定{s.estimatedMinutes ? formatDuration(s.estimatedMinutes) : "―"}</span>
-                              <span style={{ ...styles.calSubCol, textDecoration: s.done ? "line-through" : "none", color: s.done ? "#A39D8C" : "#2C3645" }} title={s.text}>{s.text}</span>
+                              <span style={{ ...styles.calSubCol, textDecoration: s.done ? "line-through" : "none", color: s.done ? "#9B9B9B" : "#2C3645" }} title={s.text}>{s.text}</span>
                             </div>
                             <div style={styles.calendarLine2}>
                               <span style={styles.calPjCol} title={pjName}>{pjName}</span>
@@ -1164,7 +1164,7 @@ export default function App() {
                 <span style={styles.workSummaryItem}>稼働可能 {formatDuration(nextWeekSummary.effectiveMinutes) || "0分"}</span>
                 <span style={styles.workSummaryItem}>
                   想定時間計 {nextWeekSummary.estMinutes ? formatDuration(nextWeekSummary.estMinutes) : "0分"}
-                  {nextWeekSummary.warnLevel && <span style={{ ...styles.workWarnIcon, color: nextWeekSummary.warnLevel === "red" ? "#A63D34" : "#2C3645" }}>⚠</span>}
+                  {nextWeekSummary.warnLevel && <span style={{ ...styles.workWarnIcon, color: nextWeekSummary.warnLevel === "red" ? "#F39800" : "#2C3645" }}>⚠</span>}
                 </span>
                 <button type="button" onClick={() => setNextWeekCollapsed((v) => !v)} style={styles.collapseBtnSm} aria-label={nextWeekCollapsed ? "詳細を展開する" : "詳細を折りたたむ"}>
                   {nextWeekCollapsed ? "▸" : "▾"}
@@ -1220,7 +1220,7 @@ export default function App() {
                               </button>
                               <span style={{ ...styles.calTimeCol, width: 60 }}>{formatDate(s.scheduledDate)}({DAY_JP[dt.getDay()]})</span>
                               <span style={styles.calEstTag}>想定{s.estimatedMinutes ? formatDuration(s.estimatedMinutes) : "―"}</span>
-                              <span style={{ ...styles.calSubCol, textDecoration: s.done ? "line-through" : "none", color: s.done ? "#A39D8C" : "#2C3645" }} title={s.text}>{s.text}</span>
+                              <span style={{ ...styles.calSubCol, textDecoration: s.done ? "line-through" : "none", color: s.done ? "#9B9B9B" : "#2C3645" }} title={s.text}>{s.text}</span>
                             </div>
                             <div style={styles.calendarLine2}>
                               <span style={styles.calPjCol} title={pjName}>{pjName}</span>
@@ -1287,7 +1287,7 @@ export default function App() {
                       <div style={styles.priorityGroup}>
                         {PJ_PRIORITIES.map((p) => (
                           <button type="button" key={p.v} onClick={() => setAddPJPriority(p.v)}
-                            style={{ ...styles.priorityBtn, background: addPJPriority === p.v ? p.color : "transparent", color: addPJPriority === p.v ? "#F5F2E9" : p.color, borderColor: p.color }}>
+                            style={{ ...styles.priorityBtn, background: addPJPriority === p.v ? p.color : "transparent", color: addPJPriority === p.v ? "#FFFFFF" : p.color, borderColor: p.color }}>
                             {p.label}
                           </button>
                         ))}
@@ -1297,7 +1297,7 @@ export default function App() {
                       <div style={styles.priorityGroup}>
                         {PRIORITIES.map((p) => (
                           <button type="button" key={p.v} onClick={() => setAddPriority(p.v)}
-                            style={{ ...styles.priorityBtn, background: addPriority === p.v ? p.color : "transparent", color: addPriority === p.v ? "#F5F2E9" : p.color, borderColor: p.color }}>
+                            style={{ ...styles.priorityBtn, background: addPriority === p.v ? p.color : "transparent", color: addPriority === p.v ? "#FFFFFF" : p.color, borderColor: p.color }}>
                             {p.label}
                           </button>
                         ))}
@@ -1367,7 +1367,7 @@ export default function App() {
                           {st.done ? <span style={styles.hankoStamp}>済</span> : <span style={styles.hankoEmpty} />}
                         </button>
                         <input type="text" value={st.text} onChange={(e) => updateStepText(p.id, t.id, s.id, st.id, e.target.value)}
-                          style={{ ...styles.subTextInput, textDecoration: st.done ? "line-through" : "none", color: st.done ? "#A39D8C" : "#2C3645" }}
+                          style={{ ...styles.subTextInput, textDecoration: st.done ? "line-through" : "none", color: st.done ? "#9B9B9B" : "#2C3645" }}
                           aria-label="ステップ名を編集" />
                         <button onClick={() => removeStep(p.id, t.id, s.id, st.id)} aria-label="削除" style={styles.deleteBtn}>×</button>
                       </li>
@@ -1416,7 +1416,7 @@ export default function App() {
                     <button onClick={() => toggleOpenPJ(p.id)} style={styles.collapseBtn} aria-label={pjOpen ? "折りたたむ" : "展開する"}>{pjOpen ? "▾" : "▸"}</button>
                     <input type="text" value={p.name} onChange={(e) => updatePJName(p.id, e.target.value)} style={styles.pjNameInput} aria-label="PJ名を編集" />
                     {pt > 0 && pd === pt && <span style={styles.doneMark}>✅</span>}
-                    <button type="button" onClick={() => toggleGantt(p.id)} style={{ ...styles.ganttToggleBtn, background: ganttPJId === p.id ? "#EAE6DB" : "transparent" }} aria-label="ガントチャートを表示">📊</button>
+                    <button type="button" onClick={() => toggleGantt(p.id)} style={{ ...styles.ganttToggleBtn, background: ganttPJId === p.id ? "#F0F0F0" : "transparent" }} aria-label="ガントチャートを表示">📊</button>
                     <select value={p.priority || 2} onChange={(e) => updatePJPriority(p.id, Number(e.target.value))} style={styles.moveSelect} aria-label="優先度を変更">
                       {PJ_PRIORITIES.map((pr) => <option key={pr.v} value={pr.v}>{pr.label}</option>)}
                     </select>
@@ -1485,7 +1485,7 @@ export default function App() {
                                           {s.done ? <span style={styles.hankoStamp} className={stamping === s.id ? "hanko-pop" : ""}>済</span> : <span style={styles.hankoEmpty} />}
                                         </button>
                                         <div style={styles.subBody}>
-                                          <input type="text" value={s.text} onChange={(e) => updateSubtaskText(p.id, t.id, s.id, e.target.value)} style={{ ...styles.subTextInput, textDecoration: s.done ? "line-through" : "none", color: s.done ? "#A39D8C" : "#2C3645" }} aria-label="サブタスク名を編集" />
+                                          <input type="text" value={s.text} onChange={(e) => updateSubtaskText(p.id, t.id, s.id, e.target.value)} style={{ ...styles.subTextInput, textDecoration: s.done ? "line-through" : "none", color: s.done ? "#9B9B9B" : "#2C3645" }} aria-label="サブタスク名を編集" />
                                           <div style={styles.scheduleEditRow}>
                                             <label style={styles.scheduleEditField}>
                                               <span style={styles.scheduleEditLabel}>予定日</span>
@@ -1506,7 +1506,7 @@ export default function App() {
                                                   {MINUTE_OPTIONS.map((m) => <option key={m} value={m}>{formatDuration(m)}</option>)}
                                                 </select>
                                                 <button type="button" onClick={() => toggleStopwatch(p.id, t.id, s.id)}
-                                                  style={{ ...styles.stopwatchBtn, background: runningTarget?.subId === s.id ? "#A63D34" : "transparent", color: runningTarget?.subId === s.id ? "#F5F2E9" : "#3E5C76", borderColor: "#3E5C76" }}
+                                                  style={{ ...styles.stopwatchBtn, background: runningTarget?.subId === s.id ? "#F39800" : "transparent", color: runningTarget?.subId === s.id ? "#FFFFFF" : "#12314F", borderColor: "#12314F" }}
                                                   aria-label={runningTarget?.subId === s.id ? "計測を終了" : "計測を開始"}>
                                                   {runningTarget?.subId === s.id ? (() => { const sec = Math.max(0, Math.floor((Date.now() - runningTarget.startAt) / 1000)); return `■ ${String(Math.floor(sec / 60)).padStart(2, "0")}:${String(sec % 60).padStart(2, "0")}`; })() : "▶"}
                                                 </button>
@@ -1561,88 +1561,88 @@ export default function App() {
 }
 
 const styles = {
-  page: { minHeight: "100vh", background: "#EAE6DB", backgroundImage: "repeating-linear-gradient(0deg, rgba(44,54,69,0.025) 0px, rgba(44,54,69,0.025) 1px, transparent 1px, transparent 28px)", fontFamily: "'Zen Kaku Gothic New', sans-serif", padding: "20px 12px 60px" },
+  page: { minHeight: "100vh", background: "#FFFFFF", backgroundImage: "repeating-linear-gradient(0deg, rgba(44,54,69,0.025) 0px, rgba(44,54,69,0.025) 1px, transparent 1px, transparent 28px)", fontFamily: "'Zen Kaku Gothic New', sans-serif", padding: "20px 12px 60px" },
   shell: { width: "100%" },
   header: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 18 },
   logoRow: { display: "flex", alignItems: "center", gap: 12 },
-  logoMark: { fontFamily: "'Shippori Mincho', serif", fontWeight: 700, fontSize: 22, color: "#F5F2E9", background: "#A63D34", width: 40, height: 40, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, boxShadow: "0 2px 0 rgba(44,54,69,0.25)" },
+  logoMark: { fontFamily: "'Shippori Mincho', serif", fontWeight: 700, fontSize: 22, color: "#FFFFFF", background: "#F39800", width: 40, height: 40, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, boxShadow: "0 2px 0 rgba(44,54,69,0.25)" },
   title: { fontFamily: "Arial, sans-serif", fontWeight: 700, fontSize: 32, color: "#2C3645", margin: 0, letterSpacing: "0.02em" },
-  saveIndicator: { fontSize: 11, color: "#8B8578", minWidth: 60, textAlign: "right" },
-  reloadBtn: { fontSize: 11, fontWeight: 700, color: "#3E5C76", background: "transparent", border: "1.5px solid #3E5C76", borderRadius: 5, padding: "3px 8px", cursor: "pointer", fontFamily: "inherit" },
+  saveIndicator: { fontSize: 11, color: "#7A7A7A", minWidth: 60, textAlign: "right" },
+  reloadBtn: { fontSize: 11, fontWeight: 700, color: "#12314F", background: "transparent", border: "1.5px solid #12314F", borderRadius: 5, padding: "3px 8px", cursor: "pointer", fontFamily: "inherit" },
   tabs: { display: "flex", gap: 6, marginBottom: -1, position: "relative", zIndex: 2 },
   tabBtn: { flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 5, padding: "9px 4px", fontSize: 12.5, fontWeight: 700, fontFamily: "inherit", border: "1.5px solid", borderBottom: "none", borderRadius: "8px 8px 0 0", cursor: "pointer", transition: "background 0.15s, color 0.15s" },
   tabDot: { width: 6, height: 6, borderRadius: "50%", flexShrink: 0 },
   tabCount: { fontSize: 10.5, fontWeight: 700 },
-  subTabs: { display: "flex", gap: 5, padding: "8px 8px 8px", background: "#DFDACB", borderLeft: "1.5px solid #C9C2B2", borderRight: "1.5px solid #C9C2B2", position: "relative", zIndex: 1 },
+  subTabs: { display: "flex", gap: 5, padding: "8px 8px 8px", background: "#F5F5F5", borderLeft: "1.5px solid #D8D8D8", borderRight: "1.5px solid #D8D8D8", position: "relative", zIndex: 1 },
   subTabBtn: { flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "6px 2px", fontSize: 11.5, fontWeight: 700, fontFamily: "inherit", border: "1.5px solid", borderRadius: 6, cursor: "pointer" },
   subTabCount: { fontSize: 9.5, fontWeight: 700 },
-  panel: { background: "#F5F2E9", border: "1.5px solid", borderRadius: "0 6px 10px 10px", padding: 16, boxShadow: "0 3px 14px rgba(44,54,69,0.08)" },
+  panel: { background: "#FFFFFF", border: "1.5px solid", borderRadius: "0 6px 10px 10px", padding: 16, boxShadow: "0 3px 14px rgba(44,54,69,0.08)" },
   formRow: { display: "flex", gap: 6, marginBottom: 6, flexWrap: "wrap" },
   modalOverlay: { position: "fixed", inset: 0, background: "rgba(44,54,69,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16, zIndex: 50 },
-  modalBox: { width: "100%", maxWidth: 420, maxHeight: "86vh", overflowY: "auto", background: "#F5F2E9", border: "1.5px solid #2C3645", borderRadius: 10, padding: 18, boxShadow: "0 8px 28px rgba(44,54,69,0.3)" },
+  modalBox: { width: "100%", maxWidth: 420, maxHeight: "86vh", overflowY: "auto", background: "#FFFFFF", border: "1.5px solid #2C3645", borderRadius: 10, padding: 18, boxShadow: "0 8px 28px rgba(44,54,69,0.3)" },
   modalHeader: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 },
   modalTitle: { fontFamily: "'Shippori Mincho', serif", fontSize: 16, fontWeight: 700, color: "#2C3645", margin: 0 },
-  modalCloseBtn: { background: "none", border: "none", fontSize: 20, lineHeight: 1, color: "#8B8578", cursor: "pointer", padding: 4 },
-  modalContext: { fontSize: 11.5, color: "#8B8578", margin: "0 0 12px" },
+  modalCloseBtn: { background: "none", border: "none", fontSize: 20, lineHeight: 1, color: "#7A7A7A", cursor: "pointer", padding: 4 },
+  modalContext: { fontSize: 11.5, color: "#7A7A7A", margin: "0 0 12px" },
   modalActions: { display: "flex", justifyContent: "flex-end", marginTop: 12 },
-  inlineAddBtn: { fontSize: 10.5, fontWeight: 700, color: "#3E5C76", background: "transparent", border: "1.5px solid #3E5C76", borderRadius: 5, padding: "2px 7px", cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap", flexShrink: 0 },
-  select: { flex: 1, minWidth: 100, fontSize: 12.5, padding: "7px 6px", borderRadius: 6, border: "1.5px solid #C9C2B2", background: "#FDFCF8", color: "#2C3645", fontFamily: "inherit" },
-  hint: { fontSize: 11.5, color: "#A63D34", margin: "0 0 6px" },
-  sectionTitle: { fontSize: 12.5, fontWeight: 700, color: "#2C3645", margin: "14px 0 8px", paddingBottom: 4, borderBottom: "1.5px solid #DAD4C4" },
-  sectionTitleRow: { display: "flex", justifyContent: "space-between", alignItems: "center", margin: "14px 0 8px", paddingBottom: 4, borderBottom: "1.5px solid #DAD4C4" },
+  inlineAddBtn: { fontSize: 10.5, fontWeight: 700, color: "#12314F", background: "transparent", border: "1.5px solid #12314F", borderRadius: 5, padding: "2px 7px", cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap", flexShrink: 0 },
+  select: { flex: 1, minWidth: 100, fontSize: 12.5, padding: "7px 6px", borderRadius: 6, border: "1.5px solid #D8D8D8", background: "#FFFFFF", color: "#2C3645", fontFamily: "inherit" },
+  hint: { fontSize: 11.5, color: "#F39800", margin: "0 0 6px" },
+  sectionTitle: { fontSize: 12.5, fontWeight: 700, color: "#2C3645", margin: "14px 0 8px", paddingBottom: 4, borderBottom: "1.5px solid #E0E0E0" },
+  sectionTitleRow: { display: "flex", justifyContent: "space-between", alignItems: "center", margin: "14px 0 8px", paddingBottom: 4, borderBottom: "1.5px solid #E0E0E0" },
   sectionTitleFlush: { fontSize: 12.5, fontWeight: 700, color: "#2C3645", margin: 0 },
-  workSummaryBar: { display: "flex", gap: 10, flexWrap: "wrap", padding: "6px 8px", marginBottom: 8, background: "#F5F2E9", border: "1px solid #DAD4C4", borderRadius: 6 },
+  workSummaryBar: { display: "flex", gap: 10, flexWrap: "wrap", padding: "6px 8px", marginBottom: 8, background: "#FFFFFF", border: "1px solid #E0E0E0", borderRadius: 6 },
   workSummaryItem: { fontSize: 11, fontWeight: 700, color: "#2C3645", display: "flex", alignItems: "center" },
   workWarnIcon: { marginLeft: 4, fontSize: 13, fontWeight: 900 },
   todayList: { listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 4 },
-  calendarCard: { padding: "7px 2px", borderBottom: "1px dashed #DAD4C4", display: "flex", flexDirection: "column", gap: 4 },
+  calendarCard: { padding: "7px 2px", borderBottom: "1px dashed #E0E0E0", display: "flex", flexDirection: "column", gap: 4 },
   calendarLine1: { display: "flex", alignItems: "center", gap: 8 },
   calendarLine2: { display: "flex", alignItems: "center", gap: 6, paddingLeft: 34 },
-  calendarLine2Label: { fontSize: 9.5, color: "#A39D8C", fontWeight: 700 },
-  calTimeCol: { width: 40, flexShrink: 0, fontSize: 10.5, fontWeight: 700, color: "#8B8578", fontVariantNumeric: "tabular-nums" },
-  calEstTag: { fontSize: 9.5, fontWeight: 700, color: "#6B7F6E", background: "#EAE6DB", padding: "1px 6px", borderRadius: 8, flexShrink: 0, whiteSpace: "nowrap" },
+  calendarLine2Label: { fontSize: 9.5, color: "#9B9B9B", fontWeight: 700 },
+  calTimeCol: { width: 40, flexShrink: 0, fontSize: 10.5, fontWeight: 700, color: "#7A7A7A", fontVariantNumeric: "tabular-nums" },
+  calEstTag: { fontSize: 9.5, fontWeight: 700, color: "#6B7F6E", background: "#F0F0F0", padding: "1px 6px", borderRadius: 8, flexShrink: 0, whiteSpace: "nowrap" },
   calSubCol: { flex: "1 1 auto", minWidth: 0, fontSize: 12.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
-  calPjCol: { fontSize: 10, color: "#3E5C76", fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 90 },
+  calPjCol: { fontSize: 10, color: "#12314F", fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 90 },
   calTaskCol: { fontSize: 10, color: "#8B6F3E", fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 90 },
   inputRow: { display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" },
-  input: { flex: "1 1 160px", padding: "10px 12px", fontSize: 14, border: "1.5px solid #C9C2B2", borderRadius: 6, background: "#FDFCF8", color: "#2C3645", fontFamily: "inherit" },
+  input: { flex: "1 1 160px", padding: "10px 12px", fontSize: 14, border: "1.5px solid #D8D8D8", borderRadius: 6, background: "#FFFFFF", color: "#2C3645", fontFamily: "inherit" },
   priorityGroup: { display: "flex", gap: 4 },
   priorityBtn: { padding: "7px 9px", fontSize: 12, fontWeight: 700, border: "1.5px solid", borderRadius: 6, cursor: "pointer", fontFamily: "inherit" },
   scheduleRow: { display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" },
   scheduleField: { display: "flex", flexDirection: "column", gap: 2 },
-  scheduleLabel: { fontSize: 10, color: "#8B8578", fontWeight: 700 },
-  scheduleInput: { fontSize: 12.5, padding: "6px 6px", borderRadius: 6, border: "1.5px solid #C9C2B2", background: "#FDFCF8", color: "#2C3645", fontFamily: "inherit" },
-  addBtn: { padding: "9px 14px", fontSize: 13, fontWeight: 700, color: "#F5F2E9", background: "#2C3645", border: "none", borderRadius: 6, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" },
+  scheduleLabel: { fontSize: 10, color: "#7A7A7A", fontWeight: 700 },
+  scheduleInput: { fontSize: 12.5, padding: "6px 6px", borderRadius: 6, border: "1.5px solid #D8D8D8", background: "#FFFFFF", color: "#2C3645", fontFamily: "inherit" },
+  addBtn: { padding: "9px 14px", fontSize: 13, fontWeight: 700, color: "#FFFFFF", background: "#2C3645", border: "none", borderRadius: 6, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" },
   tree: { display: "flex", flexDirection: "column", gap: 14 },
   prioritySection: { display: "flex", flexDirection: "column", gap: 8 },
   prioritySectionHeader: { display: "flex", alignItems: "center", gap: 6, width: "100%", background: "transparent", border: "none", borderBottom: "1.5px solid", padding: "0 0 4px", cursor: "pointer", fontFamily: "inherit", fontSize: 12.5, fontWeight: 700, textAlign: "left" },
-  prioritySectionCount: { marginLeft: "auto", fontSize: 10.5, fontWeight: 700, color: "#8B8578" },
+  prioritySectionCount: { marginLeft: "auto", fontSize: 10.5, fontWeight: 700, color: "#7A7A7A" },
   prioritySectionBody: { display: "flex", flexDirection: "column", gap: 10 },
-  statusSection: { display: "flex", flexDirection: "column", gap: 6, marginTop: 4, paddingTop: 10, borderTop: "1px dashed #C9C2B2" },
+  statusSection: { display: "flex", flexDirection: "column", gap: 6, marginTop: 4, paddingTop: 10, borderTop: "1px dashed #D8D8D8" },
   statusSectionHeader: { display: "flex", alignItems: "center", gap: 6, width: "100%", background: "transparent", border: "none", borderBottom: "1px dashed", padding: "0 0 3px", cursor: "pointer", fontFamily: "inherit", fontSize: 11, fontWeight: 700, textAlign: "left", opacity: 0.85 },
-  empty: { padding: "18px 4px", color: "#A39D8C", fontSize: 13, textAlign: "center" },
-  emptySmall: { padding: "6px 4px", color: "#A39D8C", fontSize: 11.5, margin: 0 },
-  pjCard: { background: "#FDFCF8", border: "1px solid #DAD4C4", borderLeft: "4px solid", borderRadius: 8, padding: 10 },
+  empty: { padding: "18px 4px", color: "#9B9B9B", fontSize: 13, textAlign: "center" },
+  emptySmall: { padding: "6px 4px", color: "#9B9B9B", fontSize: 11.5, margin: 0 },
+  pjCard: { background: "#FFFFFF", border: "1px solid #E0E0E0", borderLeft: "4px solid", borderRadius: 8, padding: 10 },
   pjHeader: { display: "flex", alignItems: "center", gap: 6 },
   reorderBtns: { display: "flex", flexDirection: "column", gap: 1, flexShrink: 0 },
-  reorderBtn: { background: "none", border: "none", fontSize: 8, lineHeight: 1, color: "#8B8578", cursor: "pointer", width: 14, height: 9, padding: 0 },
+  reorderBtn: { background: "none", border: "none", fontSize: 8, lineHeight: 1, color: "#7A7A7A", cursor: "pointer", width: 14, height: 9, padding: 0 },
   collapseBtn: { background: "none", border: "none", fontSize: 13, color: "#2C3645", cursor: "pointer", width: 18, padding: 0, flexShrink: 0 },
-  collapseBtnSm: { background: "none", border: "none", fontSize: 11, color: "#3E5C76", cursor: "pointer", width: 16, padding: 0, flexShrink: 0 },
+  collapseBtnSm: { background: "none", border: "none", fontSize: 11, color: "#12314F", cursor: "pointer", width: 16, padding: 0, flexShrink: 0 },
   pjNameInput: { flex: 1, fontSize: 14, fontWeight: 700, color: "#2C3645", minWidth: 0, textAlign: "left", border: "none", background: "transparent", fontFamily: "inherit", padding: "3px 5px", borderRadius: 5 },
   taskNameInput: { flex: 1, fontSize: 13, fontWeight: 600, color: "#2C3645", minWidth: 0, border: "none", background: "transparent", fontFamily: "inherit", padding: "2px 4px", borderRadius: 5 },
   ganttToggleBtn: { flexShrink: 0, border: "none", borderRadius: 5, padding: "3px 6px", fontSize: 13, cursor: "pointer", fontFamily: "inherit", lineHeight: 1 },
   doneMark: { flexShrink: 0, fontSize: 12 },
-  progressTag: { fontSize: 10.5, fontWeight: 700, color: "#6B7F6E", background: "#EAE6DB", padding: "2px 6px", borderRadius: 8, flexShrink: 0 },
-  progressTagSm: { fontSize: 10, fontWeight: 700, color: "#6B7F6E", background: "#EAE6DB", padding: "1px 5px", borderRadius: 8, flexShrink: 0 },
+  progressTag: { fontSize: 10.5, fontWeight: 700, color: "#6B7F6E", background: "#F0F0F0", padding: "2px 6px", borderRadius: 8, flexShrink: 0 },
+  progressTagSm: { fontSize: 10, fontWeight: 700, color: "#6B7F6E", background: "#F0F0F0", padding: "1px 5px", borderRadius: 8, flexShrink: 0 },
   taskList: { marginTop: 8, display: "flex", flexDirection: "column", gap: 6, paddingLeft: 18 },
   taskDatesRow: { display: "flex", gap: 8, marginTop: 6, paddingLeft: 24 },
-  ganttWrap: { marginTop: 8, padding: 10, background: "#F5F2E9", border: "1px dashed #C9C2B2", borderRadius: 8 },
-  ganttEmpty: { fontSize: 11.5, color: "#A39D8C", margin: 0, lineHeight: 1.5 },
+  ganttWrap: { marginTop: 8, padding: 10, background: "#FFFFFF", border: "1px dashed #D8D8D8", borderRadius: 8 },
+  ganttEmpty: { fontSize: 11.5, color: "#9B9B9B", margin: 0, lineHeight: 1.5 },
   ganttToolbar: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 8 },
   granularityGroup: { display: "flex", gap: 3 },
   granularityBtn: { padding: "4px 8px", fontSize: 10.5, fontWeight: 700, border: "1.5px solid #2C3645", borderRadius: 5, cursor: "pointer", fontFamily: "inherit" },
   ganttLegend: { display: "flex", gap: 10, flexWrap: "wrap" },
-  ganttLegendItem: { display: "flex", alignItems: "center", gap: 4, fontSize: 10.5, color: "#8B8578", fontWeight: 700 },
+  ganttLegendItem: { display: "flex", alignItems: "center", gap: 4, fontSize: 10.5, color: "#7A7A7A", fontWeight: 700 },
   ganttLegendDot: { width: 8, height: 8, borderRadius: "50%", display: "inline-block" },
   ganttScroll: { overflowX: "auto", paddingBottom: 4, flex: 1, minWidth: 0 },
   ganttSplitWrap: { display: "flex", gap: 6 },
@@ -1650,34 +1650,34 @@ const styles = {
   ganttLabelHeaderCell: { height: 26 },
   ganttLabelCell: { height: 22, display: "flex", alignItems: "center", fontSize: 10.5, color: "#2C3645", paddingRight: 6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
   ganttGrid: { display: "grid", rowGap: 3, columnGap: 2, alignItems: "center" },
-  ganttDateCell: { fontSize: 9.5, fontWeight: 700, color: "#8B8578", textAlign: "center", paddingBottom: 4, borderBottom: "1px solid #DAD4C4" },
-  ganttBarTrack: { height: 14, background: "#E3DECF", borderRadius: 5, overflow: "hidden", display: "flex", alignItems: "stretch" },
+  ganttDateCell: { fontSize: 9.5, fontWeight: 700, color: "#7A7A7A", textAlign: "center", paddingBottom: 4, borderBottom: "1px solid #E0E0E0" },
+  ganttBarTrack: { height: 14, background: "#E5E5E5", borderRadius: 5, overflow: "hidden", display: "flex", alignItems: "stretch" },
   ganttBarFill: { height: "100%", borderRadius: 5, minWidth: 4 },
-  ganttPjRow: { display: "flex", alignItems: "center", gap: 6, background: "#E3DECF", border: "none", borderRadius: 5, padding: "0 6px", height: 22, boxSizing: "border-box", cursor: "pointer", fontFamily: "inherit", fontSize: 11.5, fontWeight: 700, color: "#2C3645", textAlign: "left", width: "100%" },
+  ganttPjRow: { display: "flex", alignItems: "center", gap: 6, background: "#E5E5E5", border: "none", borderRadius: 5, padding: "0 6px", height: 22, boxSizing: "border-box", cursor: "pointer", fontFamily: "inherit", fontSize: 11.5, fontWeight: 700, color: "#2C3645", textAlign: "left", width: "100%" },
   ganttPjName: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
-  ganttPjCount: { fontSize: 9.5, color: "#8B8578", fontWeight: 700, marginLeft: "auto", flexShrink: 0 },
-  taskCard: { background: "#F5F2E9", border: "1px solid #E3DECF", borderRadius: 6, padding: 8 },
+  ganttPjCount: { fontSize: 9.5, color: "#7A7A7A", fontWeight: 700, marginLeft: "auto", flexShrink: 0 },
+  taskCard: { background: "#FFFFFF", border: "1px solid #E5E5E5", borderRadius: 6, padding: 8 },
   taskHeader: { display: "flex", alignItems: "center", gap: 6 },
   subList: { listStyle: "none", margin: "6px 0 0", padding: "0 0 0 16px", display: "flex", flexDirection: "column", gap: 2 },
-  subRowWrap: { borderBottom: "1px dashed #E3DECF" },
+  subRowWrap: { borderBottom: "1px dashed #E5E5E5" },
   subRow: { display: "flex", alignItems: "flex-start", gap: 7, padding: "6px 0" },
   stepList: { listStyle: "none", margin: "0 0 10px", padding: 0, display: "flex", flexDirection: "column", gap: 2 },
-  stepRow: { display: "flex", alignItems: "center", gap: 7, padding: "5px 0", borderBottom: "1px dashed #E3DECF" },
+  stepRow: { display: "flex", alignItems: "center", gap: 7, padding: "5px 0", borderBottom: "1px dashed #E5E5E5" },
   subBody: { flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4, paddingTop: 2 },
   scheduleEditRow: { display: "flex", gap: 6, flexWrap: "wrap" },
   scheduleEditField: { display: "flex", flexDirection: "column", gap: 1 },
-  scheduleEditLabel: { fontSize: 9, color: "#A39D8C", fontWeight: 700 },
-  scheduleEditInput: { fontSize: 11, padding: "3px 5px", borderRadius: 5, border: "1.5px solid #E3DECF", background: "#FDFCF8", color: "#2C3645", fontFamily: "inherit" },
-  moveSelect: { fontSize: 10, padding: "2px 4px", borderRadius: 5, border: "1.5px solid #C9C2B2", background: "#FDFCF8", color: "#2C3645", fontFamily: "inherit", maxWidth: 92 },
-  timeDropdownList: { position: "absolute", top: "100%", left: 0, zIndex: 10, marginTop: 2, width: 90, maxHeight: 180, overflowY: "auto", background: "#FDFCF8", border: "1.5px solid #C9C2B2", borderRadius: 6, boxShadow: "0 4px 12px rgba(44,54,69,0.18)" },
-  timeDropdownItem: { padding: "5px 8px", fontSize: 11.5, cursor: "pointer", borderBottom: "1px solid #EAE6DB" },
+  scheduleEditLabel: { fontSize: 9, color: "#9B9B9B", fontWeight: 700 },
+  scheduleEditInput: { fontSize: 11, padding: "3px 5px", borderRadius: 5, border: "1.5px solid #E5E5E5", background: "#FFFFFF", color: "#2C3645", fontFamily: "inherit" },
+  moveSelect: { fontSize: 10, padding: "2px 4px", borderRadius: 5, border: "1.5px solid #D8D8D8", background: "#FFFFFF", color: "#2C3645", fontFamily: "inherit", maxWidth: 92 },
+  timeDropdownList: { position: "absolute", top: "100%", left: 0, zIndex: 10, marginTop: 2, width: 90, maxHeight: 180, overflowY: "auto", background: "#FFFFFF", border: "1.5px solid #D8D8D8", borderRadius: 6, boxShadow: "0 4px 12px rgba(44,54,69,0.18)" },
+  timeDropdownItem: { padding: "5px 8px", fontSize: 11.5, cursor: "pointer", borderBottom: "1px solid #F0F0F0" },
   actualRow: { display: "flex", gap: 3, alignItems: "center" },
   stopwatchBtn: { fontSize: 10.5, fontWeight: 700, padding: "3px 6px", borderRadius: 5, border: "1.5px solid", cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" },
   stampWrap: { background: "none", border: "none", padding: 0, cursor: "pointer", width: 26, height: 26, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" },
-  hankoEmpty: { width: 20, height: 20, borderRadius: "50%", border: "2px solid #C9C2B2", display: "block" },
-  hankoStamp: { width: 22, height: 22, borderRadius: "50%", border: "2px solid #A63D34", color: "#A63D34", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Shippori Mincho', serif", fontWeight: 700, fontSize: 9.5, transform: "rotate(-10deg)" },
+  hankoEmpty: { width: 20, height: 20, borderRadius: "50%", border: "2px solid #D8D8D8", display: "block" },
+  hankoStamp: { width: 22, height: 22, borderRadius: "50%", border: "2px solid #F39800", color: "#F39800", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Shippori Mincho', serif", fontWeight: 700, fontSize: 9.5, transform: "rotate(-10deg)" },
   subText: { flex: 1, fontSize: 13, lineHeight: 1.4, wordBreak: "break-word", minWidth: 0 },
   subTextInput: { flex: 1, fontSize: 13, lineHeight: 1.4, minWidth: 0, border: "none", background: "transparent", fontFamily: "inherit", padding: "2px 4px", borderRadius: 5, width: "100%" },
   metaTag: { fontSize: 9.5, fontWeight: 700, padding: "1px 6px", borderRadius: 10, border: "1px solid", flexShrink: 0 },
-  deleteBtn: { background: "none", border: "none", color: "#C9C2B2", fontSize: 16, cursor: "pointer", padding: "0 2px", flexShrink: 0, lineHeight: 1 },
+  deleteBtn: { background: "none", border: "none", color: "#D8D8D8", fontSize: 16, cursor: "pointer", padding: "0 2px", flexShrink: 0, lineHeight: 1 },
 };
