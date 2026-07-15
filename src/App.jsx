@@ -136,8 +136,8 @@ function addMinutesToTime(time, minutes) {
   return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
 }
 
-function task(name, subtasks) {
-  return { id: uid(), name, subtasks };
+function task(name, subtasks, startDate, endDate) {
+  return { id: uid(), name, subtasks, startDate: startDate || null, endDate: endDate || null };
 }
 
 function project(owner, name, tasks, subcategory, priority) {
@@ -248,13 +248,11 @@ function GanttChart({ project }) {
   const [granularity, setGranularity] = useState("day");
   const rows = [];
   for (const t of project.tasks) {
-    const dated = t.subtasks.filter((s) => s.scheduledDate);
-    if (dated.length === 0) continue;
-    const dates = dated.map((s) => s.scheduledDate).sort();
+    if (!t.startDate || !t.endDate) continue;
     const { done, total } = taskProgress(t);
-    const minPriorityVal = Math.min(...dated.map((s) => s.priority));
+    const minPriorityVal = t.subtasks.length ? Math.min(...t.subtasks.map((s) => s.priority || 2)) : 2;
     const pInfo = PRIORITIES.find((pr) => pr.v === minPriorityVal) || PRIORITIES[1];
-    rows.push({ id: t.id, name: t.name, startDate: dates[0], endDate: dates[dates.length - 1], done, total, color: pInfo.color });
+    rows.push({ id: t.id, name: t.name, startDate: t.startDate, endDate: t.endDate, done, total, color: pInfo.color });
   }
   const today = new Date(); const todayStr = toDateStr(today);
   const yearLater = new Date(); yearLater.setDate(yearLater.getDate() + 365);
@@ -284,7 +282,7 @@ function GanttChart({ project }) {
           ))}
         </div>
       </div>
-      {rowsSorted.length === 0 && <p style={styles.ganttEmpty}>予定日が設定されたサブタスクがまだない。</p>}
+      {rowsSorted.length === 0 && <p style={styles.ganttEmpty}>開始日・終了日が設定されたタスクがまだない。</p>}
       <div style={styles.ganttSplitWrap}>
         <div style={styles.ganttLabelCol}>
           <div style={styles.ganttLabelHeaderCell} />
@@ -322,19 +320,18 @@ function OverviewGanttChart({ projects }) {
   const pjData = projects.map((p) => {
     const taskRows = [];
     for (const t of p.tasks) {
-      const dated = t.subtasks.filter((s) => s.scheduledDate && s.scheduledDate >= todayStr && s.scheduledDate <= monthLaterStr);
-      if (dated.length === 0) continue;
-      const dates = dated.map((s) => s.scheduledDate).sort();
+      if (!t.startDate || !t.endDate) continue;
+      if (t.endDate < todayStr || t.startDate > monthLaterStr) continue;
       const { done, total } = taskProgress(t);
-      const minPriorityVal = Math.min(...dated.map((s) => s.priority));
+      const minPriorityVal = t.subtasks.length ? Math.min(...t.subtasks.map((s) => s.priority || 2)) : 2;
       const pInfo = PRIORITIES.find((pr) => pr.v === minPriorityVal) || PRIORITIES[1];
-      taskRows.push({ id: t.id, name: t.name, startDate: dates[0], endDate: dates[dates.length - 1], done, total, color: pInfo.color });
+      taskRows.push({ id: t.id, name: t.name, startDate: t.startDate, endDate: t.endDate, done, total, color: pInfo.color });
     }
     return { id: p.id, name: p.name, taskRows };
   }).filter((p) => p.taskRows.length > 0);
 
   if (pjData.length === 0) {
-    return <p style={styles.ganttEmpty}>本日から1ヶ月以内に予定日が設定されたサブタスクがまだない。各カテゴリでサブタスクに予定日を入れると、ここに全PJ分がまとまって並ぶ。</p>;
+    return <p style={styles.ganttEmpty}>本日から1ヶ月以内に開始日・終了日が設定されたタスクがまだない。各タスクに開始日・終了日を入れると、ここに全PJ分がまとまって並ぶ。</p>;
   }
 
   const allTaskDates = pjData.flatMap((p) => p.taskRows.flatMap((r) => [r.startDate, r.endDate]));
@@ -431,6 +428,8 @@ export default function App() {
   const [addPriority, setAddPriority] = useState(2);
   const [addPJPriority, setAddPJPriority] = useState(2);
   const [collapsedPrioritySection, setCollapsedPrioritySection] = useState(() => new Set([...PJ_PRIORITIES.map((p) => p.v), ...PJ_STATUSES.map((s) => s.v)]));
+  const [addTaskStartDate, setAddTaskStartDate] = useState("");
+  const [addTaskEndDate, setAddTaskEndDate] = useState("");
   const [addDate, setAddDate] = useState("");
   const [addStartTime, setAddStartTime] = useState("");
   const [addEstMinutes, setAddEstMinutes] = useState("");
@@ -739,15 +738,21 @@ export default function App() {
       setProjects((prev) => [...prev, project(effectiveOwner, trimmed, [], ownerHasSub ? addSub : null, addPJPriority)]);
     } else if (addLevel === "task") {
       if (!addPJId) return;
-      setProjects((prev) => prev.map((p) => (p.id === addPJId ? { ...p, tasks: [...p.tasks, task(trimmed, [])] } : p)));
+      setProjects((prev) => prev.map((p) => (p.id === addPJId ? { ...p, tasks: [...p.tasks, task(trimmed, [], addTaskStartDate, addTaskEndDate)] } : p)));
     } else {
       if (!addPJId || !addTaskId) return;
+      const parentTask = projects.find((p) => p.id === addPJId)?.tasks.find((t) => t.id === addTaskId);
+      let clampedDate = addDate || null;
+      if (clampedDate && parentTask) {
+        if (parentTask.startDate && clampedDate < parentTask.startDate) clampedDate = parentTask.startDate;
+        if (parentTask.endDate && clampedDate > parentTask.endDate) clampedDate = parentTask.endDate;
+      }
       setProjects((prev) => prev.map((p) => {
         if (p.id !== addPJId) return p;
-        return { ...p, tasks: p.tasks.map((t) => t.id === addTaskId ? { ...t, subtasks: [...t.subtasks, sub(trimmed, false, addPriority, addDate, addStartTime, addEstMinutes ? Number(addEstMinutes) : null)] } : t) };
+        return { ...p, tasks: p.tasks.map((t) => t.id === addTaskId ? { ...t, subtasks: [...t.subtasks, sub(trimmed, false, addPriority, clampedDate, addStartTime, addEstMinutes ? Number(addEstMinutes) : null)] } : t) };
       }));
     }
-    setAddText(""); setAddDate(""); setAddStartTime(""); setAddEstMinutes("");
+    setAddText(""); setAddDate(""); setAddStartTime(""); setAddEstMinutes(""); setAddTaskStartDate(""); setAddTaskEndDate("");
     setAddModalOpen(false);
   }
 
@@ -761,7 +766,7 @@ export default function App() {
     setAddLevel("task");
     setAddPJId(pjId);
     setModalPJName(pjName);
-    setAddText("");
+    setAddText(""); setAddTaskStartDate(""); setAddTaskEndDate("");
     setAddModalOpen(true);
   }
 
@@ -784,7 +789,26 @@ export default function App() {
   }
 
   function updateSubtaskSchedule(pjId, taskId, subId, field, value) {
-    setProjects((prev) => prev.map((p) => p.id !== pjId ? p : { ...p, tasks: p.tasks.map((t) => t.id !== taskId ? t : { ...t, subtasks: t.subtasks.map((s) => s.id === subId ? { ...s, [field]: value === "" ? null : value } : s) }) }));
+    setProjects((prev) => prev.map((p) => p.id !== pjId ? p : {
+      ...p, tasks: p.tasks.map((t) => {
+        if (t.id !== taskId) return t;
+        return {
+          ...t, subtasks: t.subtasks.map((s) => {
+            if (s.id !== subId) return s;
+            let v = value === "" ? null : value;
+            if (field === "scheduledDate" && v) {
+              if (t.startDate && v < t.startDate) v = t.startDate;
+              if (t.endDate && v > t.endDate) v = t.endDate;
+            }
+            return { ...s, [field]: v };
+          }),
+        };
+      }),
+    }));
+  }
+
+  function updateTaskDate(pjId, taskId, field, value) {
+    setProjects((prev) => prev.map((p) => p.id !== pjId ? p : { ...p, tasks: p.tasks.map((t) => (t.id === taskId ? { ...t, [field]: value || null } : t)) }));
   }
 
   function commitStopwatch(target) {
@@ -835,9 +859,22 @@ export default function App() {
     });
   }
 
-  function removePJ(id) { setProjects((prev) => prev.filter((p) => p.id !== id)); }
-  function removeTask(pjId, taskId) { setProjects((prev) => prev.map((p) => (p.id === pjId ? { ...p, tasks: p.tasks.filter((t) => t.id !== taskId) } : p))); }
+  function removePJ(id) {
+    const p = projects.find((pp) => pp.id === id);
+    if (!window.confirm(`PJ「${p?.name || ""}」を削除します。配下のタスク・サブタスクも全て消えるが、よいか?`)) return;
+    setProjects((prev) => prev.filter((p) => p.id !== id));
+  }
+  function removeTask(pjId, taskId) {
+    const p = projects.find((pp) => pp.id === pjId);
+    const t = p?.tasks.find((tt) => tt.id === taskId);
+    if (!window.confirm(`タスク「${t?.name || ""}」を削除します。配下のサブタスクも全て消えるが、よいか?`)) return;
+    setProjects((prev) => prev.map((p) => (p.id === pjId ? { ...p, tasks: p.tasks.filter((t) => t.id !== taskId) } : p)));
+  }
   function removeSubtask(pjId, taskId, subId) {
+    const p = projects.find((pp) => pp.id === pjId);
+    const t = p?.tasks.find((tt) => tt.id === taskId);
+    const s = t?.subtasks.find((ss) => ss.id === subId);
+    if (!window.confirm(`サブタスク「${s?.text || ""}」を削除するが、よいか?`)) return;
     setProjects((prev) => prev.map((p) => p.id !== pjId ? p : { ...p, tasks: p.tasks.map((t) => t.id !== taskId ? t : { ...t, subtasks: t.subtasks.filter((s) => s.id !== subId) }) }));
   }
 
@@ -1186,7 +1223,9 @@ export default function App() {
 
           {showPersonSections && <h3 style={styles.sectionTitle}>タスク一覧</h3>}
 
-          {addModalOpen && (
+          {(() => {
+            const modalTargetTask = addLevel === "subtask" ? (projects || []).find((pp) => pp.id === addPJId)?.tasks.find((tt) => tt.id === addTaskId) : null;
+            return addModalOpen && (
             <div style={styles.modalOverlay} onClick={() => setAddModalOpen(false)}>
               <div style={styles.modalBox} onClick={(e) => e.stopPropagation()}>
                 <div style={styles.modalHeader}>
@@ -1238,11 +1277,25 @@ export default function App() {
                       </div>
                     )}
                   </div>
+                  {addLevel === "task" && (
+                    <div style={styles.scheduleRow}>
+                      <label style={styles.scheduleField}>
+                        <span style={styles.scheduleLabel}>開始日</span>
+                        <input type="date" value={addTaskStartDate} onChange={(e) => setAddTaskStartDate(e.target.value)} max={addTaskEndDate || undefined} style={styles.scheduleInput} />
+                      </label>
+                      <label style={styles.scheduleField}>
+                        <span style={styles.scheduleLabel}>終了日</span>
+                        <input type="date" value={addTaskEndDate} onChange={(e) => setAddTaskEndDate(e.target.value)} min={addTaskStartDate || undefined} style={styles.scheduleInput} />
+                      </label>
+                    </div>
+                  )}
                   {addLevel === "subtask" && (
                     <div style={styles.scheduleRow}>
                       <label style={styles.scheduleField}>
                         <span style={styles.scheduleLabel}>予定日</span>
-                        <input type="date" value={addDate} onChange={(e) => setAddDate(e.target.value)} style={styles.scheduleInput} />
+                        <input type="date" value={addDate} onChange={(e) => setAddDate(e.target.value)}
+                          min={modalTargetTask?.startDate || undefined} max={modalTargetTask?.endDate || undefined}
+                          style={styles.scheduleInput} />
                       </label>
                       <label style={styles.scheduleField}>
                         <span style={styles.scheduleLabel}>開始</span>
@@ -1263,7 +1316,8 @@ export default function App() {
                 </form>
               </div>
             </div>
-          )}
+            );
+          })()}
 
           {stepsModalTarget && (() => {
             const p = (projects || []).find((pp) => pp.id === stepsModalTarget.pjId);
@@ -1375,6 +1429,16 @@ export default function App() {
                               <button type="button" onClick={() => openAddSubtaskModal(p.id, t.id, p.name, t.name)} style={styles.inlineAddBtn}>＋サブ</button>
                               <button onClick={() => removeTask(p.id, t.id)} aria-label="タスクを削除" style={styles.deleteBtn}>×</button>
                             </div>
+                            <div style={styles.taskDatesRow}>
+                              <label style={styles.scheduleEditField}>
+                                <span style={styles.scheduleEditLabel}>開始日</span>
+                                <input type="date" value={t.startDate || ""} onChange={(e) => updateTaskDate(p.id, t.id, "startDate", e.target.value)} max={t.endDate || undefined} style={styles.scheduleEditInput} aria-label="タスク開始日" />
+                              </label>
+                              <label style={styles.scheduleEditField}>
+                                <span style={styles.scheduleEditLabel}>終了日</span>
+                                <input type="date" value={t.endDate || ""} onChange={(e) => updateTaskDate(p.id, t.id, "endDate", e.target.value)} min={t.startDate || undefined} style={styles.scheduleEditInput} aria-label="タスク終了日" />
+                              </label>
+                            </div>
                             {taskOpen && (
                               <ul style={styles.subList}>
                                 {t.subtasks.length === 0 && <li style={styles.emptySmall}>サブタスクなし</li>}
@@ -1391,7 +1455,7 @@ export default function App() {
                                           <div style={styles.scheduleEditRow}>
                                             <label style={styles.scheduleEditField}>
                                               <span style={styles.scheduleEditLabel}>予定日</span>
-                                              <input type="date" value={s.scheduledDate || ""} onChange={(e) => updateSubtaskSchedule(p.id, t.id, s.id, "scheduledDate", e.target.value)} style={styles.scheduleEditInput} />
+                                              <input type="date" value={s.scheduledDate || ""} onChange={(e) => updateSubtaskSchedule(p.id, t.id, s.id, "scheduledDate", e.target.value)} min={t.startDate || undefined} max={t.endDate || undefined} style={styles.scheduleEditInput} />
                                             </label>
                                             <label style={styles.scheduleEditField}>
                                               <span style={styles.scheduleEditLabel}>想定(分)</span>
@@ -1538,6 +1602,7 @@ const styles = {
   progressTag: { fontSize: 10.5, fontWeight: 700, color: "#6B7F6E", background: "#EAE6DB", padding: "2px 6px", borderRadius: 8, flexShrink: 0 },
   progressTagSm: { fontSize: 10, fontWeight: 700, color: "#6B7F6E", background: "#EAE6DB", padding: "1px 5px", borderRadius: 8, flexShrink: 0 },
   taskList: { marginTop: 8, display: "flex", flexDirection: "column", gap: 6, paddingLeft: 18 },
+  taskDatesRow: { display: "flex", gap: 8, marginTop: 6, paddingLeft: 24 },
   ganttWrap: { marginTop: 8, padding: 10, background: "#F5F2E9", border: "1px dashed #C9C2B2", borderRadius: 8 },
   ganttEmpty: { fontSize: 11.5, color: "#A39D8C", margin: 0, lineHeight: 1.5 },
   ganttToolbar: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 8 },
