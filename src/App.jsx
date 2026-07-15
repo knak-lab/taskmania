@@ -1562,7 +1562,7 @@ export default function App() {
 
 const styles = {
   page: { minHeight: "100vh", background: "#FFFFFF", backgroundImage: "repeating-linear-gradient(0deg, rgba(44,54,69,0.025) 0px, rgba(44,54,69,0.025) 1px, transparent 1px, transparent 28px)", fontFamily: "'Zen Kaku Gothic New', sans-serif", padding: "20px 12px 60px" },
-  shell: { width: "100%" },
+  shell: { width: "fit-content", maxWidth: "100%", margin: "0 auto" },
   header: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 18 },
   logoRow: { display: "flex", alignItems: "center", gap: 12 },
   logoMark: { fontFamily: "'Shippori Mincho', serif", fontWeight: 700, fontSize: 22, color: "#FFFFFF", background: "#F39800", width: 40, height: 40, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, boxShadow: "0 2px 0 rgba(44,54,69,0.25)" },
@@ -1635,7 +1635,7 @@ const styles = {
   progressTag: { fontSize: 10.5, fontWeight: 700, color: "#6B7F6E", background: "#F0F0F0", padding: "2px 6px", borderRadius: 8, flexShrink: 0 },
   progressTagSm: { fontSize: 10, fontWeight: 700, color: "#6B7F6E", background: "#F0F0F0", padding: "1px 5px", borderRadius: 8, flexShrink: 0 },
   taskList: { marginTop: 8, display: "flex", flexDirection: "column", gap: 6, paddingLeft: 18 },
-  taskDatesRow: { display: "flex", gap: 8, marginTop: 6, paddingLeft: 24 },
+  taskDatesRow: { display: "flex", gap: 8, marginTop: 6, paddingLeft: 24, flexWrap: "wrap" },
   ganttWrap: { marginTop: 8, padding: 10, background: "#FFFFFF", border: "1px dashed #D8D8D8", borderRadius: 8 },
   ganttEmpty: { fontSize: 11.5, color: "#9B9B9B", margin: 0, lineHeight: 1.5 },
   ganttToolbar: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 8 },
