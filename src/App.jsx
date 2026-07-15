@@ -1011,6 +1011,7 @@ export default function App() {
                           aria-label={runningTarget?.subId === s.id ? "計測を終了" : "計測を開始"}>
                           {runningTarget?.subId === s.id ? (() => { const sec = Math.max(0, Math.floor((Date.now() - runningTarget.startAt) / 1000)); return `■ ${String(Math.floor(sec / 60)).padStart(2, "0")}:${String(sec % 60).padStart(2, "0")}`; })() : "▶"}
                         </button>
+                        <button type="button" onClick={() => openStepsModal(pjId, taskId, s.id)} aria-label="ステップを開く" style={styles.inlineAddBtn}>☑ステップ</button>
                         <span style={styles.calPjCol} title={pjName}>{pjName}</span>
                         <span style={styles.calTaskCol} title={taskName}>{taskName}</span>
                       </div>
