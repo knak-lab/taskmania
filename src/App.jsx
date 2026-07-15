@@ -106,7 +106,12 @@ function sub(text, done, priority, scheduledDate, startTime, estimatedMinutes, a
     estimatedMinutes: estimatedMinutes || null,
     actualMinutes: actualMinutes || null,
     createdAt: Date.now(),
+    steps: [],
   };
+}
+
+function step(text) {
+  return { id: uid(), text, done: false };
 }
 
 function formatDate(dateStr) {
@@ -432,6 +437,8 @@ export default function App() {
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [modalPJName, setModalPJName] = useState("");
   const [modalTaskName, setModalTaskName] = useState("");
+  const [stepsModalTarget, setStepsModalTarget] = useState(null);
+  const [newStepText, setNewStepText] = useState("");
 
   const inputRef = useRef(null);
   const saveTimer = useRef(null);
@@ -834,6 +841,51 @@ export default function App() {
     setProjects((prev) => prev.map((p) => p.id !== pjId ? p : { ...p, tasks: p.tasks.map((t) => t.id !== taskId ? t : { ...t, subtasks: t.subtasks.filter((s) => s.id !== subId) }) }));
   }
 
+  function openStepsModal(pjId, taskId, subId) { setStepsModalTarget({ pjId, taskId, subId }); setNewStepText(""); }
+  function closeStepsModal() { setStepsModalTarget(null); setNewStepText(""); }
+
+  function toggleStepDone(pjId, taskId, subId, stepId) {
+    setProjects((prev) => prev.map((p) => p.id !== pjId ? p : {
+      ...p, tasks: p.tasks.map((t) => t.id !== taskId ? t : {
+        ...t, subtasks: t.subtasks.map((s) => {
+          if (s.id !== subId) return s;
+          const steps = (s.steps || []).map((st) => (st.id === stepId ? { ...st, done: !st.done } : st));
+          const allDone = steps.length > 0 && steps.every((st) => st.done);
+          return { ...s, steps, done: allDone };
+        }),
+      }),
+    }));
+  }
+
+  function addStep(pjId, taskId, subId, text) {
+    setProjects((prev) => prev.map((p) => p.id !== pjId ? p : {
+      ...p, tasks: p.tasks.map((t) => t.id !== taskId ? t : {
+        ...t, subtasks: t.subtasks.map((s) => (s.id !== subId ? s : { ...s, steps: [...(s.steps || []), step(text)] })),
+      }),
+    }));
+  }
+
+  function removeStep(pjId, taskId, subId, stepId) {
+    setProjects((prev) => prev.map((p) => p.id !== pjId ? p : {
+      ...p, tasks: p.tasks.map((t) => t.id !== taskId ? t : {
+        ...t, subtasks: t.subtasks.map((s) => {
+          if (s.id !== subId) return s;
+          const steps = (s.steps || []).filter((st) => st.id !== stepId);
+          const allDone = steps.length > 0 && steps.every((st) => st.done);
+          return { ...s, steps, done: steps.length > 0 ? allDone : s.done };
+        }),
+      }),
+    }));
+  }
+
+  function updateStepText(pjId, taskId, subId, stepId, text) {
+    setProjects((prev) => prev.map((p) => p.id !== pjId ? p : {
+      ...p, tasks: p.tasks.map((t) => t.id !== taskId ? t : {
+        ...t, subtasks: t.subtasks.map((s) => (s.id !== subId ? s : { ...s, steps: (s.steps || []).map((st) => (st.id === stepId ? { ...st, text } : st)) })),
+      }),
+    }));
+  }
+
   const activeTopColor = TOP_TABS.find((c) => c.key === topTab).color;
   const ownerColorOf = (key) => TOP_TABS.find((c) => c.key === key)?.color || activeTopColor;
 
@@ -1212,6 +1264,42 @@ export default function App() {
             </div>
           )}
 
+          {stepsModalTarget && (() => {
+            const p = (projects || []).find((pp) => pp.id === stepsModalTarget.pjId);
+            const t = p?.tasks.find((tt) => tt.id === stepsModalTarget.taskId);
+            const s = t?.subtasks.find((ss) => ss.id === stepsModalTarget.subId);
+            if (!s) return null;
+            return (
+              <div style={styles.modalOverlay} onClick={closeStepsModal}>
+                <div style={styles.modalBox} onClick={(e) => e.stopPropagation()}>
+                  <div style={styles.modalHeader}>
+                    <h3 style={styles.modalTitle}>ステップ</h3>
+                    <button type="button" onClick={closeStepsModal} aria-label="閉じる" style={styles.modalCloseBtn}>×</button>
+                  </div>
+                  <p style={styles.modalContext}>{s.text}</p>
+                  <ul style={styles.stepList}>
+                    {(s.steps || []).length === 0 && <li style={styles.emptySmall}>ステップなし</li>}
+                    {(s.steps || []).map((st) => (
+                      <li key={st.id} style={styles.stepRow}>
+                        <button onClick={() => toggleStepDone(p.id, t.id, s.id, st.id)} aria-label={st.done ? "未完了に戻す" : "完了にする"} style={styles.stampWrap}>
+                          {st.done ? <span style={styles.hankoStamp}>済</span> : <span style={styles.hankoEmpty} />}
+                        </button>
+                        <input type="text" value={st.text} onChange={(e) => updateStepText(p.id, t.id, s.id, st.id, e.target.value)}
+                          style={{ ...styles.subTextInput, textDecoration: st.done ? "line-through" : "none", color: st.done ? "#A39D8C" : "#2C3645" }}
+                          aria-label="ステップ名を編集" />
+                        <button onClick={() => removeStep(p.id, t.id, s.id, st.id)} aria-label="削除" style={styles.deleteBtn}>×</button>
+                      </li>
+                    ))}
+                  </ul>
+                  <form onSubmit={(e) => { e.preventDefault(); const trimmed = newStepText.trim(); if (!trimmed) return; addStep(p.id, t.id, s.id, trimmed); setNewStepText(""); }} style={styles.inputRow}>
+                    <input autoFocus value={newStepText} onChange={(e) => setNewStepText(e.target.value)} placeholder="新しいステップ…" style={styles.input} />
+                    <button type="submit" style={styles.addBtn}>追加</button>
+                  </form>
+                </div>
+              </div>
+            );
+          })()}
+
           <div style={styles.tree}>
             {projects === null && <p style={styles.empty}>読み込み中…</p>}
             {projects !== null && visibleProjects.length === 0 && <p style={styles.empty}>まだPJがない。上のフォームから作成できる。</p>}
@@ -1345,6 +1433,7 @@ export default function App() {
                                           </div>
                                         </div>
                                         <span style={{ ...styles.metaTag, borderColor: pInfo.color, color: pInfo.color }}>{pInfo.label}</span>
+                                        <button type="button" onClick={() => openStepsModal(p.id, t.id, s.id)} aria-label="ステップを開く" style={styles.inlineAddBtn}>☑ステップ</button>
                                         <button onClick={() => removeSubtask(p.id, t.id, s.id)} aria-label="削除" style={styles.deleteBtn}>×</button>
                                       </div>
                                     </li>
@@ -1473,6 +1562,8 @@ const styles = {
   subList: { listStyle: "none", margin: "6px 0 0", padding: "0 0 0 16px", display: "flex", flexDirection: "column", gap: 2 },
   subRowWrap: { borderBottom: "1px dashed #E3DECF" },
   subRow: { display: "flex", alignItems: "flex-start", gap: 7, padding: "6px 0" },
+  stepList: { listStyle: "none", margin: "0 0 10px", padding: 0, display: "flex", flexDirection: "column", gap: 2 },
+  stepRow: { display: "flex", alignItems: "center", gap: 7, padding: "5px 0", borderBottom: "1px dashed #E3DECF" },
   subBody: { flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4, paddingTop: 2 },
   scheduleEditRow: { display: "flex", gap: 6, flexWrap: "wrap" },
   scheduleEditField: { display: "flex", flexDirection: "column", gap: 1 },

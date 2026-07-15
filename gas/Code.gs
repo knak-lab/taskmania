@@ -5,6 +5,7 @@
  *   Projects: id | owner | name | subcategory | priority | status
  *   Tasks:    id | projectId | name
  *   Subtasks: id | taskId | text | done | priority | scheduledDate | startTime | estimatedMinutes | actualMinutes | createdAt
+ *   Steps:    id | subtaskId | text | done
  *
  * API:
  *   GET  {webAppUrl}            → { projects: [...] } (PJ→タスク→サブタスクのネスト構造。フロント側のprojects stateとそのまま互換)
@@ -41,6 +42,7 @@
 const SHEET_PROJECTS = "Projects";
 const SHEET_TASKS = "Tasks";
 const SHEET_SUBTASKS = "Subtasks";
+const SHEET_STEPS = "Steps";
 
 const PROJECTS_HEADERS = ["id", "owner", "name", "subcategory", "priority", "status"];
 const TASKS_HEADERS = ["id", "projectId", "name"];
@@ -56,13 +58,15 @@ const SUBTASKS_HEADERS = [
   "actualMinutes",
   "createdAt",
 ];
+const STEPS_HEADERS = ["id", "subtaskId", "text", "done"];
 
 /** 初回セットアップ用。エディタから手動で一度だけ実行する */
 function setup() {
   getOrCreateSheet_(SHEET_PROJECTS, PROJECTS_HEADERS);
   getOrCreateSheet_(SHEET_TASKS, TASKS_HEADERS);
   getOrCreateSheet_(SHEET_SUBTASKS, SUBTASKS_HEADERS);
-  Logger.log("セットアップ完了: Projects / Tasks / Subtasks シートを用意しました");
+  getOrCreateSheet_(SHEET_STEPS, STEPS_HEADERS);
+  Logger.log("セットアップ完了: Projects / Tasks / Subtasks / Steps シートを用意しました");
 }
 
 function doGet(e) {
@@ -87,10 +91,27 @@ function readProjects_() {
   const projSheet = getOrCreateSheet_(SHEET_PROJECTS, PROJECTS_HEADERS);
   const taskSheet = getOrCreateSheet_(SHEET_TASKS, TASKS_HEADERS);
   const subSheet = getOrCreateSheet_(SHEET_SUBTASKS, SUBTASKS_HEADERS);
+  const stepSheet = getOrCreateSheet_(SHEET_STEPS, STEPS_HEADERS);
 
   const projRows = getDataRows_(projSheet);
   const taskRows = getDataRows_(taskSheet);
   const subRows = getDataRows_(subSheet);
+  const stepRows = getDataRows_(stepSheet);
+
+  const stepsBySubtask = {};
+  stepRows.forEach(function (r) {
+    const id = r[0],
+      subtaskId = r[1],
+      text = r[2],
+      done = r[3];
+    if (!id || !subtaskId) return;
+    if (!stepsBySubtask[subtaskId]) stepsBySubtask[subtaskId] = [];
+    stepsBySubtask[subtaskId].push({
+      id: String(id),
+      text: text || "",
+      done: done === true || done === "TRUE" || done === "true",
+    });
+  });
 
   const subtasksByTask = {};
   subRows.forEach(function (r) {
@@ -116,6 +137,7 @@ function readProjects_() {
       estimatedMinutes: estimatedMinutes ? Number(estimatedMinutes) : null,
       actualMinutes: actualMinutes ? Number(actualMinutes) : null,
       createdAt: createdAt ? Number(createdAt) : Date.now(),
+      steps: stepsBySubtask[id] || [],
     });
   });
 
@@ -164,14 +186,17 @@ function writeProjects_(projects) {
   const projSheet = getOrCreateSheet_(SHEET_PROJECTS, PROJECTS_HEADERS);
   const taskSheet = getOrCreateSheet_(SHEET_TASKS, TASKS_HEADERS);
   const subSheet = getOrCreateSheet_(SHEET_SUBTASKS, SUBTASKS_HEADERS);
+  const stepSheet = getOrCreateSheet_(SHEET_STEPS, STEPS_HEADERS);
 
   clearDataRows_(projSheet);
   clearDataRows_(taskSheet);
   clearDataRows_(subSheet);
+  clearDataRows_(stepSheet);
 
   const projRows = [];
   const taskRows = [];
   const subRows = [];
+  const stepRows = [];
 
   (projects || []).forEach(function (p) {
     projRows.push([p.id, p.owner || "", p.name || "", p.subcategory || "", p.priority || 2, p.status || ""]);
@@ -190,6 +215,9 @@ function writeProjects_(projects) {
           s.actualMinutes || "",
           s.createdAt || Date.now(),
         ]);
+        (s.steps || []).forEach(function (st) {
+          stepRows.push([st.id, s.id, st.text || "", !!st.done]);
+        });
       });
     });
   });
@@ -197,6 +225,7 @@ function writeProjects_(projects) {
   writeRows_(projSheet, projRows, PROJECTS_HEADERS.length);
   writeRows_(taskSheet, taskRows, TASKS_HEADERS.length);
   writeRows_(subSheet, subRows, SUBTASKS_HEADERS.length);
+  writeRows_(stepSheet, stepRows, STEPS_HEADERS.length);
 }
 
 // ---- ユーティリティ ----
