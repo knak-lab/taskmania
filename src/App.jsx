@@ -983,8 +983,7 @@ export default function App() {
           <div style={styles.logoRow}>
             <span style={styles.logoMark}>⏳️</span>
             <div>
-              <h1 style={styles.title}>タスクマニア</h1>
-              <p style={styles.subtitle}>PJ・タスク・サブタスクの3段管理</p>
+              <h1 style={styles.title}>タスクマニア！</h1>
             </div>
           </div>
           <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
@@ -1567,8 +1566,7 @@ const styles = {
   header: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 18 },
   logoRow: { display: "flex", alignItems: "center", gap: 12 },
   logoMark: { fontFamily: "'Shippori Mincho', serif", fontWeight: 700, fontSize: 22, color: "#F5F2E9", background: "#A63D34", width: 40, height: 40, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, boxShadow: "0 2px 0 rgba(44,54,69,0.25)" },
-  title: { fontFamily: "'Shippori Mincho', serif", fontWeight: 700, fontSize: 21, color: "#2C3645", margin: 0, letterSpacing: "0.02em" },
-  subtitle: { fontSize: 11.5, color: "#8B8578", margin: "2px 0 0" },
+  title: { fontFamily: "Arial, sans-serif", fontWeight: 700, fontSize: 32, color: "#2C3645", margin: 0, letterSpacing: "0.02em" },
   saveIndicator: { fontSize: 11, color: "#8B8578", minWidth: 60, textAlign: "right" },
   reloadBtn: { fontSize: 11, fontWeight: 700, color: "#3E5C76", background: "transparent", border: "1.5px solid #3E5C76", borderRadius: 5, padding: "3px 8px", cursor: "pointer", fontFamily: "inherit" },
   tabs: { display: "flex", gap: 6, marginBottom: -1, position: "relative", zIndex: 2 },
