@@ -907,6 +907,27 @@ export default function App() {
     if (!window.confirm(`サブタスク「${s?.text || ""}」を削除するが、よいか?`)) return;
     setProjects((prev) => prev.map((p) => p.id !== pjId ? p : { ...p, tasks: p.tasks.map((t) => t.id !== taskId ? t : { ...t, subtasks: t.subtasks.filter((s) => s.id !== subId) }) }));
   }
+  function duplicateSubtask(pjId, taskId, subId) {
+    setProjects((prev) => prev.map((p) => p.id !== pjId ? p : {
+      ...p, tasks: p.tasks.map((t) => {
+        if (t.id !== taskId) return t;
+        const idx = t.subtasks.findIndex((s) => s.id === subId);
+        if (idx === -1) return t;
+        const orig = t.subtasks[idx];
+        const copy = {
+          ...orig,
+          id: uid(),
+          done: false,
+          actualMinutes: null,
+          createdAt: Date.now(),
+          steps: (orig.steps || []).map((st) => ({ ...st, id: uid(), done: false })),
+        };
+        const subtasks = [...t.subtasks];
+        subtasks.splice(idx + 1, 0, copy);
+        return { ...t, subtasks };
+      }),
+    }));
+  }
 
   function openStepsModal(pjId, taskId, subId) { setStepsModalTarget({ pjId, taskId, subId }); setNewStepText(""); }
   function closeStepsModal() { setStepsModalTarget(null); setNewStepText(""); }
@@ -1548,6 +1569,7 @@ export default function App() {
                                         </div>
                                         <span style={{ ...styles.metaTag, borderColor: pInfo.color, color: pInfo.color }}>{pInfo.label}</span>
                                         <button type="button" onClick={() => openStepsModal(p.id, t.id, s.id)} aria-label="ステップを開く" style={styles.inlineAddBtn}>☑ステップ</button>
+                                        <button type="button" onClick={() => duplicateSubtask(p.id, t.id, s.id)} aria-label="サブタスクをコピー" style={styles.inlineAddBtn}>📋コピー</button>
                                         <button onClick={() => removeSubtask(p.id, t.id, s.id)} aria-label="削除" style={styles.deleteBtn}>×</button>
                                       </div>
                                     </li>
