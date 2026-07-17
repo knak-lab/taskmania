@@ -417,6 +417,7 @@ export default function App() {
   const [subTab, setSubTab] = useState("仕事");
   const [openPJ, setOpenPJ] = useState(() => new Set());
   const [openTask, setOpenTask] = useState(() => new Set());
+  const [showDoneSubtasks, setShowDoneSubtasks] = useState(() => new Set());
   const [ganttPJId, setGanttPJId] = useState(null);
   const [ganttCollapsed, setGanttCollapsed] = useState(true);
   const [runningTarget, setRunningTarget] = useState(null);
@@ -703,6 +704,7 @@ export default function App() {
 
   function toggleOpenPJ(id) { setOpenPJ((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; }); }
   function toggleOpenTask(id) { setOpenTask((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; }); }
+  function toggleShowDoneSubtasks(id) { setShowDoneSubtasks((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; }); }
   function toggleGantt(id) { setGanttPJId((prev) => (prev === id ? null : id)); }
   function togglePrioritySection(v) { setCollapsedPrioritySection((prev) => { const next = new Set(prev); next.has(v) ? next.delete(v) : next.add(v); return next; }); }
 
@@ -975,6 +977,10 @@ export default function App() {
         ::placeholder { color: #9B9B9B; }
         @media (min-width: 768px) {
           .tm-page { padding: 24px 32px 60px !important; }
+        }
+        @media (max-width: 767px) {
+          .pj-header { flex-wrap: wrap; }
+          .pj-header .pj-title-input { order: -1; flex: 1 1 100% !important; width: 100%; }
         }
       `}</style>
 
@@ -1408,13 +1414,13 @@ export default function App() {
               const oColor = ownerColorOf(p.owner);
               return (
                 <div key={p.id} style={{ ...styles.pjCard, borderLeftColor: oColor }} className="row-in">
-                  <div style={styles.pjHeader}>
+                  <div style={styles.pjHeader} className="pj-header">
                     <div style={styles.reorderBtns}>
                       <button type="button" onClick={() => movePJInSection(groupIds, p.id, "up")} disabled={pIdx === 0} style={{ ...styles.reorderBtn, opacity: pIdx === 0 ? 0.3 : 1, cursor: pIdx === 0 ? "default" : "pointer" }} aria-label="上へ移動">▲</button>
                       <button type="button" onClick={() => movePJInSection(groupIds, p.id, "down")} disabled={pIdx === groupIds.length - 1} style={{ ...styles.reorderBtn, opacity: pIdx === groupIds.length - 1 ? 0.3 : 1, cursor: pIdx === groupIds.length - 1 ? "default" : "pointer" }} aria-label="下へ移動">▼</button>
                     </div>
                     <button onClick={() => toggleOpenPJ(p.id)} style={styles.collapseBtn} aria-label={pjOpen ? "折りたたむ" : "展開する"}>{pjOpen ? "▾" : "▸"}</button>
-                    <input type="text" value={p.name} onChange={(e) => updatePJName(p.id, e.target.value)} style={styles.pjNameInput} aria-label="PJ名を編集" />
+                    <input type="text" value={p.name} onChange={(e) => updatePJName(p.id, e.target.value)} style={styles.pjNameInput} className="pj-title-input" aria-label="PJ名を編集" />
                     {pt > 0 && pd === pt && <span style={styles.doneMark}>✅</span>}
                     <button type="button" onClick={() => toggleGantt(p.id)} style={{ ...styles.ganttToggleBtn, background: ganttPJId === p.id ? "#F0F0F0" : "transparent" }} aria-label="ガントチャートを表示">📊</button>
                     <select value={p.priority || 2} onChange={(e) => updatePJPriority(p.id, Number(e.target.value))} style={styles.moveSelect} aria-label="優先度を変更">
@@ -1450,6 +1456,11 @@ export default function App() {
                               <input type="text" value={t.name} onChange={(e) => updateTaskName(p.id, t.id, e.target.value)} style={styles.taskNameInput} aria-label="タスク名を編集" />
                               {tt > 0 && td === tt && <span style={styles.doneMark}>✅</span>}
                               <span style={styles.progressTagSm}>{td}/{tt}</span>
+                              <button type="button" onClick={() => toggleShowDoneSubtasks(t.id)}
+                                style={{ ...styles.eyeToggleBtn, background: showDoneSubtasks.has(t.id) ? "#F0F0F0" : "transparent" }}
+                                aria-label={showDoneSubtasks.has(t.id) ? "完了済みサブタスクを隠す" : "完了済みサブタスクを表示"}>
+                                {showDoneSubtasks.has(t.id) ? "👁" : "🙈"}
+                              </button>
                               <select value={p.id} onChange={(e) => moveTask(p.id, t.id, e.target.value)} style={styles.moveSelect} aria-label="PJを変更">
                                 {projects.map((pp) => <option key={pp.id} value={pp.id}>{pp.name}</option>)}
                               </select>
@@ -1473,10 +1484,14 @@ export default function App() {
                               <span style={styles.calEstTag} title={t.estimatedMinutes != null ? "手入力値" : "サブタスクの想定(分)の合計"}>想定{taskEstimatedEffective(t) ? formatDuration(taskEstimatedEffective(t)) : "―"}</span>
                               <span style={styles.calEstTag} title="サブタスクの実績(分)の合計">実績{taskActualSubtotal(t) ? formatDuration(taskActualSubtotal(t)) : "―"}</span>
                             </div>
-                            {taskOpen && (
+                            {taskOpen && (() => {
+                              const doneHidden = !showDoneSubtasks.has(t.id);
+                              const visibleSubtasks = doneHidden ? t.subtasks.filter((s) => !s.done) : t.subtasks;
+                              return (
                               <ul style={styles.subList}>
                                 {t.subtasks.length === 0 && <li style={styles.emptySmall}>サブタスクなし</li>}
-                                {t.subtasks.map((s) => {
+                                {t.subtasks.length > 0 && visibleSubtasks.length === 0 && <li style={styles.emptySmall}>完了済みサブタスクのみ(👁で表示できる)</li>}
+                                {visibleSubtasks.map((s) => {
                                   const pInfo = PRIORITIES.find((pr) => pr.v === s.priority);
                                   return (
                                     <li key={s.id} style={styles.subRowWrap} className="row-in">
@@ -1539,7 +1554,8 @@ export default function App() {
                                   );
                                 })}
                               </ul>
-                            )}
+                              );
+                            })()}
                           </div>
                         );
                       })}
@@ -1631,6 +1647,7 @@ const styles = {
   pjNameInput: { flex: 1, fontSize: 14, fontWeight: 700, color: "#2C3645", minWidth: 0, textAlign: "left", border: "none", background: "transparent", fontFamily: "inherit", padding: "3px 5px", borderRadius: 5 },
   taskNameInput: { flex: 1, fontSize: 13, fontWeight: 600, color: "#2C3645", minWidth: 0, border: "none", background: "transparent", fontFamily: "inherit", padding: "2px 4px", borderRadius: 5 },
   ganttToggleBtn: { flexShrink: 0, border: "none", borderRadius: 5, padding: "3px 6px", fontSize: 13, cursor: "pointer", fontFamily: "inherit", lineHeight: 1 },
+  eyeToggleBtn: { flexShrink: 0, border: "none", borderRadius: 5, padding: "3px 6px", fontSize: 12, cursor: "pointer", fontFamily: "inherit", lineHeight: 1 },
   doneMark: { flexShrink: 0, fontSize: 12 },
   progressTag: { fontSize: 10.5, fontWeight: 700, color: "#6B7F6E", background: "#F0F0F0", padding: "2px 6px", borderRadius: 8, flexShrink: 0 },
   progressTagSm: { fontSize: 10, fontWeight: 700, color: "#6B7F6E", background: "#F0F0F0", padding: "1px 5px", borderRadius: 8, flexShrink: 0 },
