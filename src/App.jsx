@@ -451,6 +451,8 @@ export default function App() {
   const [modalTaskName, setModalTaskName] = useState("");
   const [stepsModalTarget, setStepsModalTarget] = useState(null);
   const [newStepText, setNewStepText] = useState("");
+  const [dayViewDate, setDayViewDate] = useState(() => toDateStr(new Date()));
+  const [copyDateModal, setCopyDateModal] = useState(null);
 
   const inputRef = useRef(null);
   const saveTimer = useRef(null);
@@ -533,16 +535,16 @@ export default function App() {
   }, [projects, topTab, subTab]);
 
   const todayStr = toDateStr(new Date());
-  const todayTasks = [];
+  const dayTasks = [];
   if (showPersonSections) {
     for (const p of categoryProjects) {
       for (const t of p.tasks) {
         for (const s of t.subtasks) {
-          if (s.scheduledDate === todayStr) todayTasks.push({ pjId: p.id, pjName: p.name, taskId: t.id, taskName: t.name, sub: s });
+          if (s.scheduledDate === dayViewDate) dayTasks.push({ pjId: p.id, pjName: p.name, taskId: t.id, taskName: t.name, sub: s });
         }
       }
     }
-    todayTasks.sort((a, b) => {
+    dayTasks.sort((a, b) => {
       if (!a.sub.startTime && !b.sub.startTime) return 0;
       if (!a.sub.startTime) return 1;
       if (!b.sub.startTime) return -1;
@@ -550,11 +552,11 @@ export default function App() {
     });
   }
 
-  const visibleTodayTasks = todayTasks.filter((t) => !t.sub.done);
+  const visibleDayTasks = dayTasks.filter((t) => !t.sub.done);
 
   const showWorkSummary = topTab === "kkr" && subTab === "仕事";
-  const totalEstMin = todayTasks.reduce((sum, t) => sum + (t.sub.estimatedMinutes || 0), 0);
-  const totalActualMin = todayTasks.reduce((sum, t) => sum + (t.sub.actualMinutes || 0), 0);
+  const totalEstMin = dayTasks.reduce((sum, t) => sum + (t.sub.estimatedMinutes || 0), 0);
+  const totalActualMin = dayTasks.reduce((sum, t) => sum + (t.sub.actualMinutes || 0), 0);
   const estRatio = totalEstMin / WORK_MINUTES;
   const estWarnLevel = estRatio >= 0.8 ? "red" : estRatio >= 0.6 ? "amber" : null;
 
@@ -907,7 +909,7 @@ export default function App() {
     if (!window.confirm(`サブタスク「${s?.text || ""}」を削除するが、よいか?`)) return;
     setProjects((prev) => prev.map((p) => p.id !== pjId ? p : { ...p, tasks: p.tasks.map((t) => t.id !== taskId ? t : { ...t, subtasks: t.subtasks.filter((s) => s.id !== subId) }) }));
   }
-  function duplicateSubtask(pjId, taskId, subId) {
+  function duplicateSubtask(pjId, taskId, subId, overrides = {}) {
     setProjects((prev) => prev.map((p) => p.id !== pjId ? p : {
       ...p, tasks: p.tasks.map((t) => {
         if (t.id !== taskId) return t;
@@ -916,6 +918,7 @@ export default function App() {
         const orig = t.subtasks[idx];
         const copy = {
           ...orig,
+          ...overrides,
           id: uid(),
           done: false,
           actualMinutes: null,
@@ -1061,7 +1064,10 @@ export default function App() {
         <section style={{ ...styles.panel, borderColor: activeTopColor }}>
           {showPersonSections && (
             <>
-              <h3 style={styles.sectionTitle}>今日のタスク</h3>
+              <div style={styles.sectionTitleRow}>
+                <h3 style={styles.sectionTitleFlush}>1日のタスク</h3>
+                <input type="date" value={dayViewDate} onChange={(e) => setDayViewDate(e.target.value)} style={styles.scheduleEditInput} aria-label="表示する日付" />
+              </div>
               {showWorkSummary && (
                 <div style={styles.workSummaryBar}>
                   <span style={styles.workSummaryItem}>業務時間 8時間</span>
@@ -1072,11 +1078,11 @@ export default function App() {
                   <span style={styles.workSummaryItem}>実績計 {totalActualMin ? formatDuration(totalActualMin) : "0分"}</span>
                 </div>
               )}
-              {visibleTodayTasks.length === 0 ? (
-                <p style={styles.emptySmall}>今日の予定日が入ってるサブタスクはない。</p>
+              {visibleDayTasks.length === 0 ? (
+                <p style={styles.emptySmall}>この日の予定日が入ってるサブタスクはない。</p>
               ) : (
                 <ul style={styles.todayList}>
-                  {visibleTodayTasks.map(({ pjId, pjName, taskId, taskName, sub: s }) => (
+                  {visibleDayTasks.map(({ pjId, pjName, taskId, taskName, sub: s }) => (
                     <li key={s.id} style={styles.calendarCard} className="row-in">
                       <div style={styles.calendarLine1}>
                         <button onClick={() => toggleSubtaskDone(pjId, taskId, s.id)} aria-label={s.done ? "未完了に戻す" : "完了にする"} style={styles.stampWrap}>
@@ -1103,6 +1109,7 @@ export default function App() {
                           {runningTarget?.subId === s.id ? (() => { const sec = Math.max(0, Math.floor((Date.now() - runningTarget.startAt) / 1000)); return `■ ${String(Math.floor(sec / 60)).padStart(2, "0")}:${String(sec % 60).padStart(2, "0")}`; })() : "▶"}
                         </button>
                         <button type="button" onClick={() => openStepsModal(pjId, taskId, s.id)} aria-label="ステップを開く" style={styles.inlineAddBtn}>☑ステップ</button>
+                        <button type="button" onClick={() => setCopyDateModal({ pjId, taskId, subId: s.id, date: dayViewDate })} aria-label="サブタスクをコピー" style={styles.inlineAddBtn}>📋コピー</button>
                         <span style={styles.calPjCol} title={pjName}>{pjName}</span>
                         <span style={styles.calTaskCol} title={taskName}>{taskName}</span>
                       </div>
@@ -1404,6 +1411,31 @@ export default function App() {
                     <input autoFocus value={newStepText} onChange={(e) => setNewStepText(e.target.value)} placeholder="新しいステップ…" style={styles.input} />
                     <button type="submit" style={styles.addBtn}>追加</button>
                   </form>
+                </div>
+              </div>
+            );
+          })()}
+
+          {copyDateModal && (() => {
+            const p = (projects || []).find((pp) => pp.id === copyDateModal.pjId);
+            const t = p?.tasks.find((tt) => tt.id === copyDateModal.taskId);
+            const s = t?.subtasks.find((ss) => ss.id === copyDateModal.subId);
+            if (!s) return null;
+            return (
+              <div style={styles.modalOverlay} onClick={() => setCopyDateModal(null)}>
+                <div style={styles.modalBox} onClick={(e) => e.stopPropagation()}>
+                  <div style={styles.modalHeader}>
+                    <h3 style={styles.modalTitle}>サブタスクをコピー</h3>
+                    <button type="button" onClick={() => setCopyDateModal(null)} aria-label="閉じる" style={styles.modalCloseBtn}>×</button>
+                  </div>
+                  <p style={styles.modalContext}>{s.text}</p>
+                  <label style={styles.scheduleEditField}>
+                    <span style={styles.scheduleEditLabel}>コピー先の予定日</span>
+                    <input type="date" value={copyDateModal.date} onChange={(e) => setCopyDateModal((prev) => ({ ...prev, date: e.target.value }))} style={styles.scheduleEditInput} />
+                  </label>
+                  <div style={styles.modalActions}>
+                    <button type="button" onClick={() => { duplicateSubtask(p.id, t.id, s.id, { scheduledDate: copyDateModal.date || null }); setCopyDateModal(null); }} style={styles.addBtn}>コピー</button>
+                  </div>
                 </div>
               </div>
             );
