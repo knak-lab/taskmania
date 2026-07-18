@@ -1005,6 +1005,10 @@ export default function App() {
         @media (max-width: 767px) {
           .pj-header { flex-wrap: wrap; }
           .pj-header .pj-title-input { order: -1; flex: 1 1 100% !important; width: 100%; }
+          .task-header { flex-wrap: wrap; }
+          .task-header .task-title-input { order: -1; flex: 1 1 100% !important; width: 100%; }
+          .sub-row { flex-wrap: wrap; }
+          .sub-row .sub-body { order: -1; flex: 1 1 100% !important; width: 100%; }
         }
       `}</style>
 
@@ -1500,13 +1504,13 @@ export default function App() {
                         const { done: td, total: tt } = taskProgress(t);
                         return (
                           <div key={t.id} style={styles.taskCard} className="row-in">
-                            <div style={styles.taskHeader}>
+                            <div style={styles.taskHeader} className="task-header">
                               <div style={styles.reorderBtns}>
                                 <button type="button" onClick={() => moveTaskInPJ(p.id, t.id, "up")} disabled={tIdx === 0} style={{ ...styles.reorderBtn, opacity: tIdx === 0 ? 0.3 : 1, cursor: tIdx === 0 ? "default" : "pointer" }} aria-label="上へ移動">▲</button>
                                 <button type="button" onClick={() => moveTaskInPJ(p.id, t.id, "down")} disabled={tIdx === p.tasks.length - 1} style={{ ...styles.reorderBtn, opacity: tIdx === p.tasks.length - 1 ? 0.3 : 1, cursor: tIdx === p.tasks.length - 1 ? "default" : "pointer" }} aria-label="下へ移動">▼</button>
                               </div>
                               <button onClick={() => toggleOpenTask(t.id)} style={styles.collapseBtnSm} aria-label={taskOpen ? "折りたたむ" : "展開する"}>{taskOpen ? "▾" : "▸"}</button>
-                              <input type="text" value={t.name} onChange={(e) => updateTaskName(p.id, t.id, e.target.value)} style={styles.taskNameInput} aria-label="タスク名を編集" />
+                              <input type="text" value={t.name} onChange={(e) => updateTaskName(p.id, t.id, e.target.value)} style={styles.taskNameInput} className="task-title-input" aria-label="タスク名を編集" />
                               {tt > 0 && td === tt && <span style={styles.doneMark}>✅</span>}
                               <span style={styles.progressTagSm}>{td}/{tt}</span>
                               <button type="button" onClick={() => toggleShowDoneSubtasks(t.id)}
@@ -1548,11 +1552,11 @@ export default function App() {
                                   const pInfo = PRIORITIES.find((pr) => pr.v === s.priority);
                                   return (
                                     <li key={s.id} style={styles.subRowWrap} className="row-in">
-                                      <div style={styles.subRow}>
+                                      <div style={styles.subRow} className="sub-row">
                                         <button onClick={() => toggleSubtaskDone(p.id, t.id, s.id)} aria-label={s.done ? "未完了に戻す" : "完了にする"} style={styles.stampWrap}>
                                           {s.done ? <span style={styles.hankoStamp} className={stamping === s.id ? "hanko-pop" : ""}>済</span> : <span style={styles.hankoEmpty} />}
                                         </button>
-                                        <div style={styles.subBody}>
+                                        <div style={styles.subBody} className="sub-body">
                                           <input type="text" value={s.text} onChange={(e) => updateSubtaskText(p.id, t.id, s.id, e.target.value)} style={{ ...styles.subTextInput, textDecoration: s.done ? "line-through" : "none", color: s.done ? "#9B9B9B" : "#2C3645" }} aria-label="サブタスク名を編集" />
                                           <div style={styles.scheduleEditRow}>
                                             <label style={styles.scheduleEditField}>
