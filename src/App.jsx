@@ -602,15 +602,7 @@ export default function App() {
 
   const effectiveOwner = topTab === "総合" ? addOwner : topTab;
   const ownerHasSub = PERSON_KEYS.includes(effectiveOwner);
-  const showPersonSections = PERSON_KEYS.includes(topTab);
-  const ownerProjects = useMemo(
-    () => (projects || []).filter((p) => p.owner === effectiveOwner),
-    [projects, effectiveOwner]
-  );
-  const categoryProjects = useMemo(
-    () => (subTab === "総合" ? ownerProjects : ownerProjects.filter((p) => p.subcategory === subTab)),
-    [ownerProjects, subTab]
-  );
+  const showTaskSections = true;
 
   useEffect(() => {
     if (!ownerHasSub) return;
@@ -629,8 +621,8 @@ export default function App() {
 
   const todayStr = toDateStr(new Date());
   const dayTasks = [];
-  if (showPersonSections) {
-    for (const p of categoryProjects) {
+  if (showTaskSections) {
+    for (const p of visibleProjects) {
       for (const t of p.tasks) {
         for (const s of t.subtasks) {
           if (s.scheduledDate === dayViewDate) dayTasks.push({ pjId: p.id, pjName: p.name, taskId: t.id, taskName: t.name, sub: s });
@@ -678,9 +670,9 @@ export default function App() {
   }, []);
 
   const weekTasks = useMemo(() => {
-    if (!showPersonSections) return [];
+    if (!showTaskSections) return [];
     const tasks = [];
-    for (const p of categoryProjects) {
+    for (const p of visibleProjects) {
       for (const t of p.tasks) {
         for (const s of t.subtasks) {
           if (weekDates.includes(s.scheduledDate))
@@ -695,7 +687,7 @@ export default function App() {
       return a.sub.startTime.localeCompare(b.sub.startTime);
     });
     return tasks;
-  }, [categoryProjects, weekDates, showPersonSections]);
+  }, [visibleProjects, weekDates, showTaskSections]);
 
   const weekSummary = useMemo(() => {
     const futureDates = weekDates.filter(d => d >= todayStr);
@@ -741,9 +733,9 @@ export default function App() {
   }, []);
 
   const nextWeekTasks = useMemo(() => {
-    if (!showPersonSections) return [];
+    if (!showTaskSections) return [];
     const tasks = [];
-    for (const p of categoryProjects) {
+    for (const p of visibleProjects) {
       for (const t of p.tasks) {
         for (const s of t.subtasks) {
           if (nextWeekDates.includes(s.scheduledDate))
@@ -758,7 +750,7 @@ export default function App() {
       return a.sub.startTime.localeCompare(b.sub.startTime);
     });
     return tasks;
-  }, [categoryProjects, nextWeekDates, showPersonSections]);
+  }, [visibleProjects, nextWeekDates, showTaskSections]);
 
   const nextWeekSummary = useMemo(() => {
     const futureDates = nextWeekDates.filter(d => d >= todayStr);
@@ -1186,7 +1178,7 @@ export default function App() {
         )}
 
         <section style={{ ...styles.panel, borderColor: activeTopColor }}>
-          {showPersonSections && (
+          {showTaskSections && (
             <>
               <div style={styles.sectionTitleRow}>
                 <h3 style={styles.sectionTitleFlush}>1日のタスク</h3>
@@ -1396,7 +1388,7 @@ export default function App() {
             </>
           )}
 
-          {showPersonSections && (
+          {showTaskSections && (
             <>
               <div style={styles.sectionTitleRow}>
                 <h3 style={styles.sectionTitleFlush}>総合ガントチャート</h3>
@@ -1404,11 +1396,11 @@ export default function App() {
                   {ganttCollapsed ? "▸" : "▾"}
                 </button>
               </div>
-              {!ganttCollapsed && <OverviewGanttChart projects={categoryProjects} />}
+              {!ganttCollapsed && <OverviewGanttChart projects={visibleProjects} />}
             </>
           )}
 
-          {showPersonSections && <h3 style={styles.sectionTitle}>タスク一覧</h3>}
+          {showTaskSections && <h3 style={styles.sectionTitle}>タスク一覧</h3>}
 
           {(() => {
             const modalTargetTask = addLevel === "subtask" ? (projects || []).find((pp) => pp.id === addPJId)?.tasks.find((tt) => tt.id === addTaskId) : null;
