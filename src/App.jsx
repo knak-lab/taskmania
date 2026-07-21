@@ -208,6 +208,98 @@ function toDateStr(d) {
   return `${y}-${m}-${day}`;
 }
 
+function addDaysStr(dateStr, days) {
+  const d = new Date(dateStr + "T00:00:00");
+  d.setDate(d.getDate() + days);
+  return toDateStr(d);
+}
+
+const WEEKDAY_LABELS = ["日", "月", "火", "水", "木", "金", "土"];
+
+function nthWeekdayOfMonth(year, month, weekday, nth) {
+  const d = new Date(year, month - 1, 1);
+  let count = 0;
+  while (d.getMonth() === month - 1) {
+    if (d.getDay() === weekday) {
+      count += 1;
+      if (count === nth) return toDateStr(d);
+    }
+    d.setDate(d.getDate() + 1);
+  }
+  return null;
+}
+
+function equinoxDateStr(year, season) {
+  const base = season === "spring" ? 20.8431 : 23.2488;
+  const day = Math.floor(base + 0.242194 * (year - 1980) - Math.floor((year - 1980) / 4));
+  const month = season === "spring" ? 3 : 9;
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+// 固定日・ハッピーマンデー・春分秋分から日本の祝日を算出し、振替休日/国民の休日も補う
+function japanHolidaysOfYear(year) {
+  const map = {
+    [`${year}-01-01`]: "元日",
+    [`${year}-02-11`]: "建国記念の日",
+    [`${year}-02-23`]: "天皇誕生日",
+    [`${year}-04-29`]: "昭和の日",
+    [`${year}-05-03`]: "憲法記念日",
+    [`${year}-05-04`]: "みどりの日",
+    [`${year}-05-05`]: "こどもの日",
+    [`${year}-08-11`]: "山の日",
+    [`${year}-11-03`]: "文化の日",
+    [`${year}-11-23`]: "勤労感謝の日",
+    [nthWeekdayOfMonth(year, 1, 1, 2)]: "成人の日",
+    [nthWeekdayOfMonth(year, 7, 1, 3)]: "海の日",
+    [nthWeekdayOfMonth(year, 9, 1, 3)]: "敬老の日",
+    [nthWeekdayOfMonth(year, 10, 1, 2)]: "スポーツの日",
+    [equinoxDateStr(year, "spring")]: "春分の日",
+    [equinoxDateStr(year, "autumn")]: "秋分の日",
+  };
+  for (const dstr of Object.keys(map)) {
+    if (new Date(dstr + "T00:00:00").getDay() === 0) {
+      let sub = dstr;
+      do { sub = addDaysStr(sub, 1); } while (map[sub]);
+      map[sub] = map[sub] || "振替休日";
+    }
+  }
+  for (const dstr of Object.keys(map)) {
+    const mid = addDaysStr(dstr, 1);
+    const after = addDaysStr(dstr, 2);
+    if (!map[mid] && map[after] && new Date(mid + "T00:00:00").getDay() !== 0) {
+      map[mid] = "国民の休日";
+    }
+  }
+  return map;
+}
+
+const _holidayCache = {};
+function isJapanHoliday(dateStr) {
+  const year = Number(dateStr.slice(0, 4));
+  if (!_holidayCache[year]) _holidayCache[year] = japanHolidaysOfYear(year);
+  return !!_holidayCache[year][dateStr];
+}
+
+function isWeekendOrHoliday(dateStr) {
+  const day = new Date(dateStr + "T00:00:00").getDay();
+  return day === 0 || day === 6 || isJapanHoliday(dateStr);
+}
+
+function nextWeekdayOnOrAfter(dateStr, weekday) {
+  let d = dateStr;
+  while (new Date(d + "T00:00:00").getDay() !== weekday) d = addDaysStr(d, 1);
+  return d;
+}
+
+// 次回発生日を計算。shiftHolidayがtrueなら祝日・土日の場合1日ずつ後ろへずらす
+function computeNextRecurrenceDate(currentDateStr, weekday, shiftHoliday) {
+  let next = nextWeekdayOnOrAfter(addDaysStr(currentDateStr, 1), weekday);
+  if (shiftHoliday) {
+    while (isWeekendOrHoliday(next)) next = addDaysStr(next, 1);
+  }
+  return next;
+}
+
 function bucketKeyFor(dateStr, granularity) {
   const d = new Date(dateStr + "T00:00:00");
   if (granularity === "day") return dateStr;
@@ -812,8 +904,35 @@ export default function App() {
     const p = projects.find((p) => p.id === pjId);
     const t = p?.tasks.find((t) => t.id === taskId);
     const s = t?.subtasks.find((s) => s.id === subId);
-    if (s && !s.done) { setStamping(subId); setTimeout(() => setStamping(null), 550); }
-    setProjects((prev) => prev.map((p) => p.id !== pjId ? p : { ...p, tasks: p.tasks.map((t) => t.id !== taskId ? t : { ...t, subtasks: t.subtasks.map((s) => (s.id === subId ? { ...s, done: !s.done } : s)) }) }));
+    const completing = s && !s.done;
+    if (completing) { setStamping(subId); setTimeout(() => setStamping(null), 550); }
+    setProjects((prev) => prev.map((pp) => {
+      if (pp.id !== pjId) return pp;
+      return {
+        ...pp, tasks: pp.tasks.map((tt) => {
+          if (tt.id !== taskId) return tt;
+          const subtasks = tt.subtasks.map((ss) => (ss.id === subId ? { ...ss, done: !ss.done } : ss));
+          if (completing && s.repeatWeekday != null && s.scheduledDate) {
+            const shiftHoliday = pp.owner === "kkr" && pp.subcategory === "仕事";
+            const nextDate = computeNextRecurrenceDate(s.scheduledDate, s.repeatWeekday, shiftHoliday);
+            if (!tt.endDate || nextDate <= tt.endDate) {
+              const idx = subtasks.findIndex((ss) => ss.id === subId);
+              const nextSub = {
+                ...s,
+                id: uid(),
+                done: false,
+                actualMinutes: null,
+                scheduledDate: nextDate,
+                createdAt: Date.now(),
+                steps: (s.steps || []).map((st) => ({ ...st, id: uid(), done: false })),
+              };
+              subtasks.splice(idx + 1, 0, nextSub);
+            }
+          }
+          return { ...tt, subtasks };
+        }),
+      };
+    }));
   }
 
   function updateSubtaskSchedule(pjId, taskId, subId, field, value) {
@@ -1096,6 +1215,7 @@ export default function App() {
                         <TimeDropdown value={s.startTime || ""} onChange={(v) => updateSubtaskSchedule(pjId, taskId, s.id, "startTime", v)} style={{ width: 54 }} />
                         <span style={{ ...styles.calTimeCol, width: 40 }}>{addMinutesToTime(s.startTime, s.estimatedMinutes) || "―"}</span>
                         <span style={{ ...styles.calSubCol, textDecoration: s.done ? "line-through" : "none", color: s.done ? "#9B9B9B" : "#2C3645" }} title={s.text}>{s.text}</span>
+                        {s.repeatWeekday != null && <span title={`毎週${WEEKDAY_LABELS[s.repeatWeekday]}曜`} style={styles.calEstTag}>🔁{WEEKDAY_LABELS[s.repeatWeekday]}</span>}
                       </div>
                       <div style={styles.calendarLine2}>
                         <span style={styles.calendarLine2Label}>想定</span>
@@ -1589,6 +1709,13 @@ export default function App() {
                                             <label style={styles.scheduleEditField}>
                                               <span style={styles.scheduleEditLabel}>予定日</span>
                                               <input type="date" value={s.scheduledDate || ""} onChange={(e) => updateSubtaskSchedule(p.id, t.id, s.id, "scheduledDate", e.target.value)} min={t.startDate || undefined} max={t.endDate || undefined} style={styles.scheduleEditInput} />
+                                            </label>
+                                            <label style={styles.scheduleEditField}>
+                                              <span style={styles.scheduleEditLabel}>繰り返し{p.owner === "kkr" && p.subcategory === "仕事" ? "(休日は翌日へ)" : ""}</span>
+                                              <select value={s.repeatWeekday ?? ""} onChange={(e) => updateSubtaskSchedule(p.id, t.id, s.id, "repeatWeekday", e.target.value === "" ? "" : Number(e.target.value))} style={styles.scheduleEditInput}>
+                                                <option value="">なし</option>
+                                                {WEEKDAY_LABELS.map((label, idx) => <option key={idx} value={idx}>毎週{label}曜</option>)}
+                                              </select>
                                             </label>
                                             <label style={styles.scheduleEditField}>
                                               <span style={styles.scheduleEditLabel}>想定(分)</span>

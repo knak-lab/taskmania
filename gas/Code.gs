@@ -4,7 +4,7 @@
  * シート構成:
  *   Projects: id | owner | name | subcategory | priority | status
  *   Tasks:    id | projectId | name | startDate | endDate | estimatedMinutes
- *   Subtasks: id | taskId | text | done | priority | scheduledDate | startTime | estimatedMinutes | actualMinutes | createdAt
+ *   Subtasks: id | taskId | text | done | priority | scheduledDate | startTime | estimatedMinutes | actualMinutes | createdAt | repeatWeekday
  *   Steps:    id | subtaskId | text | done
  *
  * API:
@@ -47,6 +47,10 @@
  *   既存のTasksシートのF1セルに手動で "estimatedMinutes" と入力しておくこと。
  *   既存行のF列が空欄の場合は未設定(null)として扱われ、フロント側でサブタスクの
  *   想定時間合計にフォールバックするので、値が入っていなくても壊れない。
+ *
+ * 既存スプレッドシートを使っている場合の移行手順(SubtasksにrepeatWeekday列を追加した際):
+ *   既存のSubtasksシートのK1セルに手動で "repeatWeekday" と入力しておくこと(0=日〜6=土)。
+ *   既存行のK列が空欄の場合は繰り返しなし(null)として扱われるので、値が入っていなくても壊れない。
  */
 
 const SHEET_PROJECTS = "Projects";
@@ -67,6 +71,7 @@ const SUBTASKS_HEADERS = [
   "estimatedMinutes",
   "actualMinutes",
   "createdAt",
+  "repeatWeekday",
 ];
 const STEPS_HEADERS = ["id", "subtaskId", "text", "done"];
 
@@ -134,7 +139,8 @@ function readProjects_() {
       startTime = r[6],
       estimatedMinutes = r[7],
       actualMinutes = r[8],
-      createdAt = r[9];
+      createdAt = r[9],
+      repeatWeekday = r[10];
     if (!id || !taskId) return;
     if (!subtasksByTask[taskId]) subtasksByTask[taskId] = [];
     subtasksByTask[taskId].push({
@@ -147,6 +153,7 @@ function readProjects_() {
       estimatedMinutes: estimatedMinutes ? Number(estimatedMinutes) : null,
       actualMinutes: actualMinutes ? Number(actualMinutes) : null,
       createdAt: createdAt ? Number(createdAt) : Date.now(),
+      repeatWeekday: repeatWeekday !== "" && repeatWeekday != null ? Number(repeatWeekday) : null,
       steps: stepsBySubtask[id] || [],
     });
   });
@@ -230,6 +237,7 @@ function writeProjects_(projects) {
           s.estimatedMinutes || "",
           s.actualMinutes || "",
           s.createdAt || Date.now(),
+          s.repeatWeekday != null ? s.repeatWeekday : "",
         ]);
         (s.steps || []).forEach(function (st) {
           stepRows.push([st.id, s.id, st.text || "", !!st.done]);
