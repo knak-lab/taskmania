@@ -453,6 +453,7 @@ export default function App() {
   const [newStepText, setNewStepText] = useState("");
   const [dayViewDate, setDayViewDate] = useState(() => toDateStr(new Date()));
   const [copyDateModal, setCopyDateModal] = useState(null);
+  const [moveDateModal, setMoveDateModal] = useState(null);
 
   const inputRef = useRef(null);
   const saveTimer = useRef(null);
@@ -1113,6 +1114,7 @@ export default function App() {
                           {runningTarget?.subId === s.id ? (() => { const sec = Math.max(0, Math.floor((Date.now() - runningTarget.startAt) / 1000)); return `■ ${String(Math.floor(sec / 60)).padStart(2, "0")}:${String(sec % 60).padStart(2, "0")}`; })() : "▶"}
                         </button>
                         <button type="button" onClick={() => openStepsModal(pjId, taskId, s.id)} aria-label="ステップを開く" style={styles.inlineAddBtn}>☑ステップ</button>
+                        <button type="button" onClick={() => setMoveDateModal({ pjId, taskId, subId: s.id, date: s.scheduledDate || dayViewDate })} aria-label="予定日を変更" style={styles.inlineAddBtn}>📅変更</button>
                         <button type="button" onClick={() => setCopyDateModal({ pjId, taskId, subId: s.id, date: dayViewDate })} aria-label="サブタスクをコピー" style={styles.inlineAddBtn}>📋コピー</button>
                         <span style={styles.calPjCol} title={pjName}>{pjName}</span>
                         <span style={styles.calTaskCol} title={taskName}>{taskName}</span>
@@ -1439,6 +1441,31 @@ export default function App() {
                   </label>
                   <div style={styles.modalActions}>
                     <button type="button" onClick={() => { duplicateSubtask(p.id, t.id, s.id, { scheduledDate: copyDateModal.date || null }); setCopyDateModal(null); }} style={styles.addBtn}>コピー</button>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
+          {moveDateModal && (() => {
+            const p = (projects || []).find((pp) => pp.id === moveDateModal.pjId);
+            const t = p?.tasks.find((tt) => tt.id === moveDateModal.taskId);
+            const s = t?.subtasks.find((ss) => ss.id === moveDateModal.subId);
+            if (!s) return null;
+            return (
+              <div style={styles.modalOverlay} onClick={() => setMoveDateModal(null)}>
+                <div style={styles.modalBox} onClick={(e) => e.stopPropagation()}>
+                  <div style={styles.modalHeader}>
+                    <h3 style={styles.modalTitle}>予定日を変更</h3>
+                    <button type="button" onClick={() => setMoveDateModal(null)} aria-label="閉じる" style={styles.modalCloseBtn}>×</button>
+                  </div>
+                  <p style={styles.modalContext}>{s.text}</p>
+                  <label style={styles.scheduleEditField}>
+                    <span style={styles.scheduleEditLabel}>新しい予定日</span>
+                    <input type="date" value={moveDateModal.date} onChange={(e) => setMoveDateModal((prev) => ({ ...prev, date: e.target.value }))} min={t.startDate || undefined} max={t.endDate || undefined} style={styles.scheduleEditInput} />
+                  </label>
+                  <div style={styles.modalActions}>
+                    <button type="button" onClick={() => { updateSubtaskSchedule(p.id, t.id, s.id, "scheduledDate", moveDateModal.date || null); setMoveDateModal(null); }} style={styles.addBtn}>変更</button>
                   </div>
                 </div>
               </div>
