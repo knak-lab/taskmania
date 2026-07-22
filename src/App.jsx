@@ -512,8 +512,15 @@ export default function App() {
   const [showDoneSubtasks, setShowDoneSubtasks] = useState(() => new Set());
   const [ganttPJId, setGanttPJId] = useState(null);
   const [ganttCollapsed, setGanttCollapsed] = useState(true);
-  const [runningTarget, setRunningTarget] = useState(null);
+  const [runningTarget, setRunningTarget] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("tm_running_target") || "null"); } catch { return null; }
+  });
   const [, setTick] = useState(0);
+
+  useEffect(() => {
+    if (runningTarget) localStorage.setItem("tm_running_target", JSON.stringify(runningTarget));
+    else localStorage.removeItem("tm_running_target");
+  }, [runningTarget]);
 
   useEffect(() => {
     if (!runningTarget) return;
