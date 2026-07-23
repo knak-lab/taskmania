@@ -1222,7 +1222,13 @@ export default function App() {
                         </button>
                         <TimeDropdown value={s.startTime || ""} onChange={(v) => updateSubtaskSchedule(pjId, taskId, s.id, "startTime", v)} style={{ width: 54 }} />
                         <span style={{ ...styles.calTimeCol, width: 40 }}>{addMinutesToTime(s.startTime, s.estimatedMinutes) || "―"}</span>
-                        <span style={{ ...styles.calSubCol, textDecoration: s.done ? "line-through" : "none", color: s.done ? "#9B9B9B" : "#2C3645" }} title={s.text}>{s.text}</span>
+                        <input
+                          type="text"
+                          value={s.text}
+                          onChange={(e) => updateSubtaskText(pjId, taskId, s.id, e.target.value)}
+                          aria-label="サブタスク名を編集"
+                          style={{ ...styles.calSubCol, border: "none", background: "transparent", fontFamily: "inherit", padding: 0, textDecoration: s.done ? "line-through" : "none", color: s.done ? "#9B9B9B" : "#2C3645" }}
+                        />
                         {s.repeatWeekday != null && <span title={s.repeatWeekday === "weekday" ? "平日(月〜金・祝日除く)" : `毎週${WEEKDAY_LABELS[s.repeatWeekday]}曜`} style={styles.calEstTag}>🔁{s.repeatWeekday === "weekday" ? "平日" : WEEKDAY_LABELS[s.repeatWeekday]}</span>}
                       </div>
                       <div style={styles.calendarLine2}>
