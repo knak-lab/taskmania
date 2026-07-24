@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from "react";
-import { loadProjects as gasLoad, saveProjects as gasSave } from "./api/gas";
+import * as XLSX from "xlsx";
+import { loadProjects as gasLoad, saveProjects as gasSave, loadProjectNotes as gasLoadNotes, addProjectNote as gasAddNote } from "./api/gas";
 
 const TOP_TABS = [
   { key: "総合", label: "総合", color: "#2C3645" },
@@ -127,6 +128,17 @@ function formatDuration(mins) {
   if (h && m) return `${h}時間${m}分`;
   if (h) return `${h}時間`;
   return `${m}分`;
+}
+
+function formatTimestamp(ts) {
+  if (!ts) return "";
+  const d = new Date(ts);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  return `${y}/${m}/${day} ${hh}:${mm}`;
 }
 
 function addMinutesToTime(time, minutes) {
@@ -512,6 +524,185 @@ function OverviewGanttChart({ projects }) {
   );
 }
 
+function exportProjectExcel(project, notes) {
+  const wb = XLSX.utils.book_new();
+
+  const taskRows = [
+    ["タスク名", "開始日", "終了日", "想定時間(分)", "進捗"],
+    ...project.tasks.map((t) => {
+      const { done, total } = taskProgress(t);
+      return [t.name, t.startDate || "", t.endDate || "", taskEstimatedEffective(t) || "", `${done}/${total}`];
+    }),
+  ];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(taskRows), "タスク一覧");
+
+  const completedRows = [
+    ["内容", "更新日時"],
+    ...(notes.completed || []).map((n) => [n.content, formatTimestamp(n.updatedAt)]),
+  ];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(completedRows), "完了事項");
+
+  const nextRows = [
+    ["内容", "更新日時"],
+    ...(notes.next || []).map((n) => [n.content, formatTimestamp(n.updatedAt)]),
+  ];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(nextRows), "ネクストアクション");
+
+  const dateStr = toDateStr(new Date()).replace(/-/g, "");
+  const safeName = (project.name || "PJ").replace(/[\\/:*?"<>|]/g, "_");
+  XLSX.writeFile(wb, `${safeName}_${dateStr}.xlsx`);
+}
+
+const DETAIL_TABS = [
+  { key: "tasks", label: "タスク一覧" },
+  { key: "completed", label: "完了事項" },
+  { key: "next", label: "ネクストアクション" },
+];
+
+function PJDetailModal({ project, onClose }) {
+  const [tab, setTab] = useState("tasks");
+  const [notes, setNotes] = useState({ completed: [], next: [] });
+  const [notesLoading, setNotesLoading] = useState(true);
+  const [notesError, setNotesError] = useState(false);
+  const [completedText, setCompletedText] = useState("");
+  const [nextText, setNextText] = useState("");
+  const [savingType, setSavingType] = useState(null);
+  const [exporting, setExporting] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setNotesLoading(true);
+    setNotesError(false);
+    gasLoadNotes(project.id)
+      .then((list) => {
+        if (cancelled) return;
+        setNotes({
+          completed: list.filter((n) => n.type === "completed").sort((a, b) => b.updatedAt - a.updatedAt),
+          next: list.filter((n) => n.type === "next").sort((a, b) => b.updatedAt - a.updatedAt),
+        });
+      })
+      .catch(() => { if (!cancelled) setNotesError(true); })
+      .finally(() => { if (!cancelled) setNotesLoading(false); });
+    return () => { cancelled = true; };
+  }, [project.id]);
+
+  async function saveNote(type) {
+    const text = (type === "completed" ? completedText : nextText).trim();
+    if (!text) return;
+    setSavingType(type);
+    try {
+      const res = await gasAddNote(project.id, type, text);
+      const note = res.note || { id: uid(), pjId: project.id, type, content: text, updatedAt: Date.now() };
+      setNotes((prev) => ({ ...prev, [type]: [note, ...prev[type]] }));
+      if (type === "completed") setCompletedText(""); else setNextText("");
+    } catch {
+      window.alert("保存に失敗した。通信状況を確認してもう一度試してほしい。");
+    } finally {
+      setSavingType(null);
+    }
+  }
+
+  async function handleExport() {
+    setExporting(true);
+    try {
+      exportProjectExcel(project, notes);
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  const allSubtasks = [];
+  for (const t of project.tasks) {
+    for (const s of t.subtasks) allSubtasks.push({ taskName: t.name, sub: s });
+  }
+
+  return (
+    <div style={styles.modalOverlay} onClick={onClose}>
+      <div style={styles.modalBoxLarge} onClick={(e) => e.stopPropagation()}>
+        <div style={styles.modalHeader}>
+          <h3 style={styles.modalTitle}>{project.name}</h3>
+          <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            <button type="button" onClick={handleExport} disabled={exporting} style={styles.addBtn}>{exporting ? "出力中…" : "Excelで出力"}</button>
+            <button type="button" onClick={onClose} aria-label="閉じる" style={styles.modalCloseBtn}>×</button>
+          </div>
+        </div>
+
+        <GanttChart project={project} />
+
+        <div style={styles.detailTabs}>
+          {DETAIL_TABS.map((tb) => (
+            <button key={tb.key} type="button" onClick={() => setTab(tb.key)}
+              style={{ ...styles.detailTabBtn, background: tab === tb.key ? "#2C3645" : "transparent", color: tab === tb.key ? "#FFFFFF" : "#2C3645" }}>
+              {tb.label}
+            </button>
+          ))}
+        </div>
+
+        {tab === "tasks" && (
+          <ul style={styles.detailTaskList}>
+            {project.tasks.length === 0 && <li style={styles.emptySmall}>タスクなし</li>}
+            {project.tasks.map((t) => {
+              const { done, total } = taskProgress(t);
+              return (
+                <li key={t.id} style={styles.detailTaskRow}>
+                  <span style={styles.detailTaskName}>{t.name}</span>
+                  <span style={styles.calEstTag}>{t.startDate ? formatDate(t.startDate) : "―"}〜{t.endDate ? formatDate(t.endDate) : "―"}</span>
+                  <span style={styles.progressTagSm}>{done}/{total}</span>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+
+        {(tab === "completed" || tab === "next") && (() => {
+          const list = notes[tab];
+          const text = tab === "completed" ? completedText : nextText;
+          const setText = tab === "completed" ? setCompletedText : setNextText;
+          return (
+            <div>
+              <form onSubmit={(e) => { e.preventDefault(); saveNote(tab); }} style={styles.noteForm}>
+                <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder={tab === "completed" ? "完了した内容を入力…" : "次にやることを入力…"} style={styles.noteTextarea} />
+                <div style={styles.modalActions}>
+                  <button type="submit" disabled={savingType === tab} style={styles.addBtn}>{savingType === tab ? "保存中…" : "保存"}</button>
+                </div>
+              </form>
+              {notesLoading ? (
+                <p style={styles.emptySmall}>読み込み中…</p>
+              ) : notesError ? (
+                <p style={styles.emptySmall}>読み込みに失敗した。</p>
+              ) : list.length === 0 ? (
+                <p style={styles.emptySmall}>まだ記録がない。</p>
+              ) : (
+                <ul style={styles.notesList}>
+                  {list.map((n) => (
+                    <li key={n.id} style={styles.noteItem}>
+                      <p style={styles.noteContent}>{n.content}</p>
+                      <span style={styles.noteMeta}>{formatTimestamp(n.updatedAt)}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          );
+        })()}
+
+        <h4 style={styles.sectionTitle}>サブタスク一覧</h4>
+        <ul style={styles.detailSubList}>
+          {allSubtasks.length === 0 && <li style={styles.emptySmall}>サブタスクなし</li>}
+          {allSubtasks.map(({ taskName, sub: s }) => (
+            <li key={s.id} style={styles.detailSubRow}>
+              <span style={{ ...styles.doneMark, opacity: s.done ? 1 : 0.15 }}>✅</span>
+              <span style={{ ...styles.subText, textDecoration: s.done ? "line-through" : "none", color: s.done ? "#9B9B9B" : "#2C3645" }}>{s.text}</span>
+              <span style={styles.calTaskCol} title={taskName}>{taskName}</span>
+              {s.scheduledDate && <span style={styles.calEstTag}>{formatDate(s.scheduledDate)}</span>}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [projects, setProjects] = useState(null);
   const [topTab, setTopTab] = useState("kkr");
@@ -521,6 +712,7 @@ export default function App() {
   const [showDoneSubtasks, setShowDoneSubtasks] = useState(() => new Set());
   const [ganttPJId, setGanttPJId] = useState(null);
   const [ganttCollapsed, setGanttCollapsed] = useState(true);
+  const [pjDetailModal, setPjDetailModal] = useState(null);
   const [runningTarget, setRunningTarget] = useState(() => {
     try { return JSON.parse(localStorage.getItem("tm_running_target") || "null"); } catch { return null; }
   });
@@ -1606,6 +1798,12 @@ export default function App() {
             );
           })()}
 
+          {pjDetailModal && (() => {
+            const p = (projects || []).find((pp) => pp.id === pjDetailModal);
+            if (!p) return null;
+            return <PJDetailModal project={p} onClose={() => setPjDetailModal(null)} />;
+          })()}
+
           <div style={styles.tree}>
             {projects === null && <p style={styles.empty}>読み込み中…</p>}
             {projects !== null && visibleProjects.length === 0 && <p style={styles.empty}>まだPJがない。上のフォームから作成できる。</p>}
@@ -1641,6 +1839,7 @@ export default function App() {
                     <input type="text" value={p.name} onChange={(e) => updatePJName(p.id, e.target.value)} style={styles.pjNameInput} className="pj-title-input" aria-label="PJ名を編集" />
                     {pt > 0 && pd === pt && <span style={styles.doneMark}>✅</span>}
                     <button type="button" onClick={() => toggleGantt(p.id)} style={{ ...styles.ganttToggleBtn, background: ganttPJId === p.id ? "#F0F0F0" : "transparent" }} aria-label="ガントチャートを表示">📊</button>
+                    <button type="button" onClick={() => setPjDetailModal(p.id)} style={styles.inlineAddBtn}>ガントチャート</button>
                     <select value={p.priority || 2} onChange={(e) => updatePJPriority(p.id, Number(e.target.value))} style={styles.moveSelect} aria-label="優先度を変更">
                       {PJ_PRIORITIES.map((pr) => <option key={pr.v} value={pr.v}>{pr.label}</option>)}
                     </select>
@@ -1828,6 +2027,20 @@ const styles = {
   modalCloseBtn: { background: "none", border: "none", fontSize: 20, lineHeight: 1, color: "#7A7A7A", cursor: "pointer", padding: 4 },
   modalContext: { fontSize: 11.5, color: "#7A7A7A", margin: "0 0 12px" },
   modalActions: { display: "flex", justifyContent: "flex-end", marginTop: 12 },
+  modalBoxLarge: { width: "100%", maxWidth: 860, maxHeight: "88vh", overflowY: "auto", background: "#FFFFFF", border: "1.5px solid #2C3645", borderRadius: 10, padding: 18, boxShadow: "0 8px 28px rgba(44,54,69,0.3)", display: "flex", flexDirection: "column", gap: 10 },
+  detailTabs: { display: "flex", gap: 4, marginTop: 4 },
+  detailTabBtn: { flex: 1, padding: "7px 4px", fontSize: 12, fontWeight: 700, border: "1.5px solid #2C3645", borderRadius: 6, cursor: "pointer", fontFamily: "inherit" },
+  detailTaskList: { listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 4, maxHeight: 220, overflowY: "auto" },
+  detailTaskRow: { display: "flex", alignItems: "center", gap: 8, padding: "5px 4px", borderBottom: "1px dashed #E5E5E5" },
+  detailTaskName: { flex: 1, fontSize: 12.5, fontWeight: 600, color: "#2C3645", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+  noteForm: { display: "flex", flexDirection: "column", gap: 4, marginBottom: 8 },
+  noteTextarea: { minHeight: 64, padding: "8px 10px", fontSize: 13, border: "1.5px solid #D8D8D8", borderRadius: 6, background: "#FFFFFF", color: "#2C3645", fontFamily: "inherit", resize: "vertical" },
+  notesList: { listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 6, maxHeight: 220, overflowY: "auto" },
+  noteItem: { padding: "6px 8px", background: "#F5F5F5", borderRadius: 6, display: "flex", flexDirection: "column", gap: 2 },
+  noteContent: { margin: 0, fontSize: 12.5, color: "#2C3645", whiteSpace: "pre-wrap", wordBreak: "break-word" },
+  noteMeta: { fontSize: 10, color: "#9B9B9B" },
+  detailSubList: { listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 4, maxHeight: 220, overflowY: "auto" },
+  detailSubRow: { display: "flex", alignItems: "center", gap: 8, padding: "4px 4px", borderBottom: "1px dashed #E5E5E5" },
   inlineAddBtn: { fontSize: 10.5, fontWeight: 700, color: "#12314F", background: "transparent", border: "1.5px solid #12314F", borderRadius: 5, padding: "2px 7px", cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap", flexShrink: 0 },
   select: { flex: 1, minWidth: 100, fontSize: 12.5, padding: "7px 6px", borderRadius: 6, border: "1.5px solid #D8D8D8", background: "#FFFFFF", color: "#2C3645", fontFamily: "inherit" },
   hint: { fontSize: 11.5, color: "#F39800", margin: "0 0 6px" },

@@ -51,12 +51,18 @@
  * 既存スプレッドシートを使っている場合の移行手順(SubtasksにrepeatWeekday列を追加した際):
  *   既存のSubtasksシートのK1セルに手動で "repeatWeekday" と入力しておくこと(0=日〜6=土)。
  *   既存行のK列が空欄の場合は繰り返しなし(null)として扱われるので、値が入っていなくても壊れない。
+ *
+ * PJ詳細モーダルの「完了事項」「ネクストアクション」用のAPI:
+ *   GET  {webAppUrl}?action=notes&pjId=xxx  → { notes: [{ id, pjId, type, content, updatedAt }, ...] }
+ *   POST {webAppUrl}                        → body: { action: "addNote", pjId, type, content } を1件追記
+ *   (typeは "completed"(完了事項) または "next"(ネクストアクション))
  */
 
 const SHEET_PROJECTS = "Projects";
 const SHEET_TASKS = "Tasks";
 const SHEET_SUBTASKS = "Subtasks";
 const SHEET_STEPS = "Steps";
+const SHEET_NOTES = "ProjectNotes";
 
 const PROJECTS_HEADERS = ["id", "owner", "name", "subcategory", "priority", "status"];
 const TASKS_HEADERS = ["id", "projectId", "name", "startDate", "endDate", "estimatedMinutes"];
@@ -74,6 +80,7 @@ const SUBTASKS_HEADERS = [
   "repeatWeekday",
 ];
 const STEPS_HEADERS = ["id", "subtaskId", "text", "done"];
+const NOTES_HEADERS = ["id", "pjId", "type", "content", "updatedAt"];
 
 /** 初回セットアップ用。エディタから手動で一度だけ実行する */
 function setup() {
@@ -81,10 +88,16 @@ function setup() {
   getOrCreateSheet_(SHEET_TASKS, TASKS_HEADERS);
   getOrCreateSheet_(SHEET_SUBTASKS, SUBTASKS_HEADERS);
   getOrCreateSheet_(SHEET_STEPS, STEPS_HEADERS);
-  Logger.log("セットアップ完了: Projects / Tasks / Subtasks / Steps シートを用意しました");
+  getOrCreateSheet_(SHEET_NOTES, NOTES_HEADERS);
+  Logger.log("セットアップ完了: Projects / Tasks / Subtasks / Steps / ProjectNotes シートを用意しました");
 }
 
 function doGet(e) {
+  const action = e && e.parameter && e.parameter.action;
+  if (action === "notes") {
+    const pjId = e.parameter.pjId;
+    return jsonResponse_({ notes: readNotes_(pjId) });
+  }
   const projects = readProjects_();
   return jsonResponse_({ projects: projects });
 }
@@ -92,12 +105,47 @@ function doGet(e) {
 function doPost(e) {
   try {
     const body = JSON.parse(e.postData.contents);
+    if (body.action === "addNote") {
+      const note = addNote_(body.pjId, body.type, body.content);
+      return jsonResponse_({ ok: true, note: note });
+    }
     const projects = body.projects || [];
     writeProjects_(projects);
     return jsonResponse_({ ok: true, count: projects.length });
   } catch (err) {
     return jsonResponse_({ ok: false, error: String(err) });
   }
+}
+
+// ---- PJノート(完了事項・ネクストアクション) ----
+
+function readNotes_(pjId) {
+  const sheet = getOrCreateSheet_(SHEET_NOTES, NOTES_HEADERS);
+  const rows = getDataRows_(sheet);
+  return rows
+    .filter(function (r) {
+      return r[0] && (!pjId || String(r[1]) === String(pjId));
+    })
+    .map(function (r) {
+      return {
+        id: String(r[0]),
+        pjId: String(r[1]),
+        type: r[2] || "",
+        content: r[3] || "",
+        updatedAt: r[4] ? Number(r[4]) : Date.now(),
+      };
+    })
+    .sort(function (a, b) {
+      return b.updatedAt - a.updatedAt;
+    });
+}
+
+function addNote_(pjId, type, content) {
+  const sheet = getOrCreateSheet_(SHEET_NOTES, NOTES_HEADERS);
+  const id = Utilities.getUuid();
+  const updatedAt = Date.now();
+  sheet.appendRow([id, pjId, type, content, updatedAt]);
+  return { id: id, pjId: String(pjId), type: type, content: content, updatedAt: updatedAt };
 }
 
 // ---- 読み込み ----
