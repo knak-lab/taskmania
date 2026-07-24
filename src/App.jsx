@@ -553,14 +553,37 @@ function exportProjectExcel(project, notes) {
   XLSX.writeFile(wb, `${safeName}_${dateStr}.xlsx`);
 }
 
-const DETAIL_TABS = [
-  { key: "tasks", label: "タスク一覧" },
-  { key: "completed", label: "完了事項" },
-  { key: "next", label: "ネクストアクション" },
-];
+function NoteSection({ title, placeholder, text, onTextChange, onSave, saving, loading, error, list }) {
+  return (
+    <>
+      <h4 style={styles.sectionTitle}>{title}</h4>
+      <form onSubmit={(e) => { e.preventDefault(); onSave(); }} style={styles.noteForm}>
+        <textarea value={text} onChange={(e) => onTextChange(e.target.value)} placeholder={placeholder} style={styles.noteTextarea} />
+        <div style={styles.modalActions}>
+          <button type="submit" disabled={saving} style={styles.addBtn}>{saving ? "保存中…" : "保存"}</button>
+        </div>
+      </form>
+      {loading ? (
+        <p style={styles.emptySmall}>読み込み中…</p>
+      ) : error ? (
+        <p style={styles.emptySmall}>読み込みに失敗した。</p>
+      ) : list.length === 0 ? (
+        <p style={styles.emptySmall}>まだ記録がない。</p>
+      ) : (
+        <ul style={styles.notesList}>
+          {list.map((n) => (
+            <li key={n.id} style={styles.noteItem}>
+              <p style={styles.noteContent}>{n.content}</p>
+              <span style={styles.noteMeta}>{formatTimestamp(n.updatedAt)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </>
+  );
+}
 
 function PJDetailModal({ project, onClose }) {
-  const [tab, setTab] = useState("tasks");
   const [notes, setNotes] = useState({ completed: [], next: [] });
   const [notesLoading, setNotesLoading] = useState(true);
   const [notesError, setNotesError] = useState(false);
@@ -629,62 +652,44 @@ function PJDetailModal({ project, onClose }) {
 
         <GanttChart project={project} />
 
-        <div style={styles.detailTabs}>
-          {DETAIL_TABS.map((tb) => (
-            <button key={tb.key} type="button" onClick={() => setTab(tb.key)}
-              style={{ ...styles.detailTabBtn, background: tab === tb.key ? "#2C3645" : "transparent", color: tab === tb.key ? "#FFFFFF" : "#2C3645" }}>
-              {tb.label}
-            </button>
-          ))}
-        </div>
+        <NoteSection
+          title="完了事項"
+          placeholder="完了した内容を入力…"
+          text={completedText}
+          onTextChange={setCompletedText}
+          onSave={() => saveNote("completed")}
+          saving={savingType === "completed"}
+          loading={notesLoading}
+          error={notesError}
+          list={notes.completed}
+        />
 
-        {tab === "tasks" && (
-          <ul style={styles.detailTaskList}>
-            {project.tasks.length === 0 && <li style={styles.emptySmall}>タスクなし</li>}
-            {project.tasks.map((t) => {
-              const { done, total } = taskProgress(t);
-              return (
-                <li key={t.id} style={styles.detailTaskRow}>
-                  <span style={styles.detailTaskName}>{t.name}</span>
-                  <span style={styles.calEstTag}>{t.startDate ? formatDate(t.startDate) : "―"}〜{t.endDate ? formatDate(t.endDate) : "―"}</span>
-                  <span style={styles.progressTagSm}>{done}/{total}</span>
-                </li>
-              );
-            })}
-          </ul>
-        )}
+        <NoteSection
+          title="ネクストアクション"
+          placeholder="次にやることを入力…"
+          text={nextText}
+          onTextChange={setNextText}
+          onSave={() => saveNote("next")}
+          saving={savingType === "next"}
+          loading={notesLoading}
+          error={notesError}
+          list={notes.next}
+        />
 
-        {(tab === "completed" || tab === "next") && (() => {
-          const list = notes[tab];
-          const text = tab === "completed" ? completedText : nextText;
-          const setText = tab === "completed" ? setCompletedText : setNextText;
-          return (
-            <div>
-              <form onSubmit={(e) => { e.preventDefault(); saveNote(tab); }} style={styles.noteForm}>
-                <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder={tab === "completed" ? "完了した内容を入力…" : "次にやることを入力…"} style={styles.noteTextarea} />
-                <div style={styles.modalActions}>
-                  <button type="submit" disabled={savingType === tab} style={styles.addBtn}>{savingType === tab ? "保存中…" : "保存"}</button>
-                </div>
-              </form>
-              {notesLoading ? (
-                <p style={styles.emptySmall}>読み込み中…</p>
-              ) : notesError ? (
-                <p style={styles.emptySmall}>読み込みに失敗した。</p>
-              ) : list.length === 0 ? (
-                <p style={styles.emptySmall}>まだ記録がない。</p>
-              ) : (
-                <ul style={styles.notesList}>
-                  {list.map((n) => (
-                    <li key={n.id} style={styles.noteItem}>
-                      <p style={styles.noteContent}>{n.content}</p>
-                      <span style={styles.noteMeta}>{formatTimestamp(n.updatedAt)}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          );
-        })()}
+        <h4 style={styles.sectionTitle}>タスク一覧</h4>
+        <ul style={styles.detailTaskList}>
+          {project.tasks.length === 0 && <li style={styles.emptySmall}>タスクなし</li>}
+          {project.tasks.map((t) => {
+            const { done, total } = taskProgress(t);
+            return (
+              <li key={t.id} style={styles.detailTaskRow}>
+                <span style={styles.detailTaskName}>{t.name}</span>
+                <span style={styles.calEstTag}>{t.startDate ? formatDate(t.startDate) : "―"}〜{t.endDate ? formatDate(t.endDate) : "―"}</span>
+                <span style={styles.progressTagSm}>{done}/{total}</span>
+              </li>
+            );
+          })}
+        </ul>
 
         <h4 style={styles.sectionTitle}>サブタスク一覧</h4>
         <ul style={styles.detailSubList}>
@@ -724,7 +729,7 @@ export default function App() {
   }, [runningTarget]);
 
   useEffect(() => {
-    if (!runningTarget) return;
+    if (!runningTarget || runningTarget.paused) return;
     const iv = setInterval(() => setTick((t) => t + 1), 1000);
     return () => clearInterval(iv);
   }, [runningTarget]);
@@ -1105,7 +1110,14 @@ export default function App() {
     const t = p?.tasks.find((t) => t.id === taskId);
     const s = t?.subtasks.find((s) => s.id === subId);
     const completing = s && !s.done;
-    if (completing) { setStamping(subId); setTimeout(() => setStamping(null), 550); }
+    if (completing) {
+      setStamping(subId);
+      setTimeout(() => setStamping(null), 550);
+      if (runningTarget && runningTarget.subId === subId) {
+        commitStopwatch(runningTarget);
+        setRunningTarget(null);
+      }
+    }
     setProjects((prev) => prev.map((pp) => {
       if (pp.id !== pjId) return pp;
       return {
@@ -1163,18 +1175,31 @@ export default function App() {
     setProjects((prev) => prev.map((p) => p.id !== pjId ? p : { ...p, tasks: p.tasks.map((t) => (t.id === taskId ? { ...t, estimatedMinutes: v } : t)) }));
   }
 
+  function stopwatchElapsedMs(target) {
+    if (!target) return 0;
+    return (target.accumulatedMs || 0) + (target.paused ? 0 : Date.now() - target.startAt);
+  }
+
   function commitStopwatch(target) {
     if (!target) return;
-    const rawMin = (Date.now() - target.startAt) / 60000;
+    const rawMin = stopwatchElapsedMs(target) / 60000;
+    if (rawMin <= 0) return;
     const elapsedMin = Math.max(15, Math.round(rawMin / 15) * 15);
     const { pjId, taskId, subId } = target;
     setProjects((prev) => prev.map((p) => p.id !== pjId ? p : { ...p, tasks: p.tasks.map((t) => t.id !== taskId ? t : { ...t, subtasks: t.subtasks.map((s) => s.id === subId ? { ...s, actualMinutes: (s.actualMinutes || 0) + elapsedMin } : s) }) }));
   }
 
   function toggleStopwatch(pjId, taskId, subId) {
-    if (runningTarget && runningTarget.subId === subId) { commitStopwatch(runningTarget); setRunningTarget(null); return; }
+    if (runningTarget && runningTarget.subId === subId) {
+      if (runningTarget.paused) {
+        setRunningTarget({ ...runningTarget, paused: false, startAt: Date.now() });
+      } else {
+        setRunningTarget({ ...runningTarget, paused: true, accumulatedMs: stopwatchElapsedMs(runningTarget), startAt: null });
+      }
+      return;
+    }
     if (runningTarget) commitStopwatch(runningTarget);
-    setRunningTarget({ pjId, taskId, subId, startAt: Date.now() });
+    setRunningTarget({ pjId, taskId, subId, startAt: Date.now(), accumulatedMs: 0, paused: false });
   }
 
   function moveSubtask(fromPjId, fromTaskId, subId, toPjId, toTaskId) {
@@ -1435,9 +1460,9 @@ export default function App() {
                           {MINUTE_OPTIONS.map((m) => <option key={m} value={m}>{formatDuration(m)}</option>)}
                         </select>
                         <button type="button" onClick={() => toggleStopwatch(pjId, taskId, s.id)}
-                          style={{ ...styles.stopwatchBtn, background: runningTarget?.subId === s.id ? "#F39800" : "transparent", color: runningTarget?.subId === s.id ? "#FFFFFF" : "#12314F", borderColor: "#12314F" }}
-                          aria-label={runningTarget?.subId === s.id ? "計測を終了" : "計測を開始"}>
-                          {runningTarget?.subId === s.id ? (() => { const sec = Math.max(0, Math.floor((Date.now() - runningTarget.startAt) / 1000)); return `■ ${String(Math.floor(sec / 60)).padStart(2, "0")}:${String(sec % 60).padStart(2, "0")}`; })() : "▶"}
+                          style={{ ...styles.stopwatchBtn, background: runningTarget?.subId === s.id && !runningTarget.paused ? "#F39800" : "transparent", color: runningTarget?.subId === s.id && !runningTarget.paused ? "#FFFFFF" : "#12314F", borderColor: "#12314F" }}
+                          aria-label={runningTarget?.subId === s.id ? (runningTarget.paused ? "計測を再開" : "一時停止") : "計測を開始"}>
+                          {runningTarget?.subId === s.id ? (() => { const sec = Math.max(0, Math.floor(stopwatchElapsedMs(runningTarget) / 1000)); return `${runningTarget.paused ? "▶" : "⏸"} ${String(Math.floor(sec / 60)).padStart(2, "0")}:${String(sec % 60).padStart(2, "0")}`; })() : "▶"}
                         </button>
                         <button type="button" onClick={() => openStepsModal(pjId, taskId, s.id)} aria-label="ステップを開く" style={styles.inlineAddBtn}>☑ステップ</button>
                         <button type="button" onClick={() => setMoveDateModal({ pjId, taskId, subId: s.id, date: s.scheduledDate || dayViewDate })} aria-label="予定日を変更" style={styles.inlineAddBtn}>📅変更</button>
@@ -1946,9 +1971,9 @@ export default function App() {
                                                   {MINUTE_OPTIONS.map((m) => <option key={m} value={m}>{formatDuration(m)}</option>)}
                                                 </select>
                                                 <button type="button" onClick={() => toggleStopwatch(p.id, t.id, s.id)}
-                                                  style={{ ...styles.stopwatchBtn, background: runningTarget?.subId === s.id ? "#F39800" : "transparent", color: runningTarget?.subId === s.id ? "#FFFFFF" : "#12314F", borderColor: "#12314F" }}
-                                                  aria-label={runningTarget?.subId === s.id ? "計測を終了" : "計測を開始"}>
-                                                  {runningTarget?.subId === s.id ? (() => { const sec = Math.max(0, Math.floor((Date.now() - runningTarget.startAt) / 1000)); return `■ ${String(Math.floor(sec / 60)).padStart(2, "0")}:${String(sec % 60).padStart(2, "0")}`; })() : "▶"}
+                                                  style={{ ...styles.stopwatchBtn, background: runningTarget?.subId === s.id && !runningTarget.paused ? "#F39800" : "transparent", color: runningTarget?.subId === s.id && !runningTarget.paused ? "#FFFFFF" : "#12314F", borderColor: "#12314F" }}
+                                                  aria-label={runningTarget?.subId === s.id ? (runningTarget.paused ? "計測を再開" : "一時停止") : "計測を開始"}>
+                                                  {runningTarget?.subId === s.id ? (() => { const sec = Math.max(0, Math.floor(stopwatchElapsedMs(runningTarget) / 1000)); return `${runningTarget.paused ? "▶" : "⏸"} ${String(Math.floor(sec / 60)).padStart(2, "0")}:${String(sec % 60).padStart(2, "0")}`; })() : "▶"}
                                                 </button>
                                               </div>
                                             </label>
@@ -2028,8 +2053,6 @@ const styles = {
   modalContext: { fontSize: 11.5, color: "#7A7A7A", margin: "0 0 12px" },
   modalActions: { display: "flex", justifyContent: "flex-end", marginTop: 12 },
   modalBoxLarge: { width: "100%", maxWidth: 860, maxHeight: "88vh", overflowY: "auto", background: "#FFFFFF", border: "1.5px solid #2C3645", borderRadius: 10, padding: 18, boxShadow: "0 8px 28px rgba(44,54,69,0.3)", display: "flex", flexDirection: "column", gap: 10 },
-  detailTabs: { display: "flex", gap: 4, marginTop: 4 },
-  detailTabBtn: { flex: 1, padding: "7px 4px", fontSize: 12, fontWeight: 700, border: "1.5px solid #2C3645", borderRadius: 6, cursor: "pointer", fontFamily: "inherit" },
   detailTaskList: { listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 4, maxHeight: 220, overflowY: "auto" },
   detailTaskRow: { display: "flex", alignItems: "center", gap: 8, padding: "5px 4px", borderBottom: "1px dashed #E5E5E5" },
   detailTaskName: { flex: 1, fontSize: 12.5, fontWeight: 600, color: "#2C3645", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
