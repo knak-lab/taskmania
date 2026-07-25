@@ -532,26 +532,23 @@ function OverviewGanttChart({ projects }) {
 function exportProjectExcel(project, notes) {
   const wb = XLSX.utils.book_new();
 
-  const taskRows = [
+  const rows = [
+    ["タスク一覧"],
     ["タスク名", "開始日", "終了日", "想定時間(分)", "進捗"],
     ...project.tasks.map((t) => {
       const { done, total } = taskProgress(t);
       return [t.name, t.startDate || "", t.endDate || "", taskEstimatedEffective(t) || "", `${done}/${total}`];
     }),
-  ];
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(taskRows), "タスク一覧");
-
-  const completedRows = [
+    [],
+    ["完了事項"],
     ["内容", "更新日時"],
     ...(notes.completed || []).map((n) => [n.content, formatTimestamp(n.updatedAt)]),
-  ];
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(completedRows), "完了事項");
-
-  const nextRows = [
+    [],
+    ["ネクストアクション"],
     ["内容", "更新日時"],
     ...(notes.next || []).map((n) => [n.content, formatTimestamp(n.updatedAt)]),
   ];
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(nextRows), "ネクストアクション");
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), "PJ詳細");
 
   const dateStr = toDateStr(new Date()).replace(/-/g, "");
   const safeName = (project.name || "PJ").replace(/[\\/:*?"<>|]/g, "_");
