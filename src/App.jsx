@@ -314,6 +314,11 @@ function computeNextRecurrenceDate(currentDateStr, weekday, shiftHoliday) {
   if (weekday === "weekday") {
     return nextBusinessDayOnOrAfter(addDaysStr(currentDateStr, 1));
   }
+  if (weekday === "satsun") {
+    let d = addDaysStr(currentDateStr, 1);
+    while (![0, 6].includes(new Date(d + "T00:00:00").getDay())) d = addDaysStr(d, 1);
+    return d;
+  }
   let next = nextWeekdayOnOrAfter(addDaysStr(currentDateStr, 1), weekday);
   if (shiftHoliday) {
     while (isWeekendOrHoliday(next)) next = addDaysStr(next, 1);
@@ -715,7 +720,6 @@ export default function App() {
   const [openPJ, setOpenPJ] = useState(() => new Set());
   const [openTask, setOpenTask] = useState(() => new Set());
   const [showDoneSubtasks, setShowDoneSubtasks] = useState(() => new Set());
-  const [ganttPJId, setGanttPJId] = useState(null);
   const [ganttCollapsed, setGanttCollapsed] = useState(true);
   const [pjDetailModal, setPjDetailModal] = useState(null);
   const [runningTarget, setRunningTarget] = useState(() => {
@@ -1005,7 +1009,6 @@ export default function App() {
   function toggleOpenPJ(id) { setOpenPJ((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; }); }
   function toggleOpenTask(id) { setOpenTask((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; }); }
   function toggleShowDoneSubtasks(id) { setShowDoneSubtasks((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; }); }
-  function toggleGantt(id) { setGanttPJId((prev) => (prev === id ? null : id)); }
   function togglePrioritySection(v) { setCollapsedPrioritySection((prev) => { const next = new Set(prev); next.has(v) ? next.delete(v) : next.add(v); return next; }); }
 
   function updatePJPriority(pjId, priority) {
@@ -1417,16 +1420,14 @@ export default function App() {
                 <h3 style={styles.sectionTitleFlush}>1日のタスク</h3>
                 <input type="date" value={dayViewDate} onChange={(e) => setDayViewDate(e.target.value)} style={styles.scheduleEditInput} aria-label="表示する日付" />
               </div>
-              {showWorkSummary && (
-                <div style={styles.workSummaryBar}>
-                  <span style={styles.workSummaryItem}>業務時間 8時間</span>
-                  <span style={styles.workSummaryItem}>
-                    想定時間計 {totalEstMin ? formatDuration(totalEstMin) : "0分"}
-                    {estWarnLevel && <span style={{ ...styles.workWarnIcon, color: estWarnLevel === "red" ? "#F39800" : "#2C3645" }}>⚠</span>}
-                  </span>
-                  <span style={styles.workSummaryItem}>実績計 {totalActualMin ? formatDuration(totalActualMin) : "0分"}</span>
-                </div>
-              )}
+              <div style={styles.workSummaryBar}>
+                {showWorkSummary && <span style={styles.workSummaryItem}>業務時間 8時間</span>}
+                <span style={styles.workSummaryItem}>
+                  想定時間計 {totalEstMin ? formatDuration(totalEstMin) : "0分"}
+                  {showWorkSummary && estWarnLevel && <span style={{ ...styles.workWarnIcon, color: estWarnLevel === "red" ? "#F39800" : "#2C3645" }}>⚠</span>}
+                </span>
+                <span style={styles.workSummaryItem}>実績計 {totalActualMin ? formatDuration(totalActualMin) : "0分"}</span>
+              </div>
               {visibleDayTasks.length === 0 ? (
                 <p style={styles.emptySmall}>この日の予定日が入ってるサブタスクはない。</p>
               ) : (
@@ -1446,7 +1447,7 @@ export default function App() {
                           aria-label="サブタスク名を編集"
                           style={{ ...styles.calSubCol, border: "none", background: "transparent", fontFamily: "inherit", padding: 0, textDecoration: s.done ? "line-through" : "none", color: s.done ? "#9B9B9B" : "#2C3645" }}
                         />
-                        {s.repeatWeekday != null && <span title={s.repeatWeekday === "weekday" ? "平日(月〜金・祝日除く)" : `毎週${WEEKDAY_LABELS[s.repeatWeekday]}曜`} style={styles.calEstTag}>🔁{s.repeatWeekday === "weekday" ? "平日" : WEEKDAY_LABELS[s.repeatWeekday]}</span>}
+                        {s.repeatWeekday != null && <span title={s.repeatWeekday === "weekday" ? "平日(月〜金・祝日除く)" : s.repeatWeekday === "satsun" ? "毎週土曜・日曜" : `毎週${WEEKDAY_LABELS[s.repeatWeekday]}曜`} style={styles.calEstTag}>🔁{s.repeatWeekday === "weekday" ? "平日" : s.repeatWeekday === "satsun" ? "土日" : WEEKDAY_LABELS[s.repeatWeekday]}</span>}
                       </div>
                       <div style={styles.calendarLine2}>
                         <span style={styles.calendarLine2Label}>想定</span>
@@ -1863,8 +1864,7 @@ export default function App() {
                     <button onClick={() => toggleOpenPJ(p.id)} style={styles.collapseBtn} aria-label={pjOpen ? "折りたたむ" : "展開する"}>{pjOpen ? "▾" : "▸"}</button>
                     <input type="text" value={p.name} onChange={(e) => updatePJName(p.id, e.target.value)} style={styles.pjNameInput} className="pj-title-input" aria-label="PJ名を編集" />
                     {pt > 0 && pd === pt && <span style={styles.doneMark}>✅</span>}
-                    <button type="button" onClick={() => toggleGantt(p.id)} style={{ ...styles.ganttToggleBtn, background: ganttPJId === p.id ? "#F0F0F0" : "transparent" }} aria-label="ガントチャートを表示">📊</button>
-                    <button type="button" onClick={() => setPjDetailModal(p.id)} style={styles.inlineAddBtn}>ガントチャート</button>
+                    <button type="button" onClick={() => setPjDetailModal(p.id)} style={styles.ganttToggleBtn} aria-label="ガントチャートを表示">📊</button>
                     <select value={p.priority || 2} onChange={(e) => updatePJPriority(p.id, Number(e.target.value))} style={styles.moveSelect} aria-label="優先度を変更">
                       {PJ_PRIORITIES.map((pr) => <option key={pr.v} value={pr.v}>{pr.label}</option>)}
                     </select>
@@ -1880,7 +1880,6 @@ export default function App() {
                     <button type="button" onClick={() => openAddTaskModal(p.id, p.name)} style={styles.inlineAddBtn}>＋タスク</button>
                     <button onClick={() => removePJ(p.id)} aria-label="PJを削除" style={styles.deleteBtn}>×</button>
                   </div>
-                  {ganttPJId === p.id && <GanttChart project={p} />}
                   {pjOpen && (
                     <div style={styles.taskList}>
                       {p.tasks.length === 0 && <p style={styles.emptySmall}>タスクなし</p>}
@@ -1950,9 +1949,10 @@ export default function App() {
                                             </label>
                                             <label style={styles.scheduleEditField}>
                                               <span style={styles.scheduleEditLabel}>繰り返し{p.owner === "kkr" && p.subcategory === "仕事" ? "(休日は翌日へ)" : ""}</span>
-                                              <select value={s.repeatWeekday ?? ""} onChange={(e) => updateSubtaskSchedule(p.id, t.id, s.id, "repeatWeekday", e.target.value === "" ? "" : (e.target.value === "weekday" ? "weekday" : Number(e.target.value)))} style={styles.scheduleEditInput}>
+                                              <select value={s.repeatWeekday ?? ""} onChange={(e) => updateSubtaskSchedule(p.id, t.id, s.id, "repeatWeekday", e.target.value === "" ? "" : (["weekday", "satsun"].includes(e.target.value) ? e.target.value : Number(e.target.value)))} style={styles.scheduleEditInput}>
                                                 <option value="">なし</option>
                                                 <option value="weekday">平日(月〜金・祝日除く)</option>
+                                                <option value="satsun">毎週土曜・日曜</option>
                                                 {WEEKDAY_LABELS.map((label, idx) => <option key={idx} value={idx}>毎週{label}曜</option>)}
                                               </select>
                                             </label>
