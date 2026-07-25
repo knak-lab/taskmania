@@ -596,6 +596,11 @@ function PJDetailModal({ project, onClose }) {
   const [nextText, setNextText] = useState("");
   const [savingType, setSavingType] = useState(null);
   const [exporting, setExporting] = useState(false);
+  const [openTasks, setOpenTasks] = useState(() => new Set());
+  const [doneVisibleTasks, setDoneVisibleTasks] = useState(() => new Set());
+
+  function toggleOpenTask(id) { setOpenTasks((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; }); }
+  function toggleDoneVisible(id) { setDoneVisibleTasks((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; }); }
 
   useEffect(() => {
     let cancelled = false;
@@ -639,11 +644,6 @@ function PJDetailModal({ project, onClose }) {
     }
   }
 
-  const allSubtasks = [];
-  for (const t of project.tasks) {
-    for (const s of t.subtasks) allSubtasks.push({ taskName: t.name, sub: s });
-  }
-
   return (
     <div style={styles.modalOverlay} onClick={onClose}>
       <div style={styles.modalBoxLarge} onClick={(e) => e.stopPropagation()}>
@@ -681,32 +681,43 @@ function PJDetailModal({ project, onClose }) {
           list={notes.next}
         />
 
-        <h4 style={styles.sectionTitle}>タスク一覧</h4>
+        <h4 style={styles.sectionTitle}>タスク・サブタスク一覧</h4>
         <ul style={styles.detailTaskList}>
           {project.tasks.length === 0 && <li style={styles.emptySmall}>タスクなし</li>}
           {project.tasks.map((t) => {
             const { done, total } = taskProgress(t);
+            const open = openTasks.has(t.id);
+            const showDone = doneVisibleTasks.has(t.id);
+            const visibleSubtasks = showDone ? t.subtasks : t.subtasks.filter((s) => !s.done);
             return (
-              <li key={t.id} style={styles.detailTaskRow}>
-                <span style={styles.detailTaskName}>{t.name}</span>
-                <span style={styles.calEstTag}>{t.startDate ? formatDate(t.startDate) : "―"}〜{t.endDate ? formatDate(t.endDate) : "―"}</span>
-                <span style={styles.progressTagSm}>{done}/{total}</span>
+              <li key={t.id} style={styles.detailTaskGroup}>
+                <div style={styles.detailTaskRow}>
+                  <button type="button" onClick={() => toggleOpenTask(t.id)} style={styles.collapseBtnSm} aria-label={open ? "折りたたむ" : "展開する"}>{open ? "▾" : "▸"}</button>
+                  <span style={styles.detailTaskName}>{t.name}</span>
+                  <span style={styles.calEstTag}>{t.startDate ? formatDate(t.startDate) : "―"}〜{t.endDate ? formatDate(t.endDate) : "―"}</span>
+                  <span style={styles.progressTagSm}>{done}/{total}</span>
+                  <button type="button" onClick={() => toggleDoneVisible(t.id)}
+                    style={{ ...styles.eyeToggleBtn, background: showDone ? "#F0F0F0" : "transparent" }}
+                    aria-label={showDone ? "完了済みサブタスクを隠す" : "完了済みサブタスクを表示"}>
+                    {showDone ? "👁" : "🙈"}
+                  </button>
+                </div>
+                {open && (
+                  <ul style={styles.detailSubList}>
+                    {t.subtasks.length === 0 && <li style={styles.emptySmall}>サブタスクなし</li>}
+                    {t.subtasks.length > 0 && visibleSubtasks.length === 0 && <li style={styles.emptySmall}>完了済みサブタスクのみ(👁で表示できる)</li>}
+                    {visibleSubtasks.map((s) => (
+                      <li key={s.id} style={styles.detailSubRow}>
+                        <span style={{ ...styles.doneMark, opacity: s.done ? 1 : 0.15 }}>✅</span>
+                        <span style={{ ...styles.subText, textDecoration: s.done ? "line-through" : "none", color: s.done ? "#9B9B9B" : "#2C3645" }}>{s.text}</span>
+                        {s.scheduledDate && <span style={styles.calEstTag}>{formatDate(s.scheduledDate)}</span>}
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </li>
             );
           })}
-        </ul>
-
-        <h4 style={styles.sectionTitle}>サブタスク一覧</h4>
-        <ul style={styles.detailSubList}>
-          {allSubtasks.length === 0 && <li style={styles.emptySmall}>サブタスクなし</li>}
-          {allSubtasks.map(({ taskName, sub: s }) => (
-            <li key={s.id} style={styles.detailSubRow}>
-              <span style={{ ...styles.doneMark, opacity: s.done ? 1 : 0.15 }}>✅</span>
-              <span style={{ ...styles.subText, textDecoration: s.done ? "line-through" : "none", color: s.done ? "#9B9B9B" : "#2C3645" }}>{s.text}</span>
-              <span style={styles.calTaskCol} title={taskName}>{taskName}</span>
-              {s.scheduledDate && <span style={styles.calEstTag}>{formatDate(s.scheduledDate)}</span>}
-            </li>
-          ))}
         </ul>
       </div>
     </div>
@@ -2053,7 +2064,8 @@ const styles = {
   modalContext: { fontSize: 11.5, color: "#7A7A7A", margin: "0 0 12px" },
   modalActions: { display: "flex", justifyContent: "flex-end", marginTop: 12 },
   modalBoxLarge: { width: "100%", maxWidth: 860, maxHeight: "88vh", overflowY: "auto", background: "#FFFFFF", border: "1.5px solid #2C3645", borderRadius: 10, padding: 18, boxShadow: "0 8px 28px rgba(44,54,69,0.3)", display: "flex", flexDirection: "column", gap: 10 },
-  detailTaskList: { listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 4, maxHeight: 220, overflowY: "auto" },
+  detailTaskList: { listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 4, maxHeight: 420, overflowY: "auto" },
+  detailTaskGroup: { display: "flex", flexDirection: "column" },
   detailTaskRow: { display: "flex", alignItems: "center", gap: 8, padding: "5px 4px", borderBottom: "1px dashed #E5E5E5" },
   detailTaskName: { flex: 1, fontSize: 12.5, fontWeight: 600, color: "#2C3645", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
   noteForm: { display: "flex", flexDirection: "column", gap: 4, marginBottom: 8 },
@@ -2062,7 +2074,7 @@ const styles = {
   noteItem: { padding: "6px 8px", background: "#F5F5F5", borderRadius: 6, display: "flex", flexDirection: "column", gap: 2 },
   noteContent: { margin: 0, fontSize: 12.5, color: "#2C3645", whiteSpace: "pre-wrap", wordBreak: "break-word" },
   noteMeta: { fontSize: 10, color: "#9B9B9B" },
-  detailSubList: { listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 4, maxHeight: 220, overflowY: "auto" },
+  detailSubList: { listStyle: "none", margin: 0, padding: 0, paddingLeft: 20, display: "flex", flexDirection: "column", gap: 4, maxHeight: 220, overflowY: "auto" },
   detailSubRow: { display: "flex", alignItems: "center", gap: 8, padding: "4px 4px", borderBottom: "1px dashed #E5E5E5" },
   inlineAddBtn: { fontSize: 10.5, fontWeight: 700, color: "#12314F", background: "transparent", border: "1.5px solid #12314F", borderRadius: 5, padding: "2px 7px", cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap", flexShrink: 0 },
   select: { flex: 1, minWidth: 100, fontSize: 12.5, padding: "7px 6px", borderRadius: 6, border: "1.5px solid #D8D8D8", background: "#FFFFFF", color: "#2C3645", fontFamily: "inherit" },
