@@ -555,6 +555,22 @@ function exportProjectExcel(project, notes) {
   XLSX.writeFile(wb, `${safeName}_${dateStr}.xlsx`);
 }
 
+function exportWeekTasksExcel(label, tasks) {
+  const wb = XLSX.utils.book_new();
+
+  const rows = [
+    ["日付", "曜日", "完了", "サブタスク名", "想定時間(分)", "タスク名", "PJ名"],
+    ...tasks.map(({ pjName, taskName, sub: s }) => {
+      const dt = new Date(s.scheduledDate + "T00:00:00");
+      return [s.scheduledDate, WEEKDAY_LABELS[dt.getDay()], s.done ? "済" : "", s.text, s.estimatedMinutes || "", taskName, pjName];
+    }),
+  ];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), label);
+
+  const dateStr = toDateStr(new Date()).replace(/-/g, "");
+  XLSX.writeFile(wb, `${label}_${dateStr}.xlsx`);
+}
+
 function NoteSection({ title, placeholder, text, onTextChange, onSave, saving, loading, error, list }) {
   return (
     <>
@@ -1484,7 +1500,10 @@ export default function App() {
                 </ul>
               )}
 
-              <h3 style={styles.sectionTitle}>今週のタスク</h3>
+              <div style={styles.sectionTitleRow}>
+                <h3 style={styles.sectionTitleFlush}>今週のタスク</h3>
+                <button type="button" onClick={() => exportWeekTasksExcel("今週のタスク", weekTasks)} style={styles.inlineAddBtn}>Excelで出力</button>
+              </div>
               <div style={styles.workSummaryBar}>
                 <span style={styles.workSummaryItem}>稼働可能 {formatDuration(weekSummary.effectiveMinutes) || "0分"}</span>
                 <span style={styles.workSummaryItem}>
@@ -1559,7 +1578,10 @@ export default function App() {
                 </>
               )}
 
-              <h3 style={styles.sectionTitle}>来週のタスク</h3>
+              <div style={styles.sectionTitleRow}>
+                <h3 style={styles.sectionTitleFlush}>来週のタスク</h3>
+                <button type="button" onClick={() => exportWeekTasksExcel("来週のタスク", nextWeekTasks)} style={styles.inlineAddBtn}>Excelで出力</button>
+              </div>
               <div style={styles.workSummaryBar}>
                 <span style={styles.workSummaryItem}>稼働可能 {formatDuration(nextWeekSummary.effectiveMinutes) || "0分"}</span>
                 <span style={styles.workSummaryItem}>
