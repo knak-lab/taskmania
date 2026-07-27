@@ -1567,6 +1567,7 @@ export default function App() {
                               <span style={{ ...styles.calSubCol, textDecoration: s.done ? "line-through" : "none", color: s.done ? "#9B9B9B" : "#2C3645" }} title={s.text}>{s.text}</span>
                             </div>
                             <div style={styles.calendarLine2}>
+                              <button type="button" onClick={() => setMoveDateModal({ pjId, taskId, subId: s.id, date: s.scheduledDate || dayViewDate })} aria-label="予定日を変更" style={styles.inlineAddBtn}>📅変更</button>
                               <span style={styles.calPjCol} title={pjName}>{pjName}</span>
                               <span style={styles.calTaskCol} title={taskName}>{taskName}</span>
                             </div>
@@ -1645,6 +1646,7 @@ export default function App() {
                               <span style={{ ...styles.calSubCol, textDecoration: s.done ? "line-through" : "none", color: s.done ? "#9B9B9B" : "#2C3645" }} title={s.text}>{s.text}</span>
                             </div>
                             <div style={styles.calendarLine2}>
+                              <button type="button" onClick={() => setMoveDateModal({ pjId, taskId, subId: s.id, date: s.scheduledDate || dayViewDate })} aria-label="予定日を変更" style={styles.inlineAddBtn}>📅変更</button>
                               <span style={styles.calPjCol} title={pjName}>{pjName}</span>
                               <span style={styles.calTaskCol} title={taskName}>{taskName}</span>
                             </div>
