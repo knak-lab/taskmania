@@ -654,6 +654,56 @@ function PJDetailModal({ project, onUpdateNote, onClose }) {
   );
 }
 
+const DAY_JP = ["日", "月", "火", "水", "木", "金", "土"];
+
+function DateGroupedTaskList({ dates, tasks, openDates, onToggleDate, onToggleDone, onMoveDate, stamping, dayViewDate, emptyMessage }) {
+  const groups = dates
+    .map((d) => ({ date: d, items: tasks.filter((t) => t.sub.scheduledDate === d) }))
+    .filter((g) => g.items.length > 0);
+
+  if (groups.length === 0) return <p style={styles.emptySmall}>{emptyMessage}</p>;
+
+  return (
+    <ul style={styles.todayList}>
+      {groups.map((g) => {
+        const dt = new Date(g.date + "T00:00:00");
+        const open = openDates.has(g.date);
+        const estTotal = g.items.reduce((sum, t) => sum + (t.sub.estimatedMinutes || 0), 0);
+        return (
+          <li key={g.date} style={styles.dateGroupCard}>
+            <button type="button" onClick={() => onToggleDate(g.date)} style={styles.dateGroupHeader} aria-label={open ? "折りたたむ" : "展開する"}>
+              <span style={styles.collapseBtnSm}>{open ? "▾" : "▸"}</span>
+              <span style={styles.dateGroupLabel}>{formatDate(g.date)}({DAY_JP[dt.getDay()]})</span>
+              <span style={styles.dateGroupCount}>{g.items.length}件</span>
+              {estTotal > 0 && <span style={styles.calEstTag}>想定計{formatDuration(estTotal)}</span>}
+            </button>
+            {open && (
+              <ul style={styles.dateGroupList}>
+                {g.items.map(({ pjId, pjName, taskId, taskName, sub: s }) => (
+                  <li key={s.id} style={styles.calendarCard} className="row-in">
+                    <div style={styles.calendarLine1}>
+                      <button onClick={() => onToggleDone(pjId, taskId, s.id)} aria-label={s.done ? "未完了に戻す" : "完了にする"} style={styles.stampWrap}>
+                        {s.done ? <span style={styles.hankoStamp} className={stamping === s.id ? "hanko-pop" : ""}>済</span> : <span style={styles.hankoEmpty} />}
+                      </button>
+                      <span style={styles.calEstTag}>想定{s.estimatedMinutes ? formatDuration(s.estimatedMinutes) : "―"}</span>
+                      <span style={{ ...styles.calSubCol, textDecoration: s.done ? "line-through" : "none", color: s.done ? "#9B9B9B" : "#2C3645" }} title={s.text}>{s.text}</span>
+                    </div>
+                    <div style={styles.calendarLine2}>
+                      <button type="button" onClick={() => onMoveDate({ pjId, taskId, subId: s.id, date: s.scheduledDate || dayViewDate })} aria-label="予定日を変更" style={styles.inlineAddBtn}>📅変更</button>
+                      <span style={styles.calPjCol} title={pjName}>{pjName}</span>
+                      <span style={styles.calTaskCol} title={taskName}>{taskName}</span>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 export default function App() {
   const [projects, setProjects] = useState(null);
   const [topTab, setTopTab] = useState("kkr");
@@ -804,8 +854,6 @@ export default function App() {
   const estWarnLevel = estRatio >= 0.8 ? "red" : estRatio >= 0.6 ? "amber" : null;
 
   // 今週のタスク
-  const DAY_JP = ["日", "月", "火", "水", "木", "金", "土"];
-
   const [weekAdj, setWeekAdj] = useState(() => {
     try { return JSON.parse(localStorage.getItem("tm_week_adj") || "[]"); } catch { return []; }
   });
@@ -817,6 +865,8 @@ export default function App() {
   });
   const [adjHoursVal, setAdjHoursVal] = useState(1);
   const [weekCollapsed, setWeekCollapsed] = useState(true);
+  const [weekOpenDates, setWeekOpenDates] = useState(() => new Set());
+  function toggleWeekDate(date) { setWeekOpenDates((prev) => { const next = new Set(prev); next.has(date) ? next.delete(date) : next.add(date); return next; }); }
 
   useEffect(() => { localStorage.setItem("tm_week_adj", JSON.stringify(weekAdj)); }, [weekAdj]);
 
@@ -880,6 +930,8 @@ export default function App() {
   });
   const [nextAdjHoursVal, setNextAdjHoursVal] = useState(1);
   const [nextWeekCollapsed, setNextWeekCollapsed] = useState(true);
+  const [nextWeekOpenDates, setNextWeekOpenDates] = useState(() => new Set());
+  function toggleNextWeekDate(date) { setNextWeekOpenDates((prev) => { const next = new Set(prev); next.has(date) ? next.delete(date) : next.add(date); return next; }); }
 
   useEffect(() => { localStorage.setItem("tm_next_week_adj", JSON.stringify(nextWeekAdj)); }, [nextWeekAdj]);
 
@@ -1471,32 +1523,17 @@ export default function App() {
                     </ul>
                   )}
 
-                  {weekTasks.length === 0 ? (
-                    <p style={styles.emptySmall}>今週の予定日が入ってるサブタスクはない。</p>
-                  ) : (
-                    <ul style={styles.todayList}>
-                      {weekTasks.map(({ pjId, pjName, taskId, taskName, sub: s }) => {
-                        const dt = new Date(s.scheduledDate + "T00:00:00");
-                        return (
-                          <li key={s.id} style={styles.calendarCard} className="row-in">
-                            <div style={styles.calendarLine1}>
-                              <button onClick={() => toggleSubtaskDone(pjId, taskId, s.id)} aria-label={s.done ? "未完了に戻す" : "完了にする"} style={styles.stampWrap}>
-                                {s.done ? <span style={styles.hankoStamp} className={stamping === s.id ? "hanko-pop" : ""}>済</span> : <span style={styles.hankoEmpty} />}
-                              </button>
-                              <span style={{ ...styles.calTimeCol, width: 60 }}>{formatDate(s.scheduledDate)}({DAY_JP[dt.getDay()]})</span>
-                              <span style={styles.calEstTag}>想定{s.estimatedMinutes ? formatDuration(s.estimatedMinutes) : "―"}</span>
-                              <span style={{ ...styles.calSubCol, textDecoration: s.done ? "line-through" : "none", color: s.done ? "#9B9B9B" : "#2C3645" }} title={s.text}>{s.text}</span>
-                            </div>
-                            <div style={styles.calendarLine2}>
-                              <button type="button" onClick={() => setMoveDateModal({ pjId, taskId, subId: s.id, date: s.scheduledDate || dayViewDate })} aria-label="予定日を変更" style={styles.inlineAddBtn}>📅変更</button>
-                              <span style={styles.calPjCol} title={pjName}>{pjName}</span>
-                              <span style={styles.calTaskCol} title={taskName}>{taskName}</span>
-                            </div>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  )}
+                  <DateGroupedTaskList
+                    dates={weekDates}
+                    tasks={weekTasks}
+                    openDates={weekOpenDates}
+                    onToggleDate={toggleWeekDate}
+                    onToggleDone={toggleSubtaskDone}
+                    onMoveDate={setMoveDateModal}
+                    stamping={stamping}
+                    dayViewDate={dayViewDate}
+                    emptyMessage="今週の予定日が入ってるサブタスクはない。"
+                  />
                 </>
               )}
 
@@ -1550,32 +1587,17 @@ export default function App() {
                     </ul>
                   )}
 
-                  {nextWeekTasks.length === 0 ? (
-                    <p style={styles.emptySmall}>来週の予定日が入ってるサブタスクはない。</p>
-                  ) : (
-                    <ul style={styles.todayList}>
-                      {nextWeekTasks.map(({ pjId, pjName, taskId, taskName, sub: s }) => {
-                        const dt = new Date(s.scheduledDate + "T00:00:00");
-                        return (
-                          <li key={s.id} style={styles.calendarCard} className="row-in">
-                            <div style={styles.calendarLine1}>
-                              <button onClick={() => toggleSubtaskDone(pjId, taskId, s.id)} aria-label={s.done ? "未完了に戻す" : "完了にする"} style={styles.stampWrap}>
-                                {s.done ? <span style={styles.hankoStamp} className={stamping === s.id ? "hanko-pop" : ""}>済</span> : <span style={styles.hankoEmpty} />}
-                              </button>
-                              <span style={{ ...styles.calTimeCol, width: 60 }}>{formatDate(s.scheduledDate)}({DAY_JP[dt.getDay()]})</span>
-                              <span style={styles.calEstTag}>想定{s.estimatedMinutes ? formatDuration(s.estimatedMinutes) : "―"}</span>
-                              <span style={{ ...styles.calSubCol, textDecoration: s.done ? "line-through" : "none", color: s.done ? "#9B9B9B" : "#2C3645" }} title={s.text}>{s.text}</span>
-                            </div>
-                            <div style={styles.calendarLine2}>
-                              <button type="button" onClick={() => setMoveDateModal({ pjId, taskId, subId: s.id, date: s.scheduledDate || dayViewDate })} aria-label="予定日を変更" style={styles.inlineAddBtn}>📅変更</button>
-                              <span style={styles.calPjCol} title={pjName}>{pjName}</span>
-                              <span style={styles.calTaskCol} title={taskName}>{taskName}</span>
-                            </div>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  )}
+                  <DateGroupedTaskList
+                    dates={nextWeekDates}
+                    tasks={nextWeekTasks}
+                    openDates={nextWeekOpenDates}
+                    onToggleDate={toggleNextWeekDate}
+                    onToggleDone={toggleSubtaskDone}
+                    onMoveDate={setMoveDateModal}
+                    stamping={stamping}
+                    dayViewDate={dayViewDate}
+                    emptyMessage="来週の予定日が入ってるサブタスクはない。"
+                  />
                 </>
               )}
             </>
@@ -2032,6 +2054,11 @@ const styles = {
   calSubCol: { flex: "1 1 auto", minWidth: 0, fontSize: 12.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
   calPjCol: { fontSize: 10, color: "#12314F", fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 90 },
   calTaskCol: { fontSize: 10, color: "#8B6F3E", fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 90 },
+  dateGroupCard: { border: "1px solid #E0E0E0", borderRadius: 6, background: "#FFFFFF", overflow: "hidden" },
+  dateGroupHeader: { display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "7px 8px", background: "transparent", border: "none", cursor: "pointer", fontFamily: "inherit", textAlign: "left" },
+  dateGroupLabel: { fontSize: 12.5, fontWeight: 700, color: "#2C3645" },
+  dateGroupCount: { fontSize: 10, fontWeight: 700, color: "#9B9B9B" },
+  dateGroupList: { listStyle: "none", margin: 0, padding: "0 8px 4px", display: "flex", flexDirection: "column", gap: 4, borderTop: "1px dashed #E0E0E0" },
   inputRow: { display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" },
   input: { flex: "1 1 160px", padding: "10px 12px", fontSize: 14, border: "1.5px solid #D8D8D8", borderRadius: 6, background: "#FFFFFF", color: "#2C3645", fontFamily: "inherit" },
   priorityGroup: { display: "flex", gap: 4 },
