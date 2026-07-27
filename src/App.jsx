@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import * as XLSX from "xlsx";
-import { loadProjects as gasLoad, saveProjects as gasSave, loadProjectNotes as gasLoadNotes, addProjectNote as gasAddNote } from "./api/gas";
+import { loadProjects as gasLoad, saveProjects as gasSave } from "./api/gas";
 
 const TOP_TABS = [
   { key: "総合", label: "総合", color: "#2C3645" },
@@ -130,17 +130,6 @@ function formatDuration(mins) {
   return `${m}分`;
 }
 
-function formatTimestamp(ts) {
-  if (!ts) return "";
-  const d = new Date(ts);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  const hh = String(d.getHours()).padStart(2, "0");
-  const mm = String(d.getMinutes()).padStart(2, "0");
-  return `${y}/${m}/${day} ${hh}:${mm}`;
-}
-
 function addMinutesToTime(time, minutes) {
   if (!time || !minutes) return "";
   const [h, m] = time.split(":").map(Number);
@@ -153,7 +142,7 @@ function task(name, subtasks, startDate, endDate, estimatedMinutes) {
 }
 
 function project(owner, name, tasks, subcategory, priority) {
-  return { id: uid(), owner, name, tasks, subcategory: subcategory || null, priority: priority || 2 };
+  return { id: uid(), owner, name, tasks, subcategory: subcategory || null, priority: priority || 2, completedNote: "", nextAction: "" };
 }
 
 function seedProjects() {
@@ -529,7 +518,7 @@ function OverviewGanttChart({ projects }) {
   );
 }
 
-function exportProjectExcel(project, notes) {
+function exportProjectExcel(project) {
   const wb = XLSX.utils.book_new();
 
   const rows = [
@@ -541,12 +530,10 @@ function exportProjectExcel(project, notes) {
     }),
     [],
     ["完了事項"],
-    ["内容", "更新日時"],
-    ...(notes.completed || []).map((n) => [n.content, formatTimestamp(n.updatedAt)]),
+    [project.completedNote || ""],
     [],
     ["ネクストアクション"],
-    ["内容", "更新日時"],
-    ...(notes.next || []).map((n) => [n.content, formatTimestamp(n.updatedAt)]),
+    [project.nextAction || ""],
   ];
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), "PJ詳細");
 
@@ -571,43 +558,16 @@ function exportWeekTasksExcel(label, tasks) {
   XLSX.writeFile(wb, `${label}_${dateStr}.xlsx`);
 }
 
-function NoteSection({ title, placeholder, text, onTextChange, onSave, saving, loading, error, list }) {
+function NoteField({ title, placeholder, value, onChange }) {
   return (
     <>
       <h4 style={styles.sectionTitle}>{title}</h4>
-      <form onSubmit={(e) => { e.preventDefault(); onSave(); }} style={styles.noteForm}>
-        <textarea value={text} onChange={(e) => onTextChange(e.target.value)} placeholder={placeholder} style={styles.noteTextarea} />
-        <div style={styles.modalActions}>
-          <button type="submit" disabled={saving} style={styles.addBtn}>{saving ? "保存中…" : "保存"}</button>
-        </div>
-      </form>
-      {loading ? (
-        <p style={styles.emptySmall}>読み込み中…</p>
-      ) : error ? (
-        <p style={styles.emptySmall}>読み込みに失敗した。</p>
-      ) : list.length === 0 ? (
-        <p style={styles.emptySmall}>まだ記録がない。</p>
-      ) : (
-        <ul style={styles.notesList}>
-          {list.map((n) => (
-            <li key={n.id} style={styles.noteItem}>
-              <p style={styles.noteContent}>{n.content}</p>
-              <span style={styles.noteMeta}>{formatTimestamp(n.updatedAt)}</span>
-            </li>
-          ))}
-        </ul>
-      )}
+      <textarea value={value || ""} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} style={styles.noteTextarea} />
     </>
   );
 }
 
-function PJDetailModal({ project, onClose }) {
-  const [notes, setNotes] = useState({ completed: [], next: [] });
-  const [notesLoading, setNotesLoading] = useState(true);
-  const [notesError, setNotesError] = useState(false);
-  const [completedText, setCompletedText] = useState("");
-  const [nextText, setNextText] = useState("");
-  const [savingType, setSavingType] = useState(null);
+function PJDetailModal({ project, onUpdateNote, onClose }) {
   const [exporting, setExporting] = useState(false);
   const [openTasks, setOpenTasks] = useState(() => new Set());
   const [doneVisibleTasks, setDoneVisibleTasks] = useState(() => new Set());
@@ -615,43 +575,10 @@ function PJDetailModal({ project, onClose }) {
   function toggleOpenTask(id) { setOpenTasks((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; }); }
   function toggleDoneVisible(id) { setDoneVisibleTasks((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; }); }
 
-  useEffect(() => {
-    let cancelled = false;
-    setNotesLoading(true);
-    setNotesError(false);
-    gasLoadNotes(project.id)
-      .then((list) => {
-        if (cancelled) return;
-        setNotes({
-          completed: list.filter((n) => n.type === "completed").sort((a, b) => b.updatedAt - a.updatedAt),
-          next: list.filter((n) => n.type === "next").sort((a, b) => b.updatedAt - a.updatedAt),
-        });
-      })
-      .catch(() => { if (!cancelled) setNotesError(true); })
-      .finally(() => { if (!cancelled) setNotesLoading(false); });
-    return () => { cancelled = true; };
-  }, [project.id]);
-
-  async function saveNote(type) {
-    const text = (type === "completed" ? completedText : nextText).trim();
-    if (!text) return;
-    setSavingType(type);
-    try {
-      const res = await gasAddNote(project.id, type, text);
-      const note = res.note || { id: uid(), pjId: project.id, type, content: text, updatedAt: Date.now() };
-      setNotes((prev) => ({ ...prev, [type]: [note, ...prev[type]] }));
-      if (type === "completed") setCompletedText(""); else setNextText("");
-    } catch {
-      window.alert("保存に失敗した。通信状況を確認してもう一度試してほしい。");
-    } finally {
-      setSavingType(null);
-    }
-  }
-
   async function handleExport() {
     setExporting(true);
     try {
-      exportProjectExcel(project, notes);
+      exportProjectExcel(project);
     } finally {
       setExporting(false);
     }
@@ -670,28 +597,18 @@ function PJDetailModal({ project, onClose }) {
 
         <GanttChart project={project} />
 
-        <NoteSection
+        <NoteField
           title="完了事項"
           placeholder="完了した内容を入力…"
-          text={completedText}
-          onTextChange={setCompletedText}
-          onSave={() => saveNote("completed")}
-          saving={savingType === "completed"}
-          loading={notesLoading}
-          error={notesError}
-          list={notes.completed}
+          value={project.completedNote}
+          onChange={(v) => onUpdateNote(project.id, "completedNote", v)}
         />
 
-        <NoteSection
+        <NoteField
           title="ネクストアクション"
           placeholder="次にやることを入力…"
-          text={nextText}
-          onTextChange={setNextText}
-          onSave={() => saveNote("next")}
-          saving={savingType === "next"}
-          loading={notesLoading}
-          error={notesError}
-          list={notes.next}
+          value={project.nextAction}
+          onChange={(v) => onUpdateNote(project.id, "nextAction", v)}
         />
 
         <h4 style={styles.sectionTitle}>タスク・サブタスク一覧</h4>
@@ -1072,6 +989,10 @@ export default function App() {
 
   function updatePJName(pjId, name) {
     setProjects((prev) => prev.map((p) => (p.id === pjId ? { ...p, name } : p)));
+  }
+
+  function updatePJNote(pjId, field, value) {
+    setProjects((prev) => prev.map((p) => (p.id === pjId ? { ...p, [field]: value } : p)));
   }
 
   function updateTaskName(pjId, taskId, name) {
@@ -1859,7 +1780,7 @@ export default function App() {
           {pjDetailModal && (() => {
             const p = (projects || []).find((pp) => pp.id === pjDetailModal);
             if (!p) return null;
-            return <PJDetailModal project={p} onClose={() => setPjDetailModal(null)} />;
+            return <PJDetailModal project={p} onUpdateNote={updatePJNote} onClose={() => setPjDetailModal(null)} />;
           })()}
 
           <div style={styles.tree}>
@@ -2089,12 +2010,7 @@ const styles = {
   detailTaskGroup: { display: "flex", flexDirection: "column" },
   detailTaskRow: { display: "flex", alignItems: "center", gap: 8, padding: "5px 4px", borderBottom: "1px dashed #E5E5E5" },
   detailTaskName: { flex: 1, fontSize: 12.5, fontWeight: 600, color: "#2C3645", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
-  noteForm: { display: "flex", flexDirection: "column", gap: 4, marginBottom: 8 },
   noteTextarea: { minHeight: 64, padding: "8px 10px", fontSize: 13, border: "1.5px solid #D8D8D8", borderRadius: 6, background: "#FFFFFF", color: "#2C3645", fontFamily: "inherit", resize: "vertical" },
-  notesList: { listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 6, maxHeight: 220, overflowY: "auto" },
-  noteItem: { padding: "6px 8px", background: "#F5F5F5", borderRadius: 6, display: "flex", flexDirection: "column", gap: 2 },
-  noteContent: { margin: 0, fontSize: 12.5, color: "#2C3645", whiteSpace: "pre-wrap", wordBreak: "break-word" },
-  noteMeta: { fontSize: 10, color: "#9B9B9B" },
   detailSubList: { listStyle: "none", margin: 0, padding: 0, paddingLeft: 20, display: "flex", flexDirection: "column", gap: 4, maxHeight: 220, overflowY: "auto" },
   detailSubRow: { display: "flex", alignItems: "center", gap: 8, padding: "4px 4px", borderBottom: "1px dashed #E5E5E5" },
   inlineAddBtn: { fontSize: 10.5, fontWeight: 700, color: "#12314F", background: "transparent", border: "1.5px solid #12314F", borderRadius: 5, padding: "2px 7px", cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap", flexShrink: 0 },
