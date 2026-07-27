@@ -36,7 +36,7 @@ const PJ_STATUSES = [
   { v: "hold", label: "保留", color: "#9B9B9B" },
 ];
 
-const MINUTE_OPTIONS = Array.from({ length: 16 }, (_, i) => (i + 1) * 15);
+const MINUTE_OPTIONS = Array.from({ length: 48 }, (_, i) => (i + 1) * 15);
 const WORK_MINUTES = 8 * 60;
 
 const TIME_OPTIONS = Array.from({ length: 96 }, (_, i) => {
