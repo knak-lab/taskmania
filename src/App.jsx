@@ -1005,6 +1005,11 @@ export default function App() {
   // これがないと、読み込み失敗時にサンプルデータへフォールバックした直後の
   // 自動保存でスプレッドシートの実データを上書き消去してしまう。
   const hasLoadedRef = useRef(false);
+  // setProjectsは「サーバーからの読み込み」と「ユーザーの編集」を区別できないため、
+  // 読み込み直後のsetProjectsで自動保存が誤発火しないようにするガード。
+  // これがないと、読み込み結果がたまたま不完全だった場合にその内容がそのまま
+  // 自動保存され、スプレッドシートの全件洗い替えで実データを消してしまう。
+  const skipNextSaveRef = useRef(false);
 
   // 初回ロード
   const handleLoad = async () => {
@@ -1012,6 +1017,7 @@ export default function App() {
     try {
       const data = await gasLoad();
       if (data.length > 0 || !hasLoadedRef.current) {
+        skipNextSaveRef.current = true;
         setProjects(data.length > 0 ? data : seedProjects());
       }
       hasLoadedRef.current = true;
@@ -1020,6 +1026,7 @@ export default function App() {
       // 既に一度でも読み込みに成功していれば、今持っているデータを保持したまま
       // エラー表示のみ行う(サンプルデータで上書きして自動保存させない)。
       if (!hasLoadedRef.current) {
+        skipNextSaveRef.current = true;
         setProjects(seedProjects());
       }
       setSaveState("error");
@@ -1031,6 +1038,7 @@ export default function App() {
   // 変更時に自動保存(初回読み込みが成功するまでは保存しない)
   useEffect(() => {
     if (projects === null || !hasLoadedRef.current) return;
+    if (skipNextSaveRef.current) { skipNextSaveRef.current = false; return; }
     setSaveState("saving");
     clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(async () => {
