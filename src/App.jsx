@@ -712,6 +712,7 @@ const DASHBOARD_RANGES = [
   { key: "lastWeek", label: "先週" },
   { key: "thisWeek", label: "今週" },
   { key: "nextWeek", label: "来週" },
+  { key: "thisMonth", label: "今月" },
   { key: "lastMonth", label: "先月" },
   { key: "past3Months", label: "過去3ヶ月" },
 ];
@@ -731,6 +732,10 @@ function dashboardRangeDates(rangeKey) {
     const start = addDaysStr(toDateStr(monday), 7);
     return { start, end: addDaysStr(start, 6) };
   }
+  if (rangeKey === "thisMonth") {
+    const y = today.getFullYear(), m = today.getMonth();
+    return { start: toDateStr(new Date(y, m, 1)), end: toDateStr(new Date(y, m + 1, 0)) };
+  }
   if (rangeKey === "lastMonth") {
     const y = today.getFullYear(), m = today.getMonth();
     return { start: toDateStr(new Date(y, m - 1, 1)), end: toDateStr(new Date(y, m, 0)) };
@@ -739,6 +744,16 @@ function dashboardRangeDates(rangeKey) {
   const start = new Date(today);
   start.setMonth(start.getMonth() - 3);
   return { start: toDateStr(start), end: toDateStr(today) };
+}
+
+// 積み上げ棒グラフのY軸目盛りを「きりのいい」分単位の間隔にする(15分/30分/1〜24時間刻み)。
+// 目盛りが3〜5本になる最小の間隔を選ぶ
+function niceMinuteStep(maxMinutes) {
+  const steps = [15, 30, 60, 120, 180, 240, 360, 480, 600, 720, 900, 1080, 1260, 1440];
+  for (const step of steps) {
+    if (Math.ceil(maxMinutes / step) <= 5) return step;
+  }
+  return Math.ceil(maxMinutes / 5 / 1440) * 1440;
 }
 
 function PieChart({ title, data }) {
@@ -783,6 +798,7 @@ function PieChart({ title, data }) {
                 <title>{w.label} {formatDuration(w.minutes)}({Math.round((w.minutes / total) * 100)}%)</title>
               </path>
             ))}
+            <text x={cx} y={cy} textAnchor="middle" dominantBaseline="middle" fontSize="11" fontWeight="700" fill="#2C3645">{formatDuration(total)}</text>
           </svg>
           <ul style={styles.dashboardLegend}>
             {wedges.map((w, i) => (
@@ -800,9 +816,14 @@ function PieChart({ title, data }) {
 }
 
 function StackedBarChart({ dates, series }) {
-  const chartH = 160, barW = 22, gap = 10;
-  const width = dates.length * (barW + gap) + gap;
+  const chartH = 160, barW = 22, gap = 10, axisW = 40;
+  const plotW = dates.length * (barW + gap) + gap;
   const maxTotal = Math.max(1, ...dates.map((d) => series.reduce((sum, s) => sum + (s.valuesByDate.get(d) || 0), 0)));
+  const step = niceMinuteStep(maxTotal);
+  const tickMax = Math.ceil(maxTotal / step) * step;
+  const ticks = [];
+  for (let v = 0; v <= tickMax; v += step) ticks.push(v);
+  const yFor = (mins) => chartH - (mins / tickMax) * (chartH - 8);
 
   return (
     <div style={styles.dashboardBarWrap}>
@@ -811,31 +832,42 @@ function StackedBarChart({ dates, series }) {
         <p style={styles.emptySmall}>データなし</p>
       ) : (
         <>
-          <div style={{ overflowX: "auto" }}>
-            <svg width={width} height={chartH + 24} viewBox={`0 0 ${width} ${chartH + 24}`}>
-              <line x1={0} y1={chartH} x2={width} y2={chartH} stroke="#E0E0E0" strokeWidth={1} />
-              {dates.map((d, i) => {
-                const x = gap + i * (barW + gap);
-                let y = chartH;
-                return (
-                  <g key={d}>
-                    {series.map((s) => {
-                      const mins = s.valuesByDate.get(d) || 0;
-                      if (mins <= 0) return null;
-                      const h = (mins / maxTotal) * (chartH - 8);
-                      const barY = y - h;
-                      y = barY - 2;
-                      return (
-                        <rect key={s.pjId} x={x} y={barY} width={barW} height={h} fill={s.color}>
-                          <title>{s.label} {formatDate(d)} {formatDuration(mins)}</title>
-                        </rect>
-                      );
-                    })}
-                    <text x={x + barW / 2} y={chartH + 14} textAnchor="middle" fontSize="9" fill="#7A7A7A">{formatDate(d)}</text>
-                  </g>
-                );
-              })}
+          <div style={{ display: "flex" }}>
+            <svg width={axisW} height={chartH + 24} viewBox={`0 0 ${axisW} ${chartH + 24}`} style={{ flexShrink: 0 }}>
+              {ticks.map((t) => (
+                <text key={t} x={axisW - 6} y={yFor(t)} textAnchor="end" dominantBaseline="middle" fontSize="9" fill="#7A7A7A">
+                  {t === 0 ? "0" : formatDuration(t)}
+                </text>
+              ))}
             </svg>
+            <div style={{ overflowX: "auto", flex: 1 }}>
+              <svg width={plotW} height={chartH + 24} viewBox={`0 0 ${plotW} ${chartH + 24}`}>
+                {ticks.map((t) => (
+                  <line key={t} x1={0} y1={yFor(t)} x2={plotW} y2={yFor(t)} stroke="#E0E0E0" strokeWidth={1} />
+                ))}
+                {dates.map((d, i) => {
+                  const x = gap + i * (barW + gap);
+                  let y = chartH;
+                  return (
+                    <g key={d}>
+                      {series.map((s) => {
+                        const mins = s.valuesByDate.get(d) || 0;
+                        if (mins <= 0) return null;
+                        const h = (mins / tickMax) * (chartH - 8);
+                        const barY = y - h;
+                        y = barY - 2;
+                        return (
+                          <rect key={s.pjId} x={x} y={barY} width={barW} height={h} fill={s.color}>
+                            <title>{s.label} {formatDate(d)} {formatDuration(mins)}</title>
+                          </rect>
+                        );
+                      })}
+                      <text x={x + barW / 2} y={chartH + 14} textAnchor="middle" fontSize="9" fill="#7A7A7A">{formatDate(d)}</text>
+                    </g>
+                  );
+                })}
+              </svg>
+            </div>
           </div>
           <ul style={styles.dashboardLegend}>
             {series.map((s) => (
