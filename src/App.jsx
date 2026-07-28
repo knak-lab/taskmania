@@ -704,6 +704,249 @@ function DateGroupedTaskList({ dates, tasks, openDates, onToggleDate, onToggleDo
   );
 }
 
+const DASHBOARD_CATEGORICAL_COLORS = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#4a3aa7", "#e34948"];
+const DASHBOARD_OTHER_COLOR = "#9B9B9B";
+
+const DASHBOARD_RANGES = [
+  { key: "lastWeek", label: "先週" },
+  { key: "thisWeek", label: "今週" },
+  { key: "nextWeek", label: "来週" },
+  { key: "lastMonth", label: "先月" },
+  { key: "past3Months", label: "過去3ヶ月" },
+];
+
+function dashboardRangeDates(rangeKey) {
+  const today = new Date();
+  const monday = startOfWeek(today);
+  if (rangeKey === "thisWeek") {
+    const start = toDateStr(monday);
+    return { start, end: addDaysStr(start, 6) };
+  }
+  if (rangeKey === "lastWeek") {
+    const start = addDaysStr(toDateStr(monday), -7);
+    return { start, end: addDaysStr(start, 6) };
+  }
+  if (rangeKey === "nextWeek") {
+    const start = addDaysStr(toDateStr(monday), 7);
+    return { start, end: addDaysStr(start, 6) };
+  }
+  if (rangeKey === "lastMonth") {
+    const y = today.getFullYear(), m = today.getMonth();
+    return { start: toDateStr(new Date(y, m - 1, 1)), end: toDateStr(new Date(y, m, 0)) };
+  }
+  // past3Months
+  const start = new Date(today);
+  start.setMonth(start.getMonth() - 3);
+  return { start: toDateStr(start), end: toDateStr(today) };
+}
+
+function PieChart({ title, data }) {
+  const total = data.reduce((sum, d) => sum + d.minutes, 0);
+  const size = 140, outerR = 60, innerR = 34, cx = size / 2, cy = size / 2;
+  const gapDeg = data.length > 1 ? 1.5 : 0;
+
+  let acc = 0;
+  const wedges = data.map((d) => {
+    const span = (d.minutes / total) * 360;
+    const start = acc + gapDeg / 2;
+    let end = acc + span - gapDeg / 2;
+    if (end - start >= 360) end = start + 359.99; // 単一カテゴリ100%の場合、弧が退化しないようにする
+    const wedge = { ...d, start, end };
+    acc += span;
+    return wedge;
+  });
+
+  function toXY(angle, radius) {
+    const rad = (angle - 90) * Math.PI / 180;
+    return [cx + radius * Math.cos(rad), cy + radius * Math.sin(rad)];
+  }
+  function arcPath(w) {
+    const [x1, y1] = toXY(w.start, outerR);
+    const [x2, y2] = toXY(w.end, outerR);
+    const [x3, y3] = toXY(w.end, innerR);
+    const [x4, y4] = toXY(w.start, innerR);
+    const largeArc = w.end - w.start > 180 ? 1 : 0;
+    return `M ${x1} ${y1} A ${outerR} ${outerR} 0 ${largeArc} 1 ${x2} ${y2} L ${x3} ${y3} A ${innerR} ${innerR} 0 ${largeArc} 0 ${x4} ${y4} Z`;
+  }
+
+  return (
+    <div style={styles.dashboardChartCol}>
+      <h4 style={styles.dashboardChartTitle}>{title}</h4>
+      {total === 0 ? (
+        <p style={styles.emptySmall}>データなし</p>
+      ) : (
+        <>
+          <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+            {wedges.map((w, i) => w.end > w.start && (
+              <path key={i} d={arcPath(w)} fill={w.color}>
+                <title>{w.label} {formatDuration(w.minutes)}({Math.round((w.minutes / total) * 100)}%)</title>
+              </path>
+            ))}
+          </svg>
+          <ul style={styles.dashboardLegend}>
+            {wedges.map((w, i) => (
+              <li key={i} style={styles.dashboardLegendItem}>
+                <span style={{ ...styles.dashboardLegendSwatch, background: w.color }} />
+                <span style={styles.dashboardLegendLabel}>{w.label}</span>
+                <span style={styles.dashboardLegendValue}>{formatDuration(w.minutes)}({Math.round((w.minutes / total) * 100)}%)</span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </div>
+  );
+}
+
+function StackedBarChart({ dates, series }) {
+  const chartH = 160, barW = 22, gap = 10;
+  const width = dates.length * (barW + gap) + gap;
+  const maxTotal = Math.max(1, ...dates.map((d) => series.reduce((sum, s) => sum + (s.valuesByDate.get(d) || 0), 0)));
+
+  return (
+    <div style={styles.dashboardBarWrap}>
+      <h4 style={styles.dashboardChartTitle}>日別 実績時間(PJ別積み上げ)</h4>
+      {series.length === 0 ? (
+        <p style={styles.emptySmall}>データなし</p>
+      ) : (
+        <>
+          <div style={{ overflowX: "auto" }}>
+            <svg width={width} height={chartH + 24} viewBox={`0 0 ${width} ${chartH + 24}`}>
+              <line x1={0} y1={chartH} x2={width} y2={chartH} stroke="#E0E0E0" strokeWidth={1} />
+              {dates.map((d, i) => {
+                const x = gap + i * (barW + gap);
+                let y = chartH;
+                return (
+                  <g key={d}>
+                    {series.map((s) => {
+                      const mins = s.valuesByDate.get(d) || 0;
+                      if (mins <= 0) return null;
+                      const h = (mins / maxTotal) * (chartH - 8);
+                      const barY = y - h;
+                      y = barY - 2;
+                      return (
+                        <rect key={s.pjId} x={x} y={barY} width={barW} height={h} fill={s.color}>
+                          <title>{s.label} {formatDate(d)} {formatDuration(mins)}</title>
+                        </rect>
+                      );
+                    })}
+                    <text x={x + barW / 2} y={chartH + 14} textAnchor="middle" fontSize="9" fill="#7A7A7A">{formatDate(d)}</text>
+                  </g>
+                );
+              })}
+            </svg>
+          </div>
+          <ul style={styles.dashboardLegend}>
+            {series.map((s) => (
+              <li key={s.pjId} style={styles.dashboardLegendItem}>
+                <span style={{ ...styles.dashboardLegendSwatch, background: s.color }} />
+                <span style={styles.dashboardLegendLabel}>{s.label}</span>
+                <span style={styles.dashboardLegendValue}>{formatDuration([...s.valuesByDate.values()].reduce((a, b) => a + b, 0))}</span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </div>
+  );
+}
+
+function DashboardModal({ projects, onClose }) {
+  const [range, setRange] = useState("thisWeek");
+  const { start, end } = useMemo(() => dashboardRangeDates(range), [range]);
+
+  const pjColorMap = useMemo(() => {
+    const map = new Map();
+    projects.forEach((p, i) => {
+      map.set(p.id, i < DASHBOARD_CATEGORICAL_COLORS.length ? DASHBOARD_CATEGORICAL_COLORS[i] : DASHBOARD_OTHER_COLOR);
+    });
+    return map;
+  }, [projects]);
+
+  const filteredSubs = useMemo(() => {
+    const list = [];
+    for (const p of projects) {
+      for (const t of p.tasks) {
+        for (const s of t.subtasks) {
+          if (s.scheduledDate && s.scheduledDate >= start && s.scheduledDate <= end) list.push({ p, s });
+        }
+      }
+    }
+    return list;
+  }, [projects, start, end]);
+
+  const pjPieData = useMemo(() => {
+    const totals = new Map();
+    for (const { p, s } of filteredSubs) {
+      const cur = totals.get(p.id) || { label: p.name, minutes: 0, color: pjColorMap.get(p.id) };
+      cur.minutes += s.actualMinutes || 0;
+      totals.set(p.id, cur);
+    }
+    return [...totals.values()].filter((d) => d.minutes > 0).sort((a, b) => b.minutes - a.minutes);
+  }, [filteredSubs, pjColorMap]);
+
+  const priorityPieData = useMemo(() => {
+    const totals = new Map();
+    for (const { p, s } of filteredSubs) {
+      const v = p.priority || 2;
+      totals.set(v, (totals.get(v) || 0) + (s.actualMinutes || 0));
+    }
+    return PJ_PRIORITIES.map((pri) => ({ label: pri.label, color: pri.color, minutes: totals.get(pri.v) || 0 })).filter((d) => d.minutes > 0);
+  }, [filteredSubs]);
+
+  const barDates = useMemo(() => generateBuckets(start, end, "day"), [start, end]);
+
+  const barSeries = useMemo(() => {
+    const seriesMap = new Map();
+    for (const { p, s } of filteredSubs) {
+      if (!s.actualMinutes) continue;
+      let entry = seriesMap.get(p.id);
+      if (!entry) { entry = { pjId: p.id, label: p.name, color: pjColorMap.get(p.id), valuesByDate: new Map() }; seriesMap.set(p.id, entry); }
+      entry.valuesByDate.set(s.scheduledDate, (entry.valuesByDate.get(s.scheduledDate) || 0) + s.actualMinutes);
+    }
+    return [...seriesMap.values()].sort((a, b) => {
+      const totalA = [...a.valuesByDate.values()].reduce((x, y) => x + y, 0);
+      const totalB = [...b.valuesByDate.values()].reduce((x, y) => x + y, 0);
+      return totalB - totalA;
+    });
+  }, [filteredSubs, pjColorMap]);
+
+  const totalActualMin = pjPieData.reduce((sum, d) => sum + d.minutes, 0);
+
+  return (
+    <div style={styles.modalOverlay} onClick={onClose}>
+      <div style={styles.modalBoxDashboard} onClick={(e) => e.stopPropagation()}>
+        <div style={styles.modalHeader}>
+          <h3 style={styles.modalTitle}>ダッシュボード</h3>
+          <button type="button" onClick={onClose} aria-label="閉じる" style={styles.modalCloseBtn}>×</button>
+        </div>
+
+        <div style={styles.dashboardFilterRow}>
+          {DASHBOARD_RANGES.map((r) => (
+            <button key={r.key} type="button" onClick={() => setRange(r.key)}
+              style={{ ...styles.dashboardFilterBtn, background: range === r.key ? "#2C3645" : "transparent", color: range === r.key ? "#FFFFFF" : "#2C3645", borderColor: "#2C3645" }}>
+              {r.label}
+            </button>
+          ))}
+          <span style={styles.dashboardRangeLabel}>{formatDate(start)}〜{formatDate(end)}</span>
+        </div>
+
+        {totalActualMin === 0 ? (
+          <p style={styles.emptySmall}>この期間の実績時間の記録はない。</p>
+        ) : (
+          <>
+            <div style={styles.dashboardPieRow}>
+              <PieChart title="PJ単位" data={pjPieData} />
+              <PieChart title="重要度別" data={priorityPieData} />
+            </div>
+            <StackedBarChart dates={barDates} series={barSeries} />
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [projects, setProjects] = useState(null);
   const [topTab, setTopTab] = useState("kkr");
@@ -753,6 +996,7 @@ export default function App() {
   const [newStepText, setNewStepText] = useState("");
   const [dayViewDate, setDayViewDate] = useState(() => toDateStr(new Date()));
   const [copyDateModal, setCopyDateModal] = useState(null);
+  const [dashboardOpen, setDashboardOpen] = useState(false);
   const [moveDateModal, setMoveDateModal] = useState(null);
 
   const inputRef = useRef(null);
@@ -981,6 +1225,44 @@ export default function App() {
     });
   };
   const removeNextWeekAdj = (date) => setNextWeekAdj((prev) => prev.filter((a) => a.date !== date));
+
+  // 先週のタスク(今週のタスクと同じ内容、期間のみ-7日。過去分のため稼働調整はなし)
+  const [lastWeekCollapsed, setLastWeekCollapsed] = useState(true);
+  const [lastWeekOpenDates, setLastWeekOpenDates] = useState(() => new Set());
+  function toggleLastWeekDate(date) { setLastWeekOpenDates((prev) => { const next = new Set(prev); next.has(date) ? next.delete(date) : next.add(date); return next; }); }
+
+  const lastWeekDates = useMemo(() => {
+    const monday = startOfWeek(new Date());
+    return Array.from({ length: 5 }, (_, i) => {
+      const d = new Date(monday); d.setDate(monday.getDate() - 7 + i); return toDateStr(d);
+    });
+  }, []);
+
+  const lastWeekTasks = useMemo(() => {
+    if (!showTaskSections) return [];
+    const tasks = [];
+    for (const p of visibleProjects) {
+      for (const t of p.tasks) {
+        for (const s of t.subtasks) {
+          if (lastWeekDates.includes(s.scheduledDate))
+            tasks.push({ pjId: p.id, pjName: p.name, taskId: t.id, taskName: t.name, sub: s });
+        }
+      }
+    }
+    tasks.sort((a, b) => {
+      if (a.sub.scheduledDate !== b.sub.scheduledDate) return a.sub.scheduledDate.localeCompare(b.sub.scheduledDate);
+      if (!a.sub.startTime && !b.sub.startTime) return 0;
+      if (!a.sub.startTime) return 1; if (!b.sub.startTime) return -1;
+      return a.sub.startTime.localeCompare(b.sub.startTime);
+    });
+    return tasks;
+  }, [visibleProjects, lastWeekDates, showTaskSections]);
+
+  const lastWeekSummary = useMemo(() => {
+    const estMinutes = lastWeekTasks.reduce((sum, t) => sum + (t.sub.estimatedMinutes || 0), 0);
+    const actualMinutes = lastWeekTasks.reduce((sum, t) => sum + (t.sub.actualMinutes || 0), 0);
+    return { estMinutes, actualMinutes };
+  }, [lastWeekTasks]);
 
   const openCountFor = (owner, subcat) => {
     if (!projects) return 0;
@@ -1412,6 +1694,12 @@ export default function App() {
 
         <section style={{ ...styles.panel, borderColor: activeTopColor }}>
           {showTaskSections && (
+            <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
+              <button type="button" onClick={() => setDashboardOpen(true)} style={styles.addBtn}>📊ダッシュボード</button>
+            </div>
+          )}
+          {dashboardOpen && <DashboardModal projects={visibleProjects} onClose={() => setDashboardOpen(false)} />}
+          {showTaskSections && (
             <>
               <div style={styles.sectionTitleRow}>
                 <h3 style={styles.sectionTitleFlush}>1日のタスク</h3>
@@ -1599,6 +1887,32 @@ export default function App() {
                     emptyMessage="来週の予定日が入ってるサブタスクはない。"
                   />
                 </>
+              )}
+
+              <div style={styles.sectionTitleRow}>
+                <h3 style={styles.sectionTitleFlush}>先週のタスク</h3>
+                <button type="button" onClick={() => exportWeekTasksExcel("先週のタスク", lastWeekTasks)} style={styles.inlineAddBtn}>Excelで出力</button>
+              </div>
+              <div style={styles.workSummaryBar}>
+                <span style={styles.workSummaryItem}>想定時間計 {lastWeekSummary.estMinutes ? formatDuration(lastWeekSummary.estMinutes) : "0分"}</span>
+                <span style={styles.workSummaryItem}>実績時間計 {lastWeekSummary.actualMinutes ? formatDuration(lastWeekSummary.actualMinutes) : "0分"}</span>
+                <button type="button" onClick={() => setLastWeekCollapsed((v) => !v)} style={styles.collapseBtnSm} aria-label={lastWeekCollapsed ? "詳細を展開する" : "詳細を折りたたむ"}>
+                  {lastWeekCollapsed ? "▸" : "▾"}
+                </button>
+              </div>
+
+              {!lastWeekCollapsed && (
+                <DateGroupedTaskList
+                  dates={lastWeekDates}
+                  tasks={lastWeekTasks}
+                  openDates={lastWeekOpenDates}
+                  onToggleDate={toggleLastWeekDate}
+                  onToggleDone={toggleSubtaskDone}
+                  onMoveDate={setMoveDateModal}
+                  stamping={stamping}
+                  dayViewDate={dayViewDate}
+                  emptyMessage="先週の予定日が入ってるサブタスクはない。"
+                />
               )}
             </>
           )}
@@ -2031,6 +2345,19 @@ const styles = {
   modalContext: { fontSize: 11.5, color: "#7A7A7A", margin: "0 0 12px" },
   modalActions: { display: "flex", justifyContent: "flex-end", marginTop: 12 },
   modalBoxLarge: { width: "100%", maxWidth: 860, maxHeight: "88vh", overflowY: "auto", background: "#FFFFFF", border: "1.5px solid #2C3645", borderRadius: 10, padding: 18, boxShadow: "0 8px 28px rgba(44,54,69,0.3)", display: "flex", flexDirection: "column", gap: 10 },
+  modalBoxDashboard: { width: "100%", maxWidth: 960, maxHeight: "90vh", overflowY: "auto", background: "#FFFFFF", border: "1.5px solid #2C3645", borderRadius: 10, padding: 18, boxShadow: "0 8px 28px rgba(44,54,69,0.3)", display: "flex", flexDirection: "column", gap: 12 },
+  dashboardFilterRow: { display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" },
+  dashboardFilterBtn: { padding: "6px 12px", fontSize: 12, fontWeight: 700, border: "1.5px solid", borderRadius: 6, cursor: "pointer", fontFamily: "inherit" },
+  dashboardRangeLabel: { fontSize: 11, color: "#7A7A7A", marginLeft: "auto" },
+  dashboardPieRow: { display: "flex", gap: 20, flexWrap: "wrap" },
+  dashboardChartCol: { flex: "1 1 220px", minWidth: 200 },
+  dashboardChartTitle: { fontSize: 12, fontWeight: 700, color: "#2C3645", margin: "0 0 8px" },
+  dashboardLegend: { listStyle: "none", margin: "8px 0 0", padding: 0, display: "flex", flexDirection: "column", gap: 4 },
+  dashboardLegendItem: { display: "flex", alignItems: "center", gap: 6, fontSize: 11 },
+  dashboardLegendSwatch: { width: 10, height: 10, borderRadius: 2, flexShrink: 0 },
+  dashboardLegendLabel: { flex: 1, color: "#2C3645", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+  dashboardLegendValue: { color: "#7A7A7A", fontWeight: 700, whiteSpace: "nowrap" },
+  dashboardBarWrap: { display: "flex", flexDirection: "column" },
   detailTaskList: { listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 4, maxHeight: 420, overflowY: "auto" },
   detailTaskGroup: { display: "flex", flexDirection: "column" },
   detailTaskRow: { display: "flex", alignItems: "center", gap: 8, padding: "5px 4px", borderBottom: "1px dashed #E5E5E5" },
