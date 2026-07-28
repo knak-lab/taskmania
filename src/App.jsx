@@ -855,14 +855,6 @@ function DashboardModal({ projects, onClose }) {
   const [range, setRange] = useState("thisWeek");
   const { start, end } = useMemo(() => dashboardRangeDates(range), [range]);
 
-  const pjColorMap = useMemo(() => {
-    const map = new Map();
-    projects.forEach((p, i) => {
-      map.set(p.id, i < DASHBOARD_CATEGORICAL_COLORS.length ? DASHBOARD_CATEGORICAL_COLORS[i] : DASHBOARD_OTHER_COLOR);
-    });
-    return map;
-  }, [projects]);
-
   const filteredSubs = useMemo(() => {
     const list = [];
     for (const p of projects) {
@@ -875,15 +867,41 @@ function DashboardModal({ projects, onClose }) {
     return list;
   }, [projects, start, end]);
 
-  const pjPieData = useMemo(() => {
+  // 選択中の期間内の実績時間が多い順にPJを並べ、上位のみ固有色を割り当てる。
+  // (プロジェクト総数が多いと全PJ分の固有色は用意できないため、それ以外は「その他」にまとめる)
+  const projectTotals = useMemo(() => {
     const totals = new Map();
     for (const { p, s } of filteredSubs) {
-      const cur = totals.get(p.id) || { label: p.name, minutes: 0, color: pjColorMap.get(p.id) };
+      const cur = totals.get(p.id) || { p, minutes: 0 };
       cur.minutes += s.actualMinutes || 0;
       totals.set(p.id, cur);
     }
     return [...totals.values()].filter((d) => d.minutes > 0).sort((a, b) => b.minutes - a.minutes);
-  }, [filteredSubs, pjColorMap]);
+  }, [filteredSubs]);
+
+  const topProjectIds = useMemo(
+    () => new Set(projectTotals.slice(0, DASHBOARD_CATEGORICAL_COLORS.length).map((d) => d.p.id)),
+    [projectTotals]
+  );
+
+  const pjColorMap = useMemo(() => {
+    const map = new Map();
+    projectTotals.forEach((d, i) => {
+      map.set(d.p.id, i < DASHBOARD_CATEGORICAL_COLORS.length ? DASHBOARD_CATEGORICAL_COLORS[i] : DASHBOARD_OTHER_COLOR);
+    });
+    return map;
+  }, [projectTotals]);
+
+  const pjPieData = useMemo(() => {
+    const top = projectTotals
+      .filter((d) => topProjectIds.has(d.p.id))
+      .map((d) => ({ label: d.p.name, minutes: d.minutes, color: pjColorMap.get(d.p.id) }));
+    const otherMinutes = projectTotals
+      .filter((d) => !topProjectIds.has(d.p.id))
+      .reduce((sum, d) => sum + d.minutes, 0);
+    if (otherMinutes > 0) top.push({ label: "その他", minutes: otherMinutes, color: DASHBOARD_OTHER_COLOR });
+    return top;
+  }, [projectTotals, topProjectIds, pjColorMap]);
 
   const priorityPieData = useMemo(() => {
     const totals = new Map();
@@ -900,16 +918,20 @@ function DashboardModal({ projects, onClose }) {
     const seriesMap = new Map();
     for (const { p, s } of filteredSubs) {
       if (!s.actualMinutes) continue;
-      let entry = seriesMap.get(p.id);
-      if (!entry) { entry = { pjId: p.id, label: p.name, color: pjColorMap.get(p.id), valuesByDate: new Map() }; seriesMap.set(p.id, entry); }
+      const isTop = topProjectIds.has(p.id);
+      const key = isTop ? p.id : "__other__";
+      let entry = seriesMap.get(key);
+      if (!entry) {
+        entry = { pjId: key, label: isTop ? p.name : "その他", color: isTop ? pjColorMap.get(p.id) : DASHBOARD_OTHER_COLOR, valuesByDate: new Map() };
+        seriesMap.set(key, entry);
+      }
       entry.valuesByDate.set(s.scheduledDate, (entry.valuesByDate.get(s.scheduledDate) || 0) + s.actualMinutes);
     }
-    return [...seriesMap.values()].sort((a, b) => {
-      const totalA = [...a.valuesByDate.values()].reduce((x, y) => x + y, 0);
-      const totalB = [...b.valuesByDate.values()].reduce((x, y) => x + y, 0);
-      return totalB - totalA;
-    });
-  }, [filteredSubs, pjColorMap]);
+    const ordered = projectTotals.filter((d) => topProjectIds.has(d.p.id) && seriesMap.has(d.p.id)).map((d) => seriesMap.get(d.p.id));
+    const other = seriesMap.get("__other__");
+    if (other) ordered.push(other);
+    return ordered;
+  }, [filteredSubs, projectTotals, topProjectIds, pjColorMap]);
 
   const totalActualMin = pjPieData.reduce((sum, d) => sum + d.minutes, 0);
 
