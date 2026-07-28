@@ -1464,7 +1464,7 @@ export default function App() {
                         </button>
                         <button type="button" onClick={() => openStepsModal(pjId, taskId, s.id)} aria-label="ステップを開く" style={styles.inlineAddBtn}>☑ステップ</button>
                         <button type="button" onClick={() => setMoveDateModal({ pjId, taskId, subId: s.id, date: s.scheduledDate || dayViewDate })} aria-label="予定日を変更" style={styles.inlineAddBtn}>📅変更</button>
-                        <button type="button" onClick={() => setCopyDateModal({ pjId, taskId, subId: s.id, date: dayViewDate })} aria-label="サブタスクをコピー" style={styles.inlineAddBtn}>📋コピー</button>
+                        <button type="button" onClick={() => setCopyDateModal({ pjId, taskId, subId: s.id, date: dayViewDate, text: s.text })} aria-label="サブタスクをコピー" style={styles.inlineAddBtn}>📋コピー</button>
                         <span style={styles.calPjCol} title={pjName}>{pjName}</span>
                         <span style={styles.calTaskCol} title={taskName}>{taskName}</span>
                       </div>
@@ -1761,13 +1761,16 @@ export default function App() {
                     <h3 style={styles.modalTitle}>サブタスクをコピー</h3>
                     <button type="button" onClick={() => setCopyDateModal(null)} aria-label="閉じる" style={styles.modalCloseBtn}>×</button>
                   </div>
-                  <p style={styles.modalContext}>{s.text}</p>
+                  <label style={styles.scheduleEditField}>
+                    <span style={styles.scheduleEditLabel}>タイトル</span>
+                    <input type="text" value={copyDateModal.text} onChange={(e) => setCopyDateModal((prev) => ({ ...prev, text: e.target.value }))} style={styles.scheduleEditInput} />
+                  </label>
                   <label style={styles.scheduleEditField}>
                     <span style={styles.scheduleEditLabel}>コピー先の予定日</span>
                     <input type="date" value={copyDateModal.date} onChange={(e) => setCopyDateModal((prev) => ({ ...prev, date: e.target.value }))} style={styles.scheduleEditInput} />
                   </label>
                   <div style={styles.modalActions}>
-                    <button type="button" onClick={() => { duplicateSubtask(p.id, t.id, s.id, { scheduledDate: copyDateModal.date || null }); setCopyDateModal(null); }} style={styles.addBtn}>コピー</button>
+                    <button type="button" onClick={() => { duplicateSubtask(p.id, t.id, s.id, { scheduledDate: copyDateModal.date || null, text: (copyDateModal.text || "").trim() || s.text }); setCopyDateModal(null); }} style={styles.addBtn}>コピー</button>
                   </div>
                 </div>
               </div>
@@ -1973,7 +1976,7 @@ export default function App() {
                                         </div>
                                         <span style={{ ...styles.metaTag, borderColor: pInfo.color, color: pInfo.color }}>{pInfo.label}</span>
                                         <button type="button" onClick={() => openStepsModal(p.id, t.id, s.id)} aria-label="ステップを開く" style={styles.inlineAddBtn}>☑ステップ</button>
-                                        <button type="button" onClick={() => duplicateSubtask(p.id, t.id, s.id)} aria-label="サブタスクをコピー" style={styles.inlineAddBtn}>📋コピー</button>
+                                        <button type="button" onClick={() => setCopyDateModal({ pjId: p.id, taskId: t.id, subId: s.id, date: s.scheduledDate || todayStr, text: s.text })} aria-label="サブタスクをコピー" style={styles.inlineAddBtn}>📋コピー</button>
                                         <button onClick={() => removeSubtask(p.id, t.id, s.id)} aria-label="削除" style={styles.deleteBtn}>×</button>
                                       </div>
                                     </li>
