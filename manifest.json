@@ -5,7 +5,7 @@
   "start_url": "/taskmania/",
   "display": "standalone",
   "orientation": "portrait",
-  "theme_color": "#6c47d9",
+  "theme_color": "#e8630c",
   "background_color": "#f7f7fb",
   "icons": [
     {
