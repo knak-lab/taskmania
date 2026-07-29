@@ -1705,7 +1705,7 @@ export default function App() {
       <div style={styles.shell}>
         <header style={styles.header}>
           <div style={styles.logoRow}>
-            <span style={styles.logoMark}>⏳️</span>
+            <img src={`${import.meta.env.BASE_URL}favicon.svg`} alt="" style={styles.logoMark} />
             <div>
               <h1 style={styles.title}>タスクマニア！</h1>
             </div>
@@ -2388,7 +2388,7 @@ const styles = {
   shell: { width: "fit-content", maxWidth: "100%", margin: "0 auto" },
   header: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 18 },
   logoRow: { display: "flex", alignItems: "center", gap: 12 },
-  logoMark: { fontFamily: "'Shippori Mincho', serif", fontWeight: 700, fontSize: 22, color: "#FFFFFF", background: "#F39800", width: 40, height: 40, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, boxShadow: "0 2px 0 rgba(44,54,69,0.25)" },
+  logoMark: { width: 40, height: 40, flexShrink: 0, objectFit: "contain" },
   title: { fontFamily: "Arial, sans-serif", fontWeight: 700, fontSize: 32, color: "#2C3645", margin: 0, letterSpacing: "0.02em" },
   saveIndicator: { fontSize: 11, color: "#7A7A7A", minWidth: 60, textAlign: "right" },
   reloadBtn: { fontSize: 11, fontWeight: 700, color: "#12314F", background: "transparent", border: "1.5px solid #12314F", borderRadius: 5, padding: "3px 8px", cursor: "pointer", fontFamily: "inherit" },
