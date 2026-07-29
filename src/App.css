@@ -2,8 +2,8 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  --accent: #6c47d9;
-  --accent-hover: #5535b8;
+  --accent: #e8630c;
+  --accent-hover: #c94f00;
   --bg: #f7f7fb;
   --surface: #ffffff;
   --border: #e2e2ee;
@@ -44,7 +44,7 @@ body {
   background: var(--accent);
   color: white;
   flex-shrink: 0;
-  box-shadow: 0 2px 6px rgba(108,71,217,0.3);
+  box-shadow: 0 2px 6px rgba(232,99,12,0.3);
 }
 
 .app-title {
