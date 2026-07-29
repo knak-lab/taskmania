@@ -1705,7 +1705,7 @@ export default function App() {
       <div style={styles.shell}>
         <header style={styles.header}>
           <div style={styles.logoRow}>
-            <img src={`${import.meta.env.BASE_URL}favicon.svg`} alt="" style={styles.logoMark} />
+            <img src={`${import.meta.env.BASE_URL}icon-192.png`} alt="" style={styles.logoMark} />
             <div>
               <h1 style={styles.title}>タスクマニア！</h1>
             </div>
