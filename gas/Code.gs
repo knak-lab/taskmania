@@ -160,7 +160,12 @@ function readProjects_() {
       estimatedMinutes: estimatedMinutes ? Number(estimatedMinutes) : null,
       actualMinutes: actualMinutes ? Number(actualMinutes) : null,
       createdAt: createdAt ? Number(createdAt) : Date.now(),
-      repeatWeekday: repeatWeekday !== "" && repeatWeekday != null ? Number(repeatWeekday) : null,
+      repeatWeekday:
+        repeatWeekday === "" || repeatWeekday == null
+          ? null
+          : repeatWeekday === "weekday" || repeatWeekday === "satsun"
+            ? repeatWeekday
+            : Number(repeatWeekday),
       steps: stepsBySubtask[id] || [],
     });
   });
