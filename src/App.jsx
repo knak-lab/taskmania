@@ -1692,6 +1692,11 @@ export default function App() {
           100% { transform: scale(1) rotate(-10deg); opacity: 1; }
         }
         .hanko-pop { animation: stampIn 0.5s cubic-bezier(.2,.9,.3,1.2); }
+        @keyframes wobble {
+          0%, 100% { transform: rotate(-8deg); }
+          50% { transform: rotate(8deg); }
+        }
+        .loading-wobble { animation: wobble 0.9s ease-in-out infinite; }
         input:focus, select:focus, button:focus-visible { outline: 2px solid #12314F; outline-offset: 2px; }
         ::placeholder { color: #9B9B9B; }
         @media (min-width: 768px) {
@@ -1706,6 +1711,12 @@ export default function App() {
           .sub-row .sub-body { order: -1; flex: 1 1 100% !important; width: 100%; }
         }
       `}</style>
+
+      {saveState === "loading" && (
+        <div style={styles.loadingOverlay}>
+          <img src={`${import.meta.env.BASE_URL}icon-512.png`} alt="読み込み中" className="loading-wobble" style={styles.loadingOverlayIcon} />
+        </div>
+      )}
 
       <div style={styles.shell}>
         <header style={styles.header}>
@@ -2394,6 +2405,8 @@ const styles = {
   header: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 18 },
   logoRow: { display: "flex", alignItems: "center", gap: 12 },
   logoMark: { width: 80, height: 80, flexShrink: 0, objectFit: "contain" },
+  loadingOverlay: { position: "fixed", inset: 0, background: "rgba(255,255,255,0.85)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999 },
+  loadingOverlayIcon: { width: 120, height: 120, objectFit: "contain" },
   title: { fontFamily: "Arial, sans-serif", fontWeight: 700, fontSize: 32, color: "#2C3645", margin: 0, letterSpacing: "0.02em" },
   saveIndicator: { fontSize: 11, color: "#7A7A7A", minWidth: 60, textAlign: "right" },
   reloadBtn: { fontSize: 11, fontWeight: 700, color: "#12314F", background: "transparent", border: "1.5px solid #12314F", borderRadius: 5, padding: "3px 8px", cursor: "pointer", fontFamily: "inherit" },
