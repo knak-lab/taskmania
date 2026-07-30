@@ -202,6 +202,11 @@ function startOfWeek(d) {
   return monday;
 }
 
+function isWeekdayStr(dateStr) {
+  const day = new Date(dateStr + "T00:00:00").getDay();
+  return day >= 1 && day <= 5;
+}
+
 function toDateStr(d) {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
@@ -1179,7 +1184,7 @@ export default function App() {
 
   const weekDates = useMemo(() => {
     const monday = startOfWeek(new Date());
-    return Array.from({ length: 5 }, (_, i) => {
+    return Array.from({ length: 7 }, (_, i) => {
       const d = new Date(monday); d.setDate(monday.getDate() + i); return toDateStr(d);
     });
   }, []);
@@ -1205,9 +1210,9 @@ export default function App() {
   }, [visibleProjects, weekDates, showTaskSections]);
 
   const weekSummary = useMemo(() => {
-    const futureDates = weekDates.filter(d => d >= todayStr);
-    const baseMinutes = futureDates.length * 8 * 60;
-    const adjMinutes = weekAdj.filter(a => futureDates.includes(a.date)).reduce((sum, a) => sum + a.hours * 60, 0);
+    const futureWeekdays = weekDates.filter(d => d >= todayStr && isWeekdayStr(d));
+    const baseMinutes = futureWeekdays.length * 8 * 60;
+    const adjMinutes = weekAdj.filter(a => futureWeekdays.includes(a.date)).reduce((sum, a) => sum + a.hours * 60, 0);
     const effectiveMinutes = Math.max(0, baseMinutes - adjMinutes);
     const estMinutes = weekTasks.filter(t => t.sub.scheduledDate >= todayStr).reduce((sum, t) => sum + (t.sub.estimatedMinutes || 0), 0);
     const ratio = effectiveMinutes > 0 ? estMinutes / effectiveMinutes : 0;
@@ -1244,7 +1249,7 @@ export default function App() {
 
   const nextWeekDates = useMemo(() => {
     const monday = startOfWeek(new Date());
-    return Array.from({ length: 5 }, (_, i) => {
+    return Array.from({ length: 7 }, (_, i) => {
       const d = new Date(monday); d.setDate(monday.getDate() + 7 + i); return toDateStr(d);
     });
   }, []);
@@ -1270,9 +1275,9 @@ export default function App() {
   }, [visibleProjects, nextWeekDates, showTaskSections]);
 
   const nextWeekSummary = useMemo(() => {
-    const futureDates = nextWeekDates.filter(d => d >= todayStr);
-    const baseMinutes = futureDates.length * 8 * 60;
-    const adjMinutes = nextWeekAdj.filter(a => futureDates.includes(a.date)).reduce((sum, a) => sum + a.hours * 60, 0);
+    const futureWeekdays = nextWeekDates.filter(d => d >= todayStr && isWeekdayStr(d));
+    const baseMinutes = futureWeekdays.length * 8 * 60;
+    const adjMinutes = nextWeekAdj.filter(a => futureWeekdays.includes(a.date)).reduce((sum, a) => sum + a.hours * 60, 0);
     const effectiveMinutes = Math.max(0, baseMinutes - adjMinutes);
     const estMinutes = nextWeekTasks.filter(t => t.sub.scheduledDate >= todayStr).reduce((sum, t) => sum + (t.sub.estimatedMinutes || 0), 0);
     const ratio = effectiveMinutes > 0 ? estMinutes / effectiveMinutes : 0;
@@ -1296,7 +1301,7 @@ export default function App() {
 
   const lastWeekDates = useMemo(() => {
     const monday = startOfWeek(new Date());
-    return Array.from({ length: 5 }, (_, i) => {
+    return Array.from({ length: 7 }, (_, i) => {
       const d = new Date(monday); d.setDate(monday.getDate() - 7 + i); return toDateStr(d);
     });
   }, []);
@@ -1845,7 +1850,7 @@ export default function App() {
                     <label style={styles.scheduleEditField}>
                       <span style={styles.scheduleEditLabel}>稼働調整日</span>
                       <select value={adjDateVal} onChange={(e) => setAdjDateVal(e.target.value)} style={styles.scheduleEditInput}>
-                        {weekDates.map((d) => {
+                        {weekDates.filter(isWeekdayStr).map((d) => {
                           const dt = new Date(d + "T00:00:00");
                           return <option key={d} value={d}>{formatDate(d)}({DAY_JP[dt.getDay()]})</option>;
                         })}
@@ -1909,7 +1914,7 @@ export default function App() {
                     <label style={styles.scheduleEditField}>
                       <span style={styles.scheduleEditLabel}>稼働調整日</span>
                       <select value={nextAdjDateVal} onChange={(e) => setNextAdjDateVal(e.target.value)} style={styles.scheduleEditInput}>
-                        {nextWeekDates.map((d) => {
+                        {nextWeekDates.filter(isWeekdayStr).map((d) => {
                           const dt = new Date(d + "T00:00:00");
                           return <option key={d} value={d}>{formatDate(d)}({DAY_JP[dt.getDay()]})</option>;
                         })}
@@ -2388,7 +2393,7 @@ const styles = {
   shell: { width: "fit-content", maxWidth: "100%", margin: "0 auto" },
   header: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 18 },
   logoRow: { display: "flex", alignItems: "center", gap: 12 },
-  logoMark: { width: 40, height: 40, flexShrink: 0, objectFit: "contain" },
+  logoMark: { width: 80, height: 80, flexShrink: 0, objectFit: "contain" },
   title: { fontFamily: "Arial, sans-serif", fontWeight: 700, fontSize: 32, color: "#2C3645", margin: 0, letterSpacing: "0.02em" },
   saveIndicator: { fontSize: 11, color: "#7A7A7A", minWidth: 60, textAlign: "right" },
   reloadBtn: { fontSize: 11, fontWeight: 700, color: "#12314F", background: "transparent", border: "1.5px solid #12314F", borderRadius: 5, padding: "3px 8px", cursor: "pointer", fontFamily: "inherit" },
