@@ -1,4 +1,13 @@
 const GAS_URL = import.meta.env.VITE_GAS_URL;
+const KAMO_GAS_URL = import.meta.env.VITE_KAMO_GAS_URL;
+
+export async function loadKamoTodos() {
+  if (!KAMO_GAS_URL) return { todos: [], subtasks: [] };
+  const res = await fetch(KAMO_GAS_URL);
+  if (!res.ok) throw new Error(`Kamo GAS load failed: ${res.status}`);
+  const data = await res.json();
+  return { todos: data.todos || [], subtasks: data.subtasks || [] };
+}
 
 export async function loadAppData() {
   const res = await fetch(GAS_URL);

@@ -70,6 +70,12 @@
  * 既存スプレッドシートを使っている場合の移行手順(今週・来週の稼働調整を端末ローカルからスプレッドシート同期に変更した際):
  *   WorkAdjustmentsシートが自動生成される(setup関数を再実行するか、初回アクセス時に自動作成される)。
  *   移行前に端末のlocalStorageに保存されていた調整値は自動移行されないため、必要なものは手動で入れ直すこと。
+ *
+ * 既存スプレッドシートを使っている場合の移行手順(カモの小屋TODO連携用にTasksへsourceTodoId、Subtasksへ
+ * sourceSubtaskId/doneUpdatedAtを追加した際):
+ *   既存のTasksシートのG1セルに手動で "sourceTodoId" と入力しておくこと。
+ *   既存のSubtasksシートのL1・M1セルに手動で "sourceSubtaskId" "doneUpdatedAt" と入力しておくこと。
+ *   既存行が空欄の場合はカモの小屋と未連携のタスク/サブタスクとして扱われるので、値が入っていなくても壊れない。
  */
 
 const SHEET_PROJECTS = "Projects";
@@ -80,7 +86,7 @@ const SHEET_MOYAMOYA = "MoyamoyaNotes";
 const SHEET_WORKADJ = "WorkAdjustments";
 
 const PROJECTS_HEADERS = ["id", "owner", "name", "subcategory", "priority", "status", "completedNote", "nextAction", "moyamoya"];
-const TASKS_HEADERS = ["id", "projectId", "name", "startDate", "endDate", "estimatedMinutes"];
+const TASKS_HEADERS = ["id", "projectId", "name", "startDate", "endDate", "estimatedMinutes", "sourceTodoId"];
 const SUBTASKS_HEADERS = [
   "id",
   "taskId",
@@ -93,6 +99,8 @@ const SUBTASKS_HEADERS = [
   "actualMinutes",
   "createdAt",
   "repeatWeekday",
+  "sourceSubtaskId",
+  "doneUpdatedAt",
 ];
 const STEPS_HEADERS = ["id", "subtaskId", "text", "done"];
 const MOYAMOYA_HEADERS = ["id", "text"];
@@ -180,7 +188,9 @@ function readProjects_() {
       estimatedMinutes = r[7],
       actualMinutes = r[8],
       createdAt = r[9],
-      repeatWeekday = r[10];
+      repeatWeekday = r[10],
+      sourceSubtaskId = r[11],
+      doneUpdatedAt = r[12];
     if (!id || !taskId) return;
     if (!subtasksByTask[taskId]) subtasksByTask[taskId] = [];
     subtasksByTask[taskId].push({
@@ -200,6 +210,8 @@ function readProjects_() {
             ? repeatWeekday
             : Number(repeatWeekday),
       steps: stepsBySubtask[id] || [],
+      sourceSubtaskId: sourceSubtaskId ? String(sourceSubtaskId) : null,
+      doneUpdatedAt: doneUpdatedAt ? Number(doneUpdatedAt) : 0,
     });
   });
 
@@ -210,7 +222,8 @@ function readProjects_() {
       name = r[2],
       startDate = r[3],
       endDate = r[4],
-      estimatedMinutes = r[5];
+      estimatedMinutes = r[5],
+      sourceTodoId = r[6];
     if (!id || !projectId) return;
     if (!tasksByProject[projectId]) tasksByProject[projectId] = [];
     tasksByProject[projectId].push({
@@ -220,6 +233,7 @@ function readProjects_() {
       endDate: endDate ? String(endDate) : null,
       estimatedMinutes: estimatedMinutes ? Number(estimatedMinutes) : null,
       subtasks: subtasksByTask[id] || [],
+      sourceTodoId: sourceTodoId ? String(sourceTodoId) : null,
     });
   });
 
@@ -317,7 +331,7 @@ function writeProjects_(projects) {
   (projects || []).forEach(function (p) {
     projRows.push([p.id, p.owner || "", p.name || "", p.subcategory || "", p.priority || 2, p.status || "", p.completedNote || "", p.nextAction || "", !!p.moyamoya]);
     (p.tasks || []).forEach(function (t) {
-      taskRows.push([t.id, p.id, t.name || "", t.startDate || "", t.endDate || "", t.estimatedMinutes || ""]);
+      taskRows.push([t.id, p.id, t.name || "", t.startDate || "", t.endDate || "", t.estimatedMinutes || "", t.sourceTodoId || ""]);
       (t.subtasks || []).forEach(function (s) {
         subRows.push([
           s.id,
@@ -331,6 +345,8 @@ function writeProjects_(projects) {
           s.actualMinutes || "",
           s.createdAt || Date.now(),
           s.repeatWeekday != null ? s.repeatWeekday : "",
+          s.sourceSubtaskId || "",
+          s.doneUpdatedAt || "",
         ]);
         (s.steps || []).forEach(function (st) {
           stepRows.push([st.id, s.id, st.text || "", !!st.done]);

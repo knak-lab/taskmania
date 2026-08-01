@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import * as XLSX from "xlsx";
-import { loadAppData, saveProjects as gasSave, saveMoyamoyaNotes as gasSaveMoyamoyaNotes, saveWorkAdj as gasSaveWorkAdj } from "./api/gas";
+import { loadAppData, loadKamoTodos, saveProjects as gasSave, saveMoyamoyaNotes as gasSaveMoyamoyaNotes, saveWorkAdj as gasSaveWorkAdj } from "./api/gas";
 
 const TOP_TABS = [
   { key: "総合", label: "総合", color: "#2C3645" },
@@ -145,6 +145,73 @@ function task(name, subtasks, startDate, endDate, estimatedMinutes) {
 
 function project(owner, name, tasks, subcategory, priority) {
   return { id: uid(), owner, name, tasks, subcategory: subcategory || null, priority: priority || 2, completedNote: "", nextAction: "", moyamoya: false };
+}
+
+// カモの小屋のTODO(あっこ/かける担当のサブタスクを含む親TODO)を、家族タブの
+// 既存「カモの小屋」PJに同期する。内容(タスク名・サブタスク名)はカモ側が正、
+// 完了状態(done)はタイムスタンプが新しい方が勝つ双方向。削除は行わない。
+const KAMO_PROJECT_ID = "mrv5lsgyl1o3t";
+const KAMO_SYNC_ASSIGNEES = ["あっこ", "かける"];
+
+function mergeKamoSync(projects, kamoTodos, kamoSubtasks) {
+  const kamoProject = projects.find((p) => p.id === KAMO_PROJECT_ID)
+    || projects.find((p) => p.owner === "家族" && p.name === "カモの小屋");
+  if (!kamoProject) return projects;
+
+  const kamoSubsByTodo = {};
+  (kamoSubtasks || []).forEach((s) => {
+    if (!KAMO_SYNC_ASSIGNEES.includes(s.assignee)) return;
+    (kamoSubsByTodo[s.parentTaskId] ||= []).push(s);
+  });
+
+  const qualifyingTodos = (kamoTodos || []).filter((t) => (kamoSubsByTodo[t.id] || []).length > 0);
+  if (qualifyingTodos.length === 0) return projects;
+
+  let changed = false;
+  const existingTasks = kamoProject.tasks || [];
+  const nextTasks = existingTasks.map((t) => ({ ...t, subtasks: t.subtasks.map((s) => ({ ...s })) }));
+
+  qualifyingTodos.forEach((todo) => {
+    let t = nextTasks.find((tt) => tt.sourceTodoId === todo.id);
+    if (!t) {
+      t = task(todo.task, [], null, null, null);
+      t.sourceTodoId = todo.id;
+      nextTasks.push(t);
+      changed = true;
+    } else if (t.name !== todo.task) {
+      t.name = todo.task;
+      changed = true;
+    }
+
+    kamoSubsByTodo[todo.id].forEach((kamoSub) => {
+      const wantText = `【${kamoSub.assignee}】${kamoSub.name}`;
+      let s = t.subtasks.find((ss) => ss.sourceSubtaskId === kamoSub.id);
+      if (!s) {
+        s = sub(wantText, kamoSub.status === "完了", 2, null, null, null, null);
+        s.sourceSubtaskId = kamoSub.id;
+        s.doneUpdatedAt = kamoSub.statusUpdatedAt || Date.now();
+        t.subtasks.push(s);
+        changed = true;
+        return;
+      }
+      if (s.text !== wantText) {
+        s.text = wantText;
+        changed = true;
+      }
+      const kamoUpdatedAt = kamoSub.statusUpdatedAt || 0;
+      if (kamoUpdatedAt > (s.doneUpdatedAt || 0)) {
+        const wantDone = kamoSub.status === "完了";
+        if (s.done !== wantDone) {
+          s.done = wantDone;
+          changed = true;
+        }
+        s.doneUpdatedAt = kamoUpdatedAt;
+      }
+    });
+  });
+
+  if (!changed) return projects;
+  return projects.map((p) => (p.id === kamoProject.id ? { ...p, tasks: nextTasks } : p));
 }
 
 function seedProjects() {
@@ -1301,6 +1368,12 @@ export default function App() {
       setWorkAdj(data.workAdj);
       hasLoadedRef.current = true;
       setSaveState("idle");
+      try {
+        const kamo = await loadKamoTodos();
+        setProjects((prev) => mergeKamoSync(prev, kamo.todos, kamo.subtasks));
+      } catch {
+        // カモの小屋側が読み込めなくても、タスクマニア自体の読み込みは成功扱いのまま続行する
+      }
     } catch {
       // 既に一度でも読み込みに成功していれば、今持っているデータを保持したまま
       // エラー表示のみ行う(サンプルデータで上書きして自動保存させない)。
@@ -1797,7 +1870,7 @@ export default function App() {
       return {
         ...pp, tasks: pp.tasks.map((tt) => {
           if (tt.id !== taskId) return tt;
-          const subtasks = tt.subtasks.map((ss) => (ss.id === subId ? { ...ss, done: !ss.done } : ss));
+          const subtasks = tt.subtasks.map((ss) => (ss.id === subId ? { ...ss, done: !ss.done, doneUpdatedAt: Date.now() } : ss));
           if (completing && s.repeatWeekday != null && s.scheduledDate) {
             const shiftHoliday = pp.owner === "kkr" && pp.subcategory === "仕事";
             const nextDate = computeNextRecurrenceDate(s.scheduledDate, s.repeatWeekday, shiftHoliday);
@@ -1994,7 +2067,7 @@ export default function App() {
           if (s.id !== subId) return s;
           const steps = (s.steps || []).map((st) => (st.id === stepId ? { ...st, done: !st.done } : st));
           const allDone = steps.length > 0 && steps.every((st) => st.done);
-          return { ...s, steps, done: allDone };
+          return { ...s, steps, done: allDone, doneUpdatedAt: allDone !== s.done ? Date.now() : s.doneUpdatedAt };
         }),
       }),
     }));
@@ -2015,7 +2088,8 @@ export default function App() {
           if (s.id !== subId) return s;
           const steps = (s.steps || []).filter((st) => st.id !== stepId);
           const allDone = steps.length > 0 && steps.every((st) => st.done);
-          return { ...s, steps, done: steps.length > 0 ? allDone : s.done };
+          const nextDone = steps.length > 0 ? allDone : s.done;
+          return { ...s, steps, done: nextDone, doneUpdatedAt: nextDone !== s.done ? Date.now() : s.doneUpdatedAt };
         }),
       }),
     }));
