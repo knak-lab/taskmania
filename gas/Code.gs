@@ -58,14 +58,28 @@
  *   複数PJをまとめて一括更新できる(次にアプリを開いた時に反映される)。
  *   既存行のG・H列が空欄の場合は未入力として扱われるので、値が入っていなくても壊れない。
  *   (旧・時系列ログ形式の ProjectNotes シートは使用しなくなったが、過去データはそのまま残る)
+ *
+ * 既存スプレッドシートを使っている場合の移行手順(Projectsにmoyamoya列を追加した際):
+ *   既存のProjectsシートのI1セルに手動で "moyamoya" と入力しておくこと。
+ *   既存行のI列が空欄の場合はfalse(もやもや未指定)として扱われるので、値が入っていなくても壊れない。
+ *
+ * 既存スプレッドシートを使っている場合の移行手順(もやもやのフリーテキストメモを端末ローカルからスプレッドシート同期に変更した際):
+ *   MoyamoyaNotesシートが自動生成される(setup関数を再実行するか、初回アクセス時に自動作成される)。
+ *   移行前に端末のlocalStorageに保存されていたメモは自動移行されないため、必要なものは手動で書き直すこと。
+ *
+ * 既存スプレッドシートを使っている場合の移行手順(今週・来週の稼働調整を端末ローカルからスプレッドシート同期に変更した際):
+ *   WorkAdjustmentsシートが自動生成される(setup関数を再実行するか、初回アクセス時に自動作成される)。
+ *   移行前に端末のlocalStorageに保存されていた調整値は自動移行されないため、必要なものは手動で入れ直すこと。
  */
 
 const SHEET_PROJECTS = "Projects";
 const SHEET_TASKS = "Tasks";
 const SHEET_SUBTASKS = "Subtasks";
 const SHEET_STEPS = "Steps";
+const SHEET_MOYAMOYA = "MoyamoyaNotes";
+const SHEET_WORKADJ = "WorkAdjustments";
 
-const PROJECTS_HEADERS = ["id", "owner", "name", "subcategory", "priority", "status", "completedNote", "nextAction"];
+const PROJECTS_HEADERS = ["id", "owner", "name", "subcategory", "priority", "status", "completedNote", "nextAction", "moyamoya"];
 const TASKS_HEADERS = ["id", "projectId", "name", "startDate", "endDate", "estimatedMinutes"];
 const SUBTASKS_HEADERS = [
   "id",
@@ -81,6 +95,8 @@ const SUBTASKS_HEADERS = [
   "repeatWeekday",
 ];
 const STEPS_HEADERS = ["id", "subtaskId", "text", "done"];
+const MOYAMOYA_HEADERS = ["id", "text"];
+const WORKADJ_HEADERS = ["date", "hours"];
 
 /** 初回セットアップ用。エディタから手動で一度だけ実行する */
 function setup() {
@@ -88,20 +104,37 @@ function setup() {
   getOrCreateSheet_(SHEET_TASKS, TASKS_HEADERS);
   getOrCreateSheet_(SHEET_SUBTASKS, SUBTASKS_HEADERS);
   getOrCreateSheet_(SHEET_STEPS, STEPS_HEADERS);
-  Logger.log("セットアップ完了: Projects / Tasks / Subtasks / Steps シートを用意しました");
+  getOrCreateSheet_(SHEET_MOYAMOYA, MOYAMOYA_HEADERS);
+  getOrCreateSheet_(SHEET_WORKADJ, WORKADJ_HEADERS);
+  Logger.log("セットアップ完了: Projects / Tasks / Subtasks / Steps / MoyamoyaNotes / WorkAdjustments シートを用意しました");
 }
 
 function doGet(e) {
   const projects = readProjects_();
-  return jsonResponse_({ projects: projects });
+  const moyamoyaNotes = readMoyamoyaNotes_();
+  const workAdj = readWorkAdj_();
+  return jsonResponse_({ projects: projects, moyamoyaNotes: moyamoyaNotes, workAdj: workAdj });
 }
 
 function doPost(e) {
   try {
     const body = JSON.parse(e.postData.contents);
-    const projects = body.projects || [];
-    writeProjects_(projects);
-    return jsonResponse_({ ok: true, count: projects.length });
+    let projectCount = null;
+    let moyamoyaCount = null;
+    let workAdjCount = null;
+    if (body.projects !== undefined) {
+      writeProjects_(body.projects || []);
+      projectCount = (body.projects || []).length;
+    }
+    if (body.moyamoyaNotes !== undefined) {
+      writeMoyamoyaNotes_(body.moyamoyaNotes || []);
+      moyamoyaCount = (body.moyamoyaNotes || []).length;
+    }
+    if (body.workAdj !== undefined) {
+      writeWorkAdj_(body.workAdj || []);
+      workAdjCount = (body.workAdj || []).length;
+    }
+    return jsonResponse_({ ok: true, projectCount: projectCount, moyamoyaCount: moyamoyaCount, workAdjCount: workAdjCount });
   } catch (err) {
     return jsonResponse_({ ok: false, error: String(err) });
   }
@@ -202,7 +235,8 @@ function readProjects_() {
         priority = r[4],
         status = r[5],
         completedNote = r[6],
-        nextAction = r[7];
+        nextAction = r[7],
+        moyamoya = r[8];
       return {
         id: String(id),
         owner: owner || "",
@@ -212,6 +246,7 @@ function readProjects_() {
         status: status || null,
         completedNote: completedNote || "",
         nextAction: nextAction || "",
+        moyamoya: moyamoya === true || moyamoya === "TRUE" || moyamoya === "true",
         tasks: tasksByProject[id] || [],
       };
     });
@@ -219,7 +254,49 @@ function readProjects_() {
   return projects;
 }
 
+function readMoyamoyaNotes_() {
+  const sheet = getOrCreateSheet_(SHEET_MOYAMOYA, MOYAMOYA_HEADERS);
+  const rows = getDataRows_(sheet);
+  return rows
+    .filter(function (r) {
+      return r[0];
+    })
+    .map(function (r) {
+      return { id: String(r[0]), text: r[1] || "" };
+    });
+}
+
+function readWorkAdj_() {
+  const sheet = getOrCreateSheet_(SHEET_WORKADJ, WORKADJ_HEADERS);
+  const rows = getDataRows_(sheet);
+  return rows
+    .filter(function (r) {
+      return r[0];
+    })
+    .map(function (r) {
+      return { date: String(r[0]), hours: Number(r[1]) || 0 };
+    });
+}
+
 // ---- 書き込み(全件洗い替え) ----
+
+function writeMoyamoyaNotes_(notes) {
+  const sheet = getOrCreateSheet_(SHEET_MOYAMOYA, MOYAMOYA_HEADERS);
+  clearDataRows_(sheet);
+  const rows = (notes || []).map(function (n) {
+    return [n.id, n.text || ""];
+  });
+  writeRows_(sheet, rows, MOYAMOYA_HEADERS.length);
+}
+
+function writeWorkAdj_(workAdj) {
+  const sheet = getOrCreateSheet_(SHEET_WORKADJ, WORKADJ_HEADERS);
+  clearDataRows_(sheet);
+  const rows = (workAdj || []).map(function (a) {
+    return [a.date, a.hours || 0];
+  });
+  writeRows_(sheet, rows, WORKADJ_HEADERS.length);
+}
 
 function writeProjects_(projects) {
   const projSheet = getOrCreateSheet_(SHEET_PROJECTS, PROJECTS_HEADERS);
@@ -238,7 +315,7 @@ function writeProjects_(projects) {
   const stepRows = [];
 
   (projects || []).forEach(function (p) {
-    projRows.push([p.id, p.owner || "", p.name || "", p.subcategory || "", p.priority || 2, p.status || "", p.completedNote || "", p.nextAction || ""]);
+    projRows.push([p.id, p.owner || "", p.name || "", p.subcategory || "", p.priority || 2, p.status || "", p.completedNote || "", p.nextAction || "", !!p.moyamoya]);
     (p.tasks || []).forEach(function (t) {
       taskRows.push([t.id, p.id, t.name || "", t.startDate || "", t.endDate || "", t.estimatedMinutes || ""]);
       (t.subtasks || []).forEach(function (s) {
@@ -286,6 +363,10 @@ function getOrCreateSheet_(name, headers) {
   // startDate / endDate 列(Tasksの4,5列目)も同様にテキスト形式に固定
   if (name === SHEET_TASKS) {
     sheet.getRange(2, 4, Math.max(sheet.getMaxRows() - 1, 1), 2).setNumberFormat("@");
+  }
+  // date列(WorkAdjustmentsの1列目)も同様にテキスト形式に固定
+  if (name === SHEET_WORKADJ) {
+    sheet.getRange(2, 1, Math.max(sheet.getMaxRows() - 1, 1), 1).setNumberFormat("@");
   }
   return sheet;
 }

@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import * as XLSX from "xlsx";
-import { loadProjects as gasLoad, saveProjects as gasSave } from "./api/gas";
+import { loadAppData, saveProjects as gasSave, saveMoyamoyaNotes as gasSaveMoyamoyaNotes, saveWorkAdj as gasSaveWorkAdj } from "./api/gas";
 
 const TOP_TABS = [
   { key: "総合", label: "総合", color: "#2C3645" },
@@ -35,6 +35,8 @@ const PJ_STATUSES = [
   { v: "done", label: "完了", color: "#6B7F6E" },
   { v: "hold", label: "保留", color: "#9B9B9B" },
 ];
+
+const MOYAMOYA_COLOR = "#8E6FA8";
 
 const MINUTE_OPTIONS = Array.from({ length: 48 }, (_, i) => (i + 1) * 15);
 const WORK_MINUTES = 8 * 60;
@@ -142,7 +144,7 @@ function task(name, subtasks, startDate, endDate, estimatedMinutes) {
 }
 
 function project(owner, name, tasks, subcategory, priority) {
-  return { id: uid(), owner, name, tasks, subcategory: subcategory || null, priority: priority || 2, completedNote: "", nextAction: "" };
+  return { id: uid(), owner, name, tasks, subcategory: subcategory || null, priority: priority || 2, completedNote: "", nextAction: "", moyamoya: false };
 }
 
 function seedProjects() {
@@ -1007,6 +1009,55 @@ function DashboardModal({ projects, onClose }) {
   );
 }
 
+const BRAIN_LEVEL_COLORS = { blue: "#2E86DE", orange: "#F39800", red: "#D64550" };
+
+function brainLevelFor(ratio) {
+  if (ratio >= 1.2) return "red-steam";
+  if (ratio >= 1) return "red";
+  if (ratio >= 0.8) return "orange";
+  return "blue";
+}
+
+function BrainIcon({ color, size = 30 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path
+        fill={color}
+        d="M17 6c-3.5 0-6.3 2.3-6.9 5.4C7.4 12.4 5.6 14.8 5.6 17.6c0 2 .9 3.8 2.3 5-.8 1.1-1.3 2.5-1.3 4 0 3.6 2.9 6.5 6.4 6.7.6 3 3.2 5.3 6.4 5.3 1.7 0 3.2-.6 4.4-1.7 1.2 1.1 2.7 1.7 4.4 1.7 3.2 0 5.9-2.3 6.4-5.3 3.5-.2 6.4-3.1 6.4-6.7 0-1.5-.5-2.9-1.3-4 1.4-1.2 2.3-3 2.3-5 0-2.8-1.8-5.2-4.5-6.2C36.4 8.4 33.9 6 30.4 6c-1.6 0-3 .5-4.2 1.4C25 6.5 23.6 6 22.2 6H17z"
+      />
+      <path
+        stroke="rgba(0,0,0,0.28)" strokeWidth="1.3" strokeLinecap="round" fill="none"
+        d="M24 8v31M15 13c2 1.2 3.2 3.2 3.2 5.5M33 13c-2 1.2-3.2 3.2-3.2 5.5M11.5 23c2.2 0 4.3 1.1 5.3 3.2M36.5 23c-2.2 0-4.3 1.1-5.3 3.2M16 31.5c1.9 0 3.2-1.1 4-3M32 31.5c-1.9 0-3.2-1.1-4-3"
+      />
+    </svg>
+  );
+}
+
+function SteamIcon() {
+  return (
+    <svg width="20" height="15" viewBox="0 0 24 18" style={styles.brainSteamIcon} fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M6 17c2.2-3.2-2-5.2 0-8.4M12 17c2.2-3.2-2-5.2 0-8.4M18 17c2.2-3.2-2-5.2 0-8.4" stroke="#9B9B9B" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function BrainBadge({ label, ratio, moyaCount }) {
+  const level = brainLevelFor(ratio);
+  const color = BRAIN_LEVEL_COLORS[level === "red-steam" ? "red" : level];
+  return (
+    <div style={styles.brainBadgeWrap}>
+      <div style={styles.brainIconBox}>
+        {level === "red-steam" && <SteamIcon />}
+        <BrainIcon color={color} />
+        {typeof moyaCount === "number" && moyaCount > 0 && (
+          <span style={styles.brainMoyaBadge}>{moyaCount}</span>
+        )}
+      </div>
+      <span style={{ ...styles.brainBadgeLabel, color }}>{label}</span>
+    </div>
+  );
+}
+
 export default function App() {
   const [projects, setProjects] = useState(null);
   const [topTab, setTopTab] = useState("kkr");
@@ -1070,16 +1121,24 @@ export default function App() {
   // これがないと、読み込み結果がたまたま不完全だった場合にその内容がそのまま
   // 自動保存され、スプレッドシートの全件洗い替えで実データを消してしまう。
   const skipNextSaveRef = useRef(false);
+  const moyamoyaSaveTimer = useRef(null);
+  const skipNextMoyamoyaSaveRef = useRef(false);
+  const workAdjSaveTimer = useRef(null);
+  const skipNextWorkAdjSaveRef = useRef(false);
 
   // 初回ロード
   const handleLoad = async () => {
     setSaveState("loading");
     try {
-      const data = await gasLoad();
-      if (data.length > 0 || !hasLoadedRef.current) {
+      const data = await loadAppData();
+      if (data.projects.length > 0 || !hasLoadedRef.current) {
         skipNextSaveRef.current = true;
-        setProjects(data.length > 0 ? data : seedProjects());
+        setProjects(data.projects.length > 0 ? data.projects : seedProjects());
       }
+      skipNextMoyamoyaSaveRef.current = true;
+      setMoyamoyaNotes(data.moyamoyaNotes);
+      skipNextWorkAdjSaveRef.current = true;
+      setWorkAdj(data.workAdj);
       hasLoadedRef.current = true;
       setSaveState("idle");
     } catch {
@@ -1164,11 +1223,51 @@ export default function App() {
   const totalActualMin = dayTasks.reduce((sum, t) => sum + (t.sub.actualMinutes || 0), 0);
   const estRatio = totalEstMin / WORK_MINUTES;
   const estWarnLevel = estRatio >= 0.8 ? "red" : estRatio >= 0.6 ? "amber" : null;
+  // 脳バッジ用: 未来(表示中の日付が今日以降)は想定時間、過去は実績時間で集計する
+  const dayBrainRatio = (dayViewDate >= todayStr ? totalEstMin : totalActualMin) / WORK_MINUTES;
+
+  // もやもや(フリーテキストのメモ。スプレッドシート経由で端末間同期)
+  const [moyamoyaNotes, setMoyamoyaNotes] = useState([]);
+  const [moyamoyaNewText, setMoyamoyaNewText] = useState("");
+  useEffect(() => {
+    if (!hasLoadedRef.current) return;
+    if (skipNextMoyamoyaSaveRef.current) { skipNextMoyamoyaSaveRef.current = false; return; }
+    clearTimeout(moyamoyaSaveTimer.current);
+    moyamoyaSaveTimer.current = setTimeout(() => {
+      gasSaveMoyamoyaNotes(moyamoyaNotes).catch(() => {});
+    }, 800);
+    return () => clearTimeout(moyamoyaSaveTimer.current);
+  }, [moyamoyaNotes]);
+
+  function addMoyamoyaNote(e) {
+    if (e && e.preventDefault) e.preventDefault();
+    const trimmed = moyamoyaNewText.trim();
+    if (!trimmed) return;
+    setMoyamoyaNotes((prev) => [...prev, { id: uid(), text: trimmed }]);
+    setMoyamoyaNewText("");
+  }
+  function updateMoyamoyaNote(id, text) {
+    setMoyamoyaNotes((prev) => prev.map((n) => (n.id === id ? { ...n, text } : n)));
+  }
+  function removeMoyamoyaNote(id) {
+    setMoyamoyaNotes((prev) => prev.filter((n) => n.id !== id));
+  }
+  const moyamoyaPjCount = useMemo(() => visibleProjects.filter((pp) => !pp.status && pp.moyamoya).length, [visibleProjects]);
+  const totalMoyamoyaCount = moyamoyaNotes.length + moyamoyaPjCount;
+
+  // 稼働調整(今週・来週・先週で共通の日付単位の調整値。スプレッドシート経由で端末間同期)
+  const [workAdj, setWorkAdj] = useState([]);
+  useEffect(() => {
+    if (!hasLoadedRef.current) return;
+    if (skipNextWorkAdjSaveRef.current) { skipNextWorkAdjSaveRef.current = false; return; }
+    clearTimeout(workAdjSaveTimer.current);
+    workAdjSaveTimer.current = setTimeout(() => {
+      gasSaveWorkAdj(workAdj).catch(() => {});
+    }, 800);
+    return () => clearTimeout(workAdjSaveTimer.current);
+  }, [workAdj]);
 
   // 今週のタスク
-  const [weekAdj, setWeekAdj] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("tm_week_adj") || "[]"); } catch { return []; }
-  });
   const [adjDateVal, setAdjDateVal] = useState(() => {
     const today = new Date(); const day = today.getDay();
     if (day >= 1 && day <= 5) return toDateStr(today);
@@ -1179,8 +1278,6 @@ export default function App() {
   const [weekCollapsed, setWeekCollapsed] = useState(true);
   const [weekOpenDates, setWeekOpenDates] = useState(() => new Set());
   function toggleWeekDate(date) { setWeekOpenDates((prev) => { const next = new Set(prev); next.has(date) ? next.delete(date) : next.add(date); return next; }); }
-
-  useEffect(() => { localStorage.setItem("tm_week_adj", JSON.stringify(weekAdj)); }, [weekAdj]);
 
   const weekDates = useMemo(() => {
     const monday = startOfWeek(new Date());
@@ -1212,27 +1309,32 @@ export default function App() {
   const weekSummary = useMemo(() => {
     const futureWeekdays = weekDates.filter(d => d >= todayStr && isWeekdayStr(d));
     const baseMinutes = futureWeekdays.length * 8 * 60;
-    const adjMinutes = weekAdj.filter(a => futureWeekdays.includes(a.date)).reduce((sum, a) => sum + a.hours * 60, 0);
+    const adjMinutes = workAdj.filter(a => futureWeekdays.includes(a.date)).reduce((sum, a) => sum + a.hours * 60, 0);
     const effectiveMinutes = Math.max(0, baseMinutes - adjMinutes);
     const estMinutes = weekTasks.filter(t => t.sub.scheduledDate >= todayStr).reduce((sum, t) => sum + (t.sub.estimatedMinutes || 0), 0);
     const ratio = effectiveMinutes > 0 ? estMinutes / effectiveMinutes : 0;
     const warnLevel = ratio >= 0.8 ? "red" : ratio >= 0.6 ? "black" : null;
-    return { baseMinutes, adjMinutes, effectiveMinutes, estMinutes, ratio, warnLevel };
-  }, [weekTasks, weekAdj, weekDates, todayStr]);
+    // 脳バッジ用: 未来(今日以降)は想定時間、過去(週内の今日より前の日)は実績時間で集計し、
+    // 分母も週全体の稼働可能時間(過去分含む)にする
+    const weekdayDates = weekDates.filter(isWeekdayStr);
+    const fullBaseMinutes = weekdayDates.length * 8 * 60;
+    const fullAdjMinutes = workAdj.filter(a => weekdayDates.includes(a.date)).reduce((sum, a) => sum + a.hours * 60, 0);
+    const fullEffectiveMinutes = Math.max(0, fullBaseMinutes - fullAdjMinutes);
+    const pastActualMinutes = weekTasks.filter(t => t.sub.scheduledDate < todayStr).reduce((sum, t) => sum + (t.sub.actualMinutes || 0), 0);
+    const brainRatio = fullEffectiveMinutes > 0 ? (estMinutes + pastActualMinutes) / fullEffectiveMinutes : 0;
+    return { baseMinutes, adjMinutes, effectiveMinutes, estMinutes, ratio, warnLevel, brainRatio };
+  }, [weekTasks, workAdj, weekDates, todayStr]);
 
   const addWeekAdj = () => {
     if (!adjDateVal || !adjHoursVal) return;
-    setWeekAdj((prev) => {
+    setWorkAdj((prev) => {
       const others = prev.filter((a) => a.date !== adjDateVal);
       return [...others, { date: adjDateVal, hours: Number(adjHoursVal) }].sort((a, b) => a.date.localeCompare(b.date));
     });
   };
-  const removeWeekAdj = (date) => setWeekAdj((prev) => prev.filter((a) => a.date !== date));
+  const removeWeekAdj = (date) => setWorkAdj((prev) => prev.filter((a) => a.date !== date));
 
   // 来週のタスク(今週のタスクと同じ内容、期間のみ+7日)
-  const [nextWeekAdj, setNextWeekAdj] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("tm_next_week_adj") || "[]"); } catch { return []; }
-  });
   const [nextAdjDateVal, setNextAdjDateVal] = useState(() => {
     const today = new Date(); const day = today.getDay();
     const monday = startOfWeek(today);
@@ -1244,8 +1346,6 @@ export default function App() {
   const [nextWeekCollapsed, setNextWeekCollapsed] = useState(true);
   const [nextWeekOpenDates, setNextWeekOpenDates] = useState(() => new Set());
   function toggleNextWeekDate(date) { setNextWeekOpenDates((prev) => { const next = new Set(prev); next.has(date) ? next.delete(date) : next.add(date); return next; }); }
-
-  useEffect(() => { localStorage.setItem("tm_next_week_adj", JSON.stringify(nextWeekAdj)); }, [nextWeekAdj]);
 
   const nextWeekDates = useMemo(() => {
     const monday = startOfWeek(new Date());
@@ -1277,24 +1377,24 @@ export default function App() {
   const nextWeekSummary = useMemo(() => {
     const futureWeekdays = nextWeekDates.filter(d => d >= todayStr && isWeekdayStr(d));
     const baseMinutes = futureWeekdays.length * 8 * 60;
-    const adjMinutes = nextWeekAdj.filter(a => futureWeekdays.includes(a.date)).reduce((sum, a) => sum + a.hours * 60, 0);
+    const adjMinutes = workAdj.filter(a => futureWeekdays.includes(a.date)).reduce((sum, a) => sum + a.hours * 60, 0);
     const effectiveMinutes = Math.max(0, baseMinutes - adjMinutes);
     const estMinutes = nextWeekTasks.filter(t => t.sub.scheduledDate >= todayStr).reduce((sum, t) => sum + (t.sub.estimatedMinutes || 0), 0);
     const ratio = effectiveMinutes > 0 ? estMinutes / effectiveMinutes : 0;
     const warnLevel = ratio >= 0.8 ? "red" : ratio >= 0.6 ? "black" : null;
     return { baseMinutes, adjMinutes, effectiveMinutes, estMinutes, ratio, warnLevel };
-  }, [nextWeekTasks, nextWeekAdj, nextWeekDates, todayStr]);
+  }, [nextWeekTasks, workAdj, nextWeekDates, todayStr]);
 
   const addNextWeekAdj = () => {
     if (!nextAdjDateVal || !nextAdjHoursVal) return;
-    setNextWeekAdj((prev) => {
+    setWorkAdj((prev) => {
       const others = prev.filter((a) => a.date !== nextAdjDateVal);
       return [...others, { date: nextAdjDateVal, hours: Number(nextAdjHoursVal) }].sort((a, b) => a.date.localeCompare(b.date));
     });
   };
-  const removeNextWeekAdj = (date) => setNextWeekAdj((prev) => prev.filter((a) => a.date !== date));
+  const removeNextWeekAdj = (date) => setWorkAdj((prev) => prev.filter((a) => a.date !== date));
 
-  // 先週のタスク(今週のタスクと同じ内容、期間のみ-7日。過去分のため稼働調整はなし)
+  // 先週のタスク(今週のタスクと同じ内容、期間のみ-7日。稼働調整はworkAdjを日付で参照)
   const [lastWeekCollapsed, setLastWeekCollapsed] = useState(true);
   const [lastWeekOpenDates, setLastWeekOpenDates] = useState(() => new Set());
   function toggleLastWeekDate(date) { setLastWeekOpenDates((prev) => { const next = new Set(prev); next.has(date) ? next.delete(date) : next.add(date); return next; }); }
@@ -1329,8 +1429,13 @@ export default function App() {
   const lastWeekSummary = useMemo(() => {
     const estMinutes = lastWeekTasks.reduce((sum, t) => sum + (t.sub.estimatedMinutes || 0), 0);
     const actualMinutes = lastWeekTasks.reduce((sum, t) => sum + (t.sub.actualMinutes || 0), 0);
-    return { estMinutes, actualMinutes };
-  }, [lastWeekTasks]);
+    const weekdayDates = lastWeekDates.filter(isWeekdayStr);
+    const rawMinutes = weekdayDates.length * 8 * 60;
+    const adjMinutes = workAdj.filter((a) => weekdayDates.includes(a.date)).reduce((sum, a) => sum + a.hours * 60, 0);
+    const baseMinutes = Math.max(0, rawMinutes - adjMinutes);
+    const ratio = baseMinutes > 0 ? actualMinutes / baseMinutes : 0;
+    return { estMinutes, actualMinutes, baseMinutes, ratio };
+  }, [lastWeekTasks, lastWeekDates, workAdj]);
 
   const openCountFor = (owner, subcat) => {
     if (!projects) return 0;
@@ -1356,6 +1461,10 @@ export default function App() {
 
   function updatePJPriority(pjId, priority) {
     setProjects((prev) => prev.map((p) => (p.id === pjId ? { ...p, priority } : p)));
+  }
+
+  function togglePJMoyamoya(pjId) {
+    setProjects((prev) => prev.map((p) => (p.id === pjId ? { ...p, moyamoya: !p.moyamoya } : p)));
   }
 
   function movePJInSection(groupIds, pjId, direction) {
@@ -1552,6 +1661,39 @@ export default function App() {
     setRunningTarget({ pjId, taskId, subId, startAt: Date.now(), accumulatedMs: 0, paused: false });
   }
 
+  // 一時停止中の計測時間を手修正(止め忘れて計測が長くなりすぎた場合の救済用)
+  function updateRunningAccumulatedMinutes(value) {
+    if (!runningTarget || !runningTarget.paused) return;
+    const minutes = Math.max(0, Number(value) || 0);
+    setRunningTarget({ ...runningTarget, accumulatedMs: minutes * 60000 });
+  }
+
+  function renderStopwatchControl(pjId, taskId, subId) {
+    const isActive = runningTarget?.subId === subId;
+    const isPaused = isActive && runningTarget.paused;
+    const isRunning = isActive && !runningTarget.paused;
+    if (isPaused) {
+      const minutes = Math.floor(stopwatchElapsedMs(runningTarget) / 60000);
+      return (
+        <span style={styles.stopwatchEditGroup}>
+          <input type="number" min="0" step="1" value={minutes}
+            onChange={(e) => updateRunningAccumulatedMinutes(e.target.value)}
+            style={styles.stopwatchEditInput} aria-label="計測時間を修正(分)" />
+          <button type="button" onClick={() => toggleStopwatch(pjId, taskId, subId)}
+            style={{ ...styles.stopwatchBtn, background: "transparent", color: "#12314F", borderColor: "#12314F" }}
+            aria-label="計測を再開">▶</button>
+        </span>
+      );
+    }
+    return (
+      <button type="button" onClick={() => toggleStopwatch(pjId, taskId, subId)}
+        style={{ ...styles.stopwatchBtn, background: isRunning ? "#F39800" : "transparent", color: isRunning ? "#FFFFFF" : "#12314F", borderColor: "#12314F" }}
+        aria-label={isActive ? "一時停止" : "計測を開始"}>
+        {isRunning ? (() => { const sec = Math.max(0, Math.floor(stopwatchElapsedMs(runningTarget) / 1000)); return `⏸ ${String(Math.floor(sec / 60)).padStart(2, "0")}:${String(sec % 60).padStart(2, "0")}`; })() : "▶"}
+      </button>
+    );
+  }
+
   function moveSubtask(fromPjId, fromTaskId, subId, toPjId, toTaskId) {
     setProjects((prev) => {
       let moved = null;
@@ -1677,6 +1819,206 @@ export default function App() {
 
   const saveLabel = { idle: "", loading: "読込中…", saving: "保存中…", saved: "保存済み", error: "保存失敗" }[saveState];
 
+  function renderPrioritySection(sec) {
+    const group = sec.group;
+    if (group.length === 0 && !sec.moyamoya) return null;
+    const sectionOpen = !collapsedPrioritySection.has(sec.key);
+    return (
+      <div key={sec.key} style={sec.small ? styles.statusSection : styles.prioritySection}>
+        <button type="button" onClick={() => togglePrioritySection(sec.key)} style={{ ...(sec.small ? styles.statusSectionHeader : styles.prioritySectionHeader), color: sec.color, borderColor: sec.color }}>
+          <span>{sectionOpen ? "▾" : "▸"}</span>
+          <span>{sec.label}</span>
+          <span style={styles.prioritySectionCount}>{group.length}</span>
+        </button>
+        {sectionOpen && (
+          <div style={styles.prioritySectionBody}>
+            {sec.moyamoya && (
+              <div style={styles.moyamoyaNotes}>
+                <form onSubmit={addMoyamoyaNote} style={styles.moyamoyaAddForm}>
+                  <input type="text" value={moyamoyaNewText} onChange={(e) => setMoyamoyaNewText(e.target.value)}
+                    placeholder="もやもやしていることを書く…" style={styles.moyamoyaInput} aria-label="もやもやを追加" />
+                  <button type="submit" style={styles.moyamoyaAddBtn}>＋</button>
+                </form>
+                {moyamoyaNotes.map((n) => (
+                  <div key={n.id} style={styles.moyamoyaNoteRow}>
+                    <input type="text" value={n.text} onChange={(e) => updateMoyamoyaNote(n.id, e.target.value)}
+                      style={styles.moyamoyaInput} aria-label="もやもやを編集" />
+                    <button type="button" onClick={() => removeMoyamoyaNote(n.id)} aria-label="もやもやを削除" style={styles.deleteBtn}>×</button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {group.map((p, pIdx) => {
+              const groupIds = group.map((gp) => gp.id);
+              const pjOpen = openPJ.has(p.id);
+              const { done: pd, total: pt } = pjProgress(p);
+              const oColor = ownerColorOf(p.owner);
+              return (
+                <div key={p.id} style={{ ...styles.pjCard, borderLeftColor: oColor }} className="row-in">
+                  <div style={styles.pjHeader} className="pj-header">
+                    <div style={styles.reorderBtns}>
+                      <button type="button" onClick={() => movePJInSection(groupIds, p.id, "up")} disabled={pIdx === 0} style={{ ...styles.reorderBtn, opacity: pIdx === 0 ? 0.3 : 1, cursor: pIdx === 0 ? "default" : "pointer" }} aria-label="上へ移動">▲</button>
+                      <button type="button" onClick={() => movePJInSection(groupIds, p.id, "down")} disabled={pIdx === groupIds.length - 1} style={{ ...styles.reorderBtn, opacity: pIdx === groupIds.length - 1 ? 0.3 : 1, cursor: pIdx === groupIds.length - 1 ? "default" : "pointer" }} aria-label="下へ移動">▼</button>
+                    </div>
+                    <button onClick={() => toggleOpenPJ(p.id)} style={styles.collapseBtn} aria-label={pjOpen ? "折りたたむ" : "展開する"}>{pjOpen ? "▾" : "▸"}</button>
+                    <input type="text" value={p.name} onChange={(e) => updatePJName(p.id, e.target.value)} style={styles.pjNameInput} className="pj-title-input" aria-label="PJ名を編集" />
+                    {pt > 0 && pd === pt && <span style={styles.doneMark}>✅</span>}
+                    <button type="button" onClick={() => setPjDetailModal(p.id)} style={styles.ganttToggleBtn} aria-label="ガントチャートを表示">📊</button>
+                    <button type="button" onClick={() => togglePJMoyamoya(p.id)}
+                      style={{ ...styles.moyamoyaToggleBtn, background: p.moyamoya ? MOYAMOYA_COLOR : "transparent", color: p.moyamoya ? "#FFFFFF" : MOYAMOYA_COLOR, borderColor: MOYAMOYA_COLOR }}
+                      aria-label={p.moyamoya ? "もやもやから外す" : "もやもやに入れる"}>もや</button>
+                    <select value={p.priority || 2} onChange={(e) => updatePJPriority(p.id, Number(e.target.value))} style={styles.moveSelect} aria-label="優先度を変更">
+                      {PJ_PRIORITIES.map((pr) => <option key={pr.v} value={pr.v}>{pr.label}</option>)}
+                    </select>
+                    <select value={p.status || ""} onChange={(e) => updatePJStatus(p.id, e.target.value)} style={styles.moveSelect} aria-label="状態を変更">
+                      <option value="">進行中</option>
+                      {PJ_STATUSES.map((st) => <option key={st.v} value={st.v}>{st.label}</option>)}
+                    </select>
+                    {topTab === "総合" && <span style={{ ...styles.metaTag, borderColor: oColor, color: oColor }}>{TOP_TABS.find((c) => c.key === p.owner)?.label}</span>}
+                    {(topTab === "総合" || subTab === "総合") && p.subcategory && (
+                      <span style={{ ...styles.metaTag, borderColor: SUB_TABS.find((s) => s.key === p.subcategory)?.color, color: SUB_TABS.find((s) => s.key === p.subcategory)?.color }}>{p.subcategory}</span>
+                    )}
+                    <span style={styles.progressTag}>{pd}/{pt}</span>
+                    <button type="button" onClick={() => openAddTaskModal(p.id, p.name)} style={styles.inlineAddBtn}>＋タスク</button>
+                    <button onClick={() => removePJ(p.id)} aria-label="PJを削除" style={styles.deleteBtn}>×</button>
+                  </div>
+                  {pjOpen && (
+                    <div style={styles.taskList}>
+                      {p.tasks.length === 0 && <p style={styles.emptySmall}>タスクなし</p>}
+                      {p.tasks.map((t, tIdx) => {
+                        const taskOpen = openTask.has(t.id);
+                        const { done: td, total: tt } = taskProgress(t);
+                        return (
+                          <div key={t.id} style={styles.taskCard} className="row-in">
+                            <div style={styles.taskHeader} className="task-header">
+                              <div style={styles.reorderBtns}>
+                                <button type="button" onClick={() => moveTaskInPJ(p.id, t.id, "up")} disabled={tIdx === 0} style={{ ...styles.reorderBtn, opacity: tIdx === 0 ? 0.3 : 1, cursor: tIdx === 0 ? "default" : "pointer" }} aria-label="上へ移動">▲</button>
+                                <button type="button" onClick={() => moveTaskInPJ(p.id, t.id, "down")} disabled={tIdx === p.tasks.length - 1} style={{ ...styles.reorderBtn, opacity: tIdx === p.tasks.length - 1 ? 0.3 : 1, cursor: tIdx === p.tasks.length - 1 ? "default" : "pointer" }} aria-label="下へ移動">▼</button>
+                              </div>
+                              <button onClick={() => toggleOpenTask(t.id)} style={styles.collapseBtnSm} aria-label={taskOpen ? "折りたたむ" : "展開する"}>{taskOpen ? "▾" : "▸"}</button>
+                              <input type="text" value={t.name} onChange={(e) => updateTaskName(p.id, t.id, e.target.value)} style={styles.taskNameInput} className="task-title-input" aria-label="タスク名を編集" />
+                              {tt > 0 && td === tt && <span style={styles.doneMark}>✅</span>}
+                              <span style={styles.progressTagSm}>{td}/{tt}</span>
+                              <button type="button" onClick={() => toggleShowDoneSubtasks(t.id)}
+                                style={{ ...styles.eyeToggleBtn, background: showDoneSubtasks.has(t.id) ? "#F0F0F0" : "transparent" }}
+                                aria-label={showDoneSubtasks.has(t.id) ? "完了済みサブタスクを隠す" : "完了済みサブタスクを表示"}>
+                                {showDoneSubtasks.has(t.id) ? "👁" : "🙈"}
+                              </button>
+                              <select value={p.id} onChange={(e) => moveTask(p.id, t.id, e.target.value)} style={styles.moveSelect} aria-label="PJを変更">
+                                {projects.map((pp) => <option key={pp.id} value={pp.id}>{pp.name}</option>)}
+                              </select>
+                              <button type="button" onClick={() => openAddSubtaskModal(p.id, t.id, p.name, t.name)} style={styles.inlineAddBtn}>＋サブ</button>
+                              <button onClick={() => removeTask(p.id, t.id)} aria-label="タスクを削除" style={styles.deleteBtn}>×</button>
+                            </div>
+                            <div style={styles.taskDatesRow}>
+                              <label style={styles.scheduleEditField}>
+                                <span style={styles.scheduleEditLabel}>開始日</span>
+                                <input type="date" value={t.startDate || ""} onChange={(e) => updateTaskDate(p.id, t.id, "startDate", e.target.value)} max={t.endDate || undefined} style={styles.scheduleEditInput} aria-label="タスク開始日" />
+                              </label>
+                              <label style={styles.scheduleEditField}>
+                                <span style={styles.scheduleEditLabel}>終了日</span>
+                                <input type="date" value={t.endDate || ""} onChange={(e) => updateTaskDate(p.id, t.id, "endDate", e.target.value)} min={t.startDate || undefined} style={styles.scheduleEditInput} aria-label="タスク終了日" />
+                              </label>
+                              <label style={styles.scheduleEditField}>
+                                <span style={styles.scheduleEditLabel}>想定(分・手入力優先)</span>
+                                <input type="number" min="0" step="15" value={t.estimatedMinutes ?? ""} onChange={(e) => updateTaskEstimatedMinutes(p.id, t.id, e.target.value)}
+                                  placeholder={taskEstimatedSubtotal(t) ? String(taskEstimatedSubtotal(t)) : "―"} style={{ ...styles.scheduleEditInput, width: 64 }} aria-label="タスク想定時間(分)" />
+                              </label>
+                              <span style={styles.calEstTag} title={t.estimatedMinutes != null ? "手入力値" : "サブタスクの想定(分)の合計"}>想定{taskEstimatedEffective(t) ? formatDuration(taskEstimatedEffective(t)) : "―"}</span>
+                              <span style={styles.calEstTag} title="サブタスクの実績(分)の合計">実績{taskActualSubtotal(t) ? formatDuration(taskActualSubtotal(t)) : "―"}</span>
+                            </div>
+                            {taskOpen && (() => {
+                              const doneHidden = !showDoneSubtasks.has(t.id);
+                              const visibleSubtasks = doneHidden ? t.subtasks.filter((s) => !s.done) : t.subtasks;
+                              return (
+                              <ul style={styles.subList}>
+                                {t.subtasks.length === 0 && <li style={styles.emptySmall}>サブタスクなし</li>}
+                                {t.subtasks.length > 0 && visibleSubtasks.length === 0 && <li style={styles.emptySmall}>完了済みサブタスクのみ(👁で表示できる)</li>}
+                                {visibleSubtasks.map((s) => {
+                                  const pInfo = PRIORITIES.find((pr) => pr.v === s.priority);
+                                  return (
+                                    <li key={s.id} style={styles.subRowWrap} className="row-in">
+                                      <div style={styles.subRow} className="sub-row">
+                                        <button onClick={() => toggleSubtaskDone(p.id, t.id, s.id)} aria-label={s.done ? "未完了に戻す" : "完了にする"} style={styles.stampWrap}>
+                                          {s.done ? <span style={styles.hankoStamp} className={stamping === s.id ? "hanko-pop" : ""}>済</span> : <span style={styles.hankoEmpty} />}
+                                        </button>
+                                        <div style={styles.subBody} className="sub-body">
+                                          <input type="text" value={s.text} onChange={(e) => updateSubtaskText(p.id, t.id, s.id, e.target.value)} style={{ ...styles.subTextInput, textDecoration: s.done ? "line-through" : "none", color: s.done ? "#9B9B9B" : "#2C3645" }} aria-label="サブタスク名を編集" />
+                                          <div style={styles.scheduleEditRow}>
+                                            <label style={styles.scheduleEditField}>
+                                              <span style={styles.scheduleEditLabel}>予定日</span>
+                                              <input type="date" value={s.scheduledDate || ""} onChange={(e) => updateSubtaskSchedule(p.id, t.id, s.id, "scheduledDate", e.target.value)} min={t.startDate || undefined} max={t.endDate || undefined} style={styles.scheduleEditInput} />
+                                            </label>
+                                            <label style={styles.scheduleEditField}>
+                                              <span style={styles.scheduleEditLabel}>繰り返し{p.owner === "kkr" && p.subcategory === "仕事" ? "(休日は翌日へ)" : ""}</span>
+                                              <select value={s.repeatWeekday ?? ""} onChange={(e) => updateSubtaskSchedule(p.id, t.id, s.id, "repeatWeekday", e.target.value === "" ? "" : (["weekday", "satsun"].includes(e.target.value) ? e.target.value : Number(e.target.value)))} style={styles.scheduleEditInput}>
+                                                <option value="">なし</option>
+                                                <option value="weekday">平日(月〜金・祝日除く)</option>
+                                                <option value="satsun">毎週土曜・日曜</option>
+                                                {WEEKDAY_LABELS.map((label, idx) => <option key={idx} value={idx}>毎週{label}曜</option>)}
+                                              </select>
+                                            </label>
+                                            <label style={styles.scheduleEditField}>
+                                              <span style={styles.scheduleEditLabel}>想定(分)</span>
+                                              <select value={s.estimatedMinutes || ""} onChange={(e) => updateSubtaskSchedule(p.id, t.id, s.id, "estimatedMinutes", e.target.value ? Number(e.target.value) : "")} style={{ ...styles.scheduleEditInput, width: 64 }}>
+                                                <option value="">―</option>
+                                                {MINUTE_OPTIONS.map((m) => <option key={m} value={m}>{formatDuration(m)}</option>)}
+                                              </select>
+                                            </label>
+                                            <label style={styles.scheduleEditField}>
+                                              <span style={styles.scheduleEditLabel}>実績(分)</span>
+                                              <div style={styles.actualRow}>
+                                                <select value={s.actualMinutes || ""} onChange={(e) => updateSubtaskSchedule(p.id, t.id, s.id, "actualMinutes", e.target.value ? Number(e.target.value) : "")} style={{ ...styles.scheduleEditInput, width: 64 }}>
+                                                  <option value="">―</option>
+                                                  {MINUTE_OPTIONS.map((m) => <option key={m} value={m}>{formatDuration(m)}</option>)}
+                                                </select>
+                                                {renderStopwatchControl(p.id, t.id, s.id)}
+                                              </div>
+                                            </label>
+                                            <label style={styles.scheduleEditField}>
+                                              <span style={styles.scheduleEditLabel}>PJ</span>
+                                              <select value={p.id} onChange={(e) => {
+                                                const toPjId = e.target.value;
+                                                const toPj = projects.find((pp) => pp.id === toPjId);
+                                                const toTaskId = toPj?.tasks[0]?.id;
+                                                if (toTaskId) moveSubtask(p.id, t.id, s.id, toPjId, toTaskId);
+                                              }} style={styles.moveSelect}>
+                                                {projects.map((pp) => <option key={pp.id} value={pp.id}>{pp.name}</option>)}
+                                              </select>
+                                            </label>
+                                            <label style={styles.scheduleEditField}>
+                                              <span style={styles.scheduleEditLabel}>タスク</span>
+                                              <select value={t.id} onChange={(e) => moveSubtask(p.id, t.id, s.id, p.id, e.target.value)} style={styles.moveSelect} disabled={p.tasks.length <= 1}>
+                                                {p.tasks.map((tt) => <option key={tt.id} value={tt.id}>{tt.name}</option>)}
+                                              </select>
+                                            </label>
+                                          </div>
+                                        </div>
+                                        <span style={{ ...styles.metaTag, borderColor: pInfo.color, color: pInfo.color }}>{pInfo.label}</span>
+                                        <button type="button" onClick={() => openStepsModal(p.id, t.id, s.id)} aria-label="ステップを開く" style={styles.inlineAddBtn}>☑ステップ</button>
+                                        <button type="button" onClick={() => setCopyDateModal({ pjId: p.id, taskId: t.id, subId: s.id, date: s.scheduledDate || todayStr, text: s.text })} aria-label="サブタスクをコピー" style={styles.inlineAddBtn}>📋コピー</button>
+                                        <button onClick={() => removeSubtask(p.id, t.id, s.id)} aria-label="削除" style={styles.deleteBtn}>×</button>
+                                      </div>
+                                    </li>
+                                  );
+                                })}
+                              </ul>
+                              );
+                            })()}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div style={styles.page} className="tm-page">
       <style>{`
@@ -1780,6 +2122,13 @@ export default function App() {
           {dashboardOpen && <DashboardModal projects={visibleProjects} onClose={() => setDashboardOpen(false)} />}
           {showTaskSections && (
             <>
+              <div style={styles.brainRow}>
+                <BrainBadge label="1日" ratio={dayBrainRatio} moyaCount={totalMoyamoyaCount} />
+                <BrainBadge label="今週" ratio={weekSummary.brainRatio} />
+                <BrainBadge label="来週" ratio={nextWeekSummary.ratio} />
+                <BrainBadge label="先週" ratio={lastWeekSummary.ratio} />
+              </div>
+              {projects !== null && renderPrioritySection({ key: "moyamoya", label: "もやもや", color: MOYAMOYA_COLOR, small: false, moyamoya: true, group: visibleProjects.filter((pp) => !pp.status && pp.moyamoya) })}
               <div style={styles.sectionTitleRow}>
                 <h3 style={styles.sectionTitleFlush}>1日のタスク</h3>
                 <input type="date" value={dayViewDate} onChange={(e) => setDayViewDate(e.target.value)} style={styles.scheduleEditInput} aria-label="表示する日付" />
@@ -1824,11 +2173,7 @@ export default function App() {
                           <option value="">―</option>
                           {MINUTE_OPTIONS.map((m) => <option key={m} value={m}>{formatDuration(m)}</option>)}
                         </select>
-                        <button type="button" onClick={() => toggleStopwatch(pjId, taskId, s.id)}
-                          style={{ ...styles.stopwatchBtn, background: runningTarget?.subId === s.id && !runningTarget.paused ? "#F39800" : "transparent", color: runningTarget?.subId === s.id && !runningTarget.paused ? "#FFFFFF" : "#12314F", borderColor: "#12314F" }}
-                          aria-label={runningTarget?.subId === s.id ? (runningTarget.paused ? "計測を再開" : "一時停止") : "計測を開始"}>
-                          {runningTarget?.subId === s.id ? (() => { const sec = Math.max(0, Math.floor(stopwatchElapsedMs(runningTarget) / 1000)); return `${runningTarget.paused ? "▶" : "⏸"} ${String(Math.floor(sec / 60)).padStart(2, "0")}:${String(sec % 60).padStart(2, "0")}`; })() : "▶"}
-                        </button>
+                        {renderStopwatchControl(pjId, taskId, s.id)}
                         <button type="button" onClick={() => openStepsModal(pjId, taskId, s.id)} aria-label="ステップを開く" style={styles.inlineAddBtn}>☑ステップ</button>
                         <button type="button" onClick={() => setMoveDateModal({ pjId, taskId, subId: s.id, date: s.scheduledDate || dayViewDate })} aria-label="予定日を変更" style={styles.inlineAddBtn}>📅変更</button>
                         <button type="button" onClick={() => setCopyDateModal({ pjId, taskId, subId: s.id, date: dayViewDate, text: s.text })} aria-label="サブタスクをコピー" style={styles.inlineAddBtn}>📋コピー</button>
@@ -1876,9 +2221,9 @@ export default function App() {
                     <button type="button" onClick={addWeekAdj} style={styles.addBtn}>調整を追加</button>
                   </div>
 
-                  {weekAdj.filter((a) => weekDates.includes(a.date)).length > 0 && (
+                  {workAdj.filter((a) => weekDates.includes(a.date)).length > 0 && (
                     <ul style={styles.todayList}>
-                      {weekAdj.filter((a) => weekDates.includes(a.date)).map((a) => {
+                      {workAdj.filter((a) => weekDates.includes(a.date)).map((a) => {
                         const dt = new Date(a.date + "T00:00:00");
                         return (
                           <li key={a.date} style={{ ...styles.calendarLine1, justifyContent: "space-between" }}>
@@ -1940,9 +2285,9 @@ export default function App() {
                     <button type="button" onClick={addNextWeekAdj} style={styles.addBtn}>調整を追加</button>
                   </div>
 
-                  {nextWeekAdj.filter((a) => nextWeekDates.includes(a.date)).length > 0 && (
+                  {workAdj.filter((a) => nextWeekDates.includes(a.date)).length > 0 && (
                     <ul style={styles.todayList}>
-                      {nextWeekAdj.filter((a) => nextWeekDates.includes(a.date)).map((a) => {
+                      {workAdj.filter((a) => nextWeekDates.includes(a.date)).map((a) => {
                         const dt = new Date(a.date + "T00:00:00");
                         return (
                           <li key={a.date} style={{ ...styles.calendarLine1, justifyContent: "space-between" }}>
@@ -2208,190 +2553,7 @@ export default function App() {
             {projects !== null && visibleProjects.length > 0 && [
               ...PJ_PRIORITIES.map((pri) => ({ key: pri.v, label: pri.label, color: pri.color, small: false, group: visibleProjects.filter((pp) => !pp.status && (pp.priority || 2) === pri.v) })),
               ...PJ_STATUSES.map((st) => ({ key: st.v, label: st.label, color: st.color, small: true, group: visibleProjects.filter((pp) => pp.status === st.v) })),
-            ].map((sec) => {
-              const group = sec.group;
-              if (group.length === 0) return null;
-              const sectionOpen = !collapsedPrioritySection.has(sec.key);
-              return (
-                <div key={sec.key} style={sec.small ? styles.statusSection : styles.prioritySection}>
-                  <button type="button" onClick={() => togglePrioritySection(sec.key)} style={{ ...(sec.small ? styles.statusSectionHeader : styles.prioritySectionHeader), color: sec.color, borderColor: sec.color }}>
-                    <span>{sectionOpen ? "▾" : "▸"}</span>
-                    <span>{sec.label}</span>
-                    <span style={styles.prioritySectionCount}>{group.length}</span>
-                  </button>
-                  {sectionOpen && (
-                    <div style={styles.prioritySectionBody}>
-                      {group.map((p, pIdx) => {
-              const groupIds = group.map((gp) => gp.id);
-              const pjOpen = openPJ.has(p.id);
-              const { done: pd, total: pt } = pjProgress(p);
-              const oColor = ownerColorOf(p.owner);
-              return (
-                <div key={p.id} style={{ ...styles.pjCard, borderLeftColor: oColor }} className="row-in">
-                  <div style={styles.pjHeader} className="pj-header">
-                    <div style={styles.reorderBtns}>
-                      <button type="button" onClick={() => movePJInSection(groupIds, p.id, "up")} disabled={pIdx === 0} style={{ ...styles.reorderBtn, opacity: pIdx === 0 ? 0.3 : 1, cursor: pIdx === 0 ? "default" : "pointer" }} aria-label="上へ移動">▲</button>
-                      <button type="button" onClick={() => movePJInSection(groupIds, p.id, "down")} disabled={pIdx === groupIds.length - 1} style={{ ...styles.reorderBtn, opacity: pIdx === groupIds.length - 1 ? 0.3 : 1, cursor: pIdx === groupIds.length - 1 ? "default" : "pointer" }} aria-label="下へ移動">▼</button>
-                    </div>
-                    <button onClick={() => toggleOpenPJ(p.id)} style={styles.collapseBtn} aria-label={pjOpen ? "折りたたむ" : "展開する"}>{pjOpen ? "▾" : "▸"}</button>
-                    <input type="text" value={p.name} onChange={(e) => updatePJName(p.id, e.target.value)} style={styles.pjNameInput} className="pj-title-input" aria-label="PJ名を編集" />
-                    {pt > 0 && pd === pt && <span style={styles.doneMark}>✅</span>}
-                    <button type="button" onClick={() => setPjDetailModal(p.id)} style={styles.ganttToggleBtn} aria-label="ガントチャートを表示">📊</button>
-                    <select value={p.priority || 2} onChange={(e) => updatePJPriority(p.id, Number(e.target.value))} style={styles.moveSelect} aria-label="優先度を変更">
-                      {PJ_PRIORITIES.map((pr) => <option key={pr.v} value={pr.v}>{pr.label}</option>)}
-                    </select>
-                    <select value={p.status || ""} onChange={(e) => updatePJStatus(p.id, e.target.value)} style={styles.moveSelect} aria-label="状態を変更">
-                      <option value="">進行中</option>
-                      {PJ_STATUSES.map((st) => <option key={st.v} value={st.v}>{st.label}</option>)}
-                    </select>
-                    {topTab === "総合" && <span style={{ ...styles.metaTag, borderColor: oColor, color: oColor }}>{TOP_TABS.find((c) => c.key === p.owner)?.label}</span>}
-                    {(topTab === "総合" || subTab === "総合") && p.subcategory && (
-                      <span style={{ ...styles.metaTag, borderColor: SUB_TABS.find((s) => s.key === p.subcategory)?.color, color: SUB_TABS.find((s) => s.key === p.subcategory)?.color }}>{p.subcategory}</span>
-                    )}
-                    <span style={styles.progressTag}>{pd}/{pt}</span>
-                    <button type="button" onClick={() => openAddTaskModal(p.id, p.name)} style={styles.inlineAddBtn}>＋タスク</button>
-                    <button onClick={() => removePJ(p.id)} aria-label="PJを削除" style={styles.deleteBtn}>×</button>
-                  </div>
-                  {pjOpen && (
-                    <div style={styles.taskList}>
-                      {p.tasks.length === 0 && <p style={styles.emptySmall}>タスクなし</p>}
-                      {p.tasks.map((t, tIdx) => {
-                        const taskOpen = openTask.has(t.id);
-                        const { done: td, total: tt } = taskProgress(t);
-                        return (
-                          <div key={t.id} style={styles.taskCard} className="row-in">
-                            <div style={styles.taskHeader} className="task-header">
-                              <div style={styles.reorderBtns}>
-                                <button type="button" onClick={() => moveTaskInPJ(p.id, t.id, "up")} disabled={tIdx === 0} style={{ ...styles.reorderBtn, opacity: tIdx === 0 ? 0.3 : 1, cursor: tIdx === 0 ? "default" : "pointer" }} aria-label="上へ移動">▲</button>
-                                <button type="button" onClick={() => moveTaskInPJ(p.id, t.id, "down")} disabled={tIdx === p.tasks.length - 1} style={{ ...styles.reorderBtn, opacity: tIdx === p.tasks.length - 1 ? 0.3 : 1, cursor: tIdx === p.tasks.length - 1 ? "default" : "pointer" }} aria-label="下へ移動">▼</button>
-                              </div>
-                              <button onClick={() => toggleOpenTask(t.id)} style={styles.collapseBtnSm} aria-label={taskOpen ? "折りたたむ" : "展開する"}>{taskOpen ? "▾" : "▸"}</button>
-                              <input type="text" value={t.name} onChange={(e) => updateTaskName(p.id, t.id, e.target.value)} style={styles.taskNameInput} className="task-title-input" aria-label="タスク名を編集" />
-                              {tt > 0 && td === tt && <span style={styles.doneMark}>✅</span>}
-                              <span style={styles.progressTagSm}>{td}/{tt}</span>
-                              <button type="button" onClick={() => toggleShowDoneSubtasks(t.id)}
-                                style={{ ...styles.eyeToggleBtn, background: showDoneSubtasks.has(t.id) ? "#F0F0F0" : "transparent" }}
-                                aria-label={showDoneSubtasks.has(t.id) ? "完了済みサブタスクを隠す" : "完了済みサブタスクを表示"}>
-                                {showDoneSubtasks.has(t.id) ? "👁" : "🙈"}
-                              </button>
-                              <select value={p.id} onChange={(e) => moveTask(p.id, t.id, e.target.value)} style={styles.moveSelect} aria-label="PJを変更">
-                                {projects.map((pp) => <option key={pp.id} value={pp.id}>{pp.name}</option>)}
-                              </select>
-                              <button type="button" onClick={() => openAddSubtaskModal(p.id, t.id, p.name, t.name)} style={styles.inlineAddBtn}>＋サブ</button>
-                              <button onClick={() => removeTask(p.id, t.id)} aria-label="タスクを削除" style={styles.deleteBtn}>×</button>
-                            </div>
-                            <div style={styles.taskDatesRow}>
-                              <label style={styles.scheduleEditField}>
-                                <span style={styles.scheduleEditLabel}>開始日</span>
-                                <input type="date" value={t.startDate || ""} onChange={(e) => updateTaskDate(p.id, t.id, "startDate", e.target.value)} max={t.endDate || undefined} style={styles.scheduleEditInput} aria-label="タスク開始日" />
-                              </label>
-                              <label style={styles.scheduleEditField}>
-                                <span style={styles.scheduleEditLabel}>終了日</span>
-                                <input type="date" value={t.endDate || ""} onChange={(e) => updateTaskDate(p.id, t.id, "endDate", e.target.value)} min={t.startDate || undefined} style={styles.scheduleEditInput} aria-label="タスク終了日" />
-                              </label>
-                              <label style={styles.scheduleEditField}>
-                                <span style={styles.scheduleEditLabel}>想定(分・手入力優先)</span>
-                                <input type="number" min="0" step="15" value={t.estimatedMinutes ?? ""} onChange={(e) => updateTaskEstimatedMinutes(p.id, t.id, e.target.value)}
-                                  placeholder={taskEstimatedSubtotal(t) ? String(taskEstimatedSubtotal(t)) : "―"} style={{ ...styles.scheduleEditInput, width: 64 }} aria-label="タスク想定時間(分)" />
-                              </label>
-                              <span style={styles.calEstTag} title={t.estimatedMinutes != null ? "手入力値" : "サブタスクの想定(分)の合計"}>想定{taskEstimatedEffective(t) ? formatDuration(taskEstimatedEffective(t)) : "―"}</span>
-                              <span style={styles.calEstTag} title="サブタスクの実績(分)の合計">実績{taskActualSubtotal(t) ? formatDuration(taskActualSubtotal(t)) : "―"}</span>
-                            </div>
-                            {taskOpen && (() => {
-                              const doneHidden = !showDoneSubtasks.has(t.id);
-                              const visibleSubtasks = doneHidden ? t.subtasks.filter((s) => !s.done) : t.subtasks;
-                              return (
-                              <ul style={styles.subList}>
-                                {t.subtasks.length === 0 && <li style={styles.emptySmall}>サブタスクなし</li>}
-                                {t.subtasks.length > 0 && visibleSubtasks.length === 0 && <li style={styles.emptySmall}>完了済みサブタスクのみ(👁で表示できる)</li>}
-                                {visibleSubtasks.map((s) => {
-                                  const pInfo = PRIORITIES.find((pr) => pr.v === s.priority);
-                                  return (
-                                    <li key={s.id} style={styles.subRowWrap} className="row-in">
-                                      <div style={styles.subRow} className="sub-row">
-                                        <button onClick={() => toggleSubtaskDone(p.id, t.id, s.id)} aria-label={s.done ? "未完了に戻す" : "完了にする"} style={styles.stampWrap}>
-                                          {s.done ? <span style={styles.hankoStamp} className={stamping === s.id ? "hanko-pop" : ""}>済</span> : <span style={styles.hankoEmpty} />}
-                                        </button>
-                                        <div style={styles.subBody} className="sub-body">
-                                          <input type="text" value={s.text} onChange={(e) => updateSubtaskText(p.id, t.id, s.id, e.target.value)} style={{ ...styles.subTextInput, textDecoration: s.done ? "line-through" : "none", color: s.done ? "#9B9B9B" : "#2C3645" }} aria-label="サブタスク名を編集" />
-                                          <div style={styles.scheduleEditRow}>
-                                            <label style={styles.scheduleEditField}>
-                                              <span style={styles.scheduleEditLabel}>予定日</span>
-                                              <input type="date" value={s.scheduledDate || ""} onChange={(e) => updateSubtaskSchedule(p.id, t.id, s.id, "scheduledDate", e.target.value)} min={t.startDate || undefined} max={t.endDate || undefined} style={styles.scheduleEditInput} />
-                                            </label>
-                                            <label style={styles.scheduleEditField}>
-                                              <span style={styles.scheduleEditLabel}>繰り返し{p.owner === "kkr" && p.subcategory === "仕事" ? "(休日は翌日へ)" : ""}</span>
-                                              <select value={s.repeatWeekday ?? ""} onChange={(e) => updateSubtaskSchedule(p.id, t.id, s.id, "repeatWeekday", e.target.value === "" ? "" : (["weekday", "satsun"].includes(e.target.value) ? e.target.value : Number(e.target.value)))} style={styles.scheduleEditInput}>
-                                                <option value="">なし</option>
-                                                <option value="weekday">平日(月〜金・祝日除く)</option>
-                                                <option value="satsun">毎週土曜・日曜</option>
-                                                {WEEKDAY_LABELS.map((label, idx) => <option key={idx} value={idx}>毎週{label}曜</option>)}
-                                              </select>
-                                            </label>
-                                            <label style={styles.scheduleEditField}>
-                                              <span style={styles.scheduleEditLabel}>想定(分)</span>
-                                              <select value={s.estimatedMinutes || ""} onChange={(e) => updateSubtaskSchedule(p.id, t.id, s.id, "estimatedMinutes", e.target.value ? Number(e.target.value) : "")} style={{ ...styles.scheduleEditInput, width: 64 }}>
-                                                <option value="">―</option>
-                                                {MINUTE_OPTIONS.map((m) => <option key={m} value={m}>{formatDuration(m)}</option>)}
-                                              </select>
-                                            </label>
-                                            <label style={styles.scheduleEditField}>
-                                              <span style={styles.scheduleEditLabel}>実績(分)</span>
-                                              <div style={styles.actualRow}>
-                                                <select value={s.actualMinutes || ""} onChange={(e) => updateSubtaskSchedule(p.id, t.id, s.id, "actualMinutes", e.target.value ? Number(e.target.value) : "")} style={{ ...styles.scheduleEditInput, width: 64 }}>
-                                                  <option value="">―</option>
-                                                  {MINUTE_OPTIONS.map((m) => <option key={m} value={m}>{formatDuration(m)}</option>)}
-                                                </select>
-                                                <button type="button" onClick={() => toggleStopwatch(p.id, t.id, s.id)}
-                                                  style={{ ...styles.stopwatchBtn, background: runningTarget?.subId === s.id && !runningTarget.paused ? "#F39800" : "transparent", color: runningTarget?.subId === s.id && !runningTarget.paused ? "#FFFFFF" : "#12314F", borderColor: "#12314F" }}
-                                                  aria-label={runningTarget?.subId === s.id ? (runningTarget.paused ? "計測を再開" : "一時停止") : "計測を開始"}>
-                                                  {runningTarget?.subId === s.id ? (() => { const sec = Math.max(0, Math.floor(stopwatchElapsedMs(runningTarget) / 1000)); return `${runningTarget.paused ? "▶" : "⏸"} ${String(Math.floor(sec / 60)).padStart(2, "0")}:${String(sec % 60).padStart(2, "0")}`; })() : "▶"}
-                                                </button>
-                                              </div>
-                                            </label>
-                                            <label style={styles.scheduleEditField}>
-                                              <span style={styles.scheduleEditLabel}>PJ</span>
-                                              <select value={p.id} onChange={(e) => {
-                                                const toPjId = e.target.value;
-                                                const toPj = projects.find((pp) => pp.id === toPjId);
-                                                const toTaskId = toPj?.tasks[0]?.id;
-                                                if (toTaskId) moveSubtask(p.id, t.id, s.id, toPjId, toTaskId);
-                                              }} style={styles.moveSelect}>
-                                                {projects.map((pp) => <option key={pp.id} value={pp.id}>{pp.name}</option>)}
-                                              </select>
-                                            </label>
-                                            <label style={styles.scheduleEditField}>
-                                              <span style={styles.scheduleEditLabel}>タスク</span>
-                                              <select value={t.id} onChange={(e) => moveSubtask(p.id, t.id, s.id, p.id, e.target.value)} style={styles.moveSelect} disabled={p.tasks.length <= 1}>
-                                                {p.tasks.map((tt) => <option key={tt.id} value={tt.id}>{tt.name}</option>)}
-                                              </select>
-                                            </label>
-                                          </div>
-                                        </div>
-                                        <span style={{ ...styles.metaTag, borderColor: pInfo.color, color: pInfo.color }}>{pInfo.label}</span>
-                                        <button type="button" onClick={() => openStepsModal(p.id, t.id, s.id)} aria-label="ステップを開く" style={styles.inlineAddBtn}>☑ステップ</button>
-                                        <button type="button" onClick={() => setCopyDateModal({ pjId: p.id, taskId: t.id, subId: s.id, date: s.scheduledDate || todayStr, text: s.text })} aria-label="サブタスクをコピー" style={styles.inlineAddBtn}>📋コピー</button>
-                                        <button onClick={() => removeSubtask(p.id, t.id, s.id)} aria-label="削除" style={styles.deleteBtn}>×</button>
-                                      </div>
-                                    </li>
-                                  );
-                                })}
-                              </ul>
-                              );
-                            })()}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              );
-                      })}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+            ].map(renderPrioritySection)}
           </div>
         </section>
       </div>
@@ -2537,10 +2699,24 @@ const styles = {
   scheduleEditLabel: { fontSize: 9, color: "#9B9B9B", fontWeight: 700 },
   scheduleEditInput: { fontSize: 11, padding: "3px 5px", borderRadius: 5, border: "1.5px solid #E5E5E5", background: "#FFFFFF", color: "#2C3645", fontFamily: "inherit" },
   moveSelect: { fontSize: 10, padding: "2px 4px", borderRadius: 5, border: "1.5px solid #D8D8D8", background: "#FFFFFF", color: "#2C3645", fontFamily: "inherit", maxWidth: 92 },
+  moyamoyaToggleBtn: { fontSize: 10, fontWeight: 700, padding: "3px 7px", borderRadius: 5, border: "1.5px solid", cursor: "pointer", fontFamily: "inherit", flexShrink: 0 },
+  brainRow: { display: "flex", gap: 18, marginBottom: 12, flexWrap: "wrap" },
+  brainBadgeWrap: { display: "flex", flexDirection: "column", alignItems: "center", gap: 3 },
+  brainIconBox: { position: "relative", display: "flex", alignItems: "center", justifyContent: "center", width: 34, height: 34, flexShrink: 0 },
+  brainSteamIcon: { position: "absolute", top: -12, left: "50%", transform: "translateX(-50%)" },
+  brainBadgeLabel: { fontSize: 10, fontWeight: 700 },
+  brainMoyaBadge: { position: "absolute", bottom: -3, right: -7, minWidth: 15, height: 15, borderRadius: 8, background: MOYAMOYA_COLOR, color: "#FFFFFF", fontSize: 9, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 3px", lineHeight: 1 },
+  moyamoyaNotes: { display: "flex", flexDirection: "column", gap: 6, marginBottom: 10, paddingBottom: 10, borderBottom: "1px dashed #D8D8D8" },
+  moyamoyaAddForm: { display: "flex", gap: 6 },
+  moyamoyaNoteRow: { display: "flex", gap: 6, alignItems: "center" },
+  moyamoyaInput: { flex: 1, fontSize: 13, padding: "7px 9px", borderRadius: 6, border: "1.5px solid #D8D8D8", background: "#FFFFFF", color: "#2C3645", fontFamily: "inherit" },
+  moyamoyaAddBtn: { fontSize: 15, fontWeight: 700, color: "#FFFFFF", background: MOYAMOYA_COLOR, border: "none", borderRadius: 6, padding: "0 12px", cursor: "pointer", fontFamily: "inherit" },
   timeDropdownList: { position: "absolute", top: "100%", left: 0, zIndex: 10, marginTop: 2, width: 90, maxHeight: 180, overflowY: "auto", background: "#FFFFFF", border: "1.5px solid #D8D8D8", borderRadius: 6, boxShadow: "0 4px 12px rgba(44,54,69,0.18)" },
   timeDropdownItem: { padding: "5px 8px", fontSize: 11.5, cursor: "pointer", borderBottom: "1px solid #F0F0F0" },
   actualRow: { display: "flex", gap: 3, alignItems: "center" },
   stopwatchBtn: { fontSize: 10.5, fontWeight: 700, padding: "3px 6px", borderRadius: 5, border: "1.5px solid", cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" },
+  stopwatchEditGroup: { display: "inline-flex", gap: 3, alignItems: "center" },
+  stopwatchEditInput: { width: 44, fontSize: 11, padding: "3px 4px", borderRadius: 5, border: "1.5px solid #F39800", background: "#FFFFFF", color: "#2C3645", fontFamily: "inherit" },
   stampWrap: { background: "none", border: "none", padding: 0, cursor: "pointer", width: 26, height: 26, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" },
   hankoEmpty: { width: 20, height: 20, borderRadius: "50%", border: "2px solid #D8D8D8", display: "block" },
   hankoStamp: { width: 22, height: 22, borderRadius: "50%", border: "2px solid #F39800", color: "#F39800", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Shippori Mincho', serif", fontWeight: 700, fontSize: 9.5, transform: "rotate(-10deg)" },
