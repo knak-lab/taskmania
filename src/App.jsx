@@ -782,10 +782,18 @@ function CalendarMonthView({ monthDateStr, tasksByDate, todayStr, ownerColorOf, 
   );
 }
 
+const CAL_UNTIMED_COLLAPSED_ROWS = 3;
+
 function CalendarTimeGrid({ dates, tasksByDate, todayStr, ownerColorOf, onToggleDone, onSelectDay }) {
   const hours = Array.from({ length: CAL_HOUR_END - CAL_HOUR_START }, (_, i) => i + CAL_HOUR_START);
   const gridHeight = hours.length * CAL_HOUR_HEIGHT;
   const rangeStartMin = CAL_HOUR_START * 60;
+  const [expandedUntimed, setExpandedUntimed] = useState(() => new Set());
+  const toggleUntimedExpanded = (d) => setExpandedUntimed((prev) => {
+    const next = new Set(prev);
+    next.has(d) ? next.delete(d) : next.add(d);
+    return next;
+  });
   return (
     <div style={styles.calGridWrap}>
       <div style={styles.calGridHeaderRow}>
@@ -794,12 +802,15 @@ function CalendarTimeGrid({ dates, tasksByDate, todayStr, ownerColorOf, onToggle
           const dt = new Date(d + "T00:00:00");
           const items = tasksByDate[d] || [];
           const untimed = items.filter((i) => !i.sub.startTime);
+          const expanded = expandedUntimed.has(d);
+          const visibleUntimed = expanded ? untimed : untimed.slice(0, CAL_UNTIMED_COLLAPSED_ROWS);
+          const hiddenCount = untimed.length - visibleUntimed.length;
           return (
             <div key={d} style={styles.calGridDayHeaderCol}>
               <button type="button" onClick={() => onSelectDay(d)} style={{ ...styles.calGridDayHeaderBtn, color: d === todayStr ? "#F39800" : "#2C3645" }}>
                 {formatDate(d)}({DAY_JP[dt.getDay()]})
               </button>
-              {untimed.map(({ pjId, taskId, sub: s, owner }) => (
+              {visibleUntimed.map(({ pjId, taskId, sub: s, owner }) => (
                 <button
                   type="button"
                   key={s.id}
@@ -810,6 +821,11 @@ function CalendarTimeGrid({ dates, tasksByDate, todayStr, ownerColorOf, onToggle
                   {s.text}
                 </button>
               ))}
+              {untimed.length > CAL_UNTIMED_COLLAPSED_ROWS && (
+                <button type="button" onClick={() => toggleUntimedExpanded(d)} style={styles.calGridUntimedToggle}>
+                  {expanded ? "▲閉じる" : `▼他${hiddenCount}件`}
+                </button>
+              )}
             </div>
           );
         })}
@@ -1247,6 +1263,12 @@ export default function App() {
   const [calGranularity, setCalGranularity] = useState("month");
   const [calDate, setCalDate] = useState(() => toDateStr(new Date()));
   const [calCollapsed, setCalCollapsed] = useState(false);
+  const [calHiddenOwners, setCalHiddenOwners] = useState(() => new Set());
+  const toggleCalOwner = (owner) => setCalHiddenOwners((prev) => {
+    const next = new Set(prev);
+    next.has(owner) ? next.delete(owner) : next.add(owner);
+    return next;
+  });
 
   const inputRef = useRef(null);
   const saveTimer = useRef(null);
@@ -1378,6 +1400,16 @@ export default function App() {
     }
     return map;
   }, [visibleProjects, showTaskSections]);
+
+  const calVisibleTasksByDate = useMemo(() => {
+    if (calHiddenOwners.size === 0) return calendarTasksByDate;
+    const map = {};
+    for (const d of Object.keys(calendarTasksByDate)) {
+      const items = calendarTasksByDate[d].filter((i) => !calHiddenOwners.has(i.owner));
+      if (items.length > 0) map[d] = items;
+    }
+    return map;
+  }, [calendarTasksByDate, calHiddenOwners]);
 
   function calShift(delta) {
     if (calGranularity === "month") setCalDate((d) => addMonthsStr(d, delta));
@@ -2346,21 +2378,24 @@ export default function App() {
                         </div>
                       </div>
                       <div style={styles.calLegend}>
-                        {TOP_TABS.filter((c) => c.key !== "総合").map((c) => (
-                          <span key={c.key} style={styles.calLegendItem}>
-                            <span style={{ ...styles.calMonthDot, background: c.color }} />
-                            {c.label}
-                          </span>
-                        ))}
+                        {TOP_TABS.filter((c) => c.key !== "総合").map((c) => {
+                          const hidden = calHiddenOwners.has(c.key);
+                          return (
+                            <button type="button" key={c.key} onClick={() => toggleCalOwner(c.key)} style={{ ...styles.calLegendItem, opacity: hidden ? 0.4 : 1 }}>
+                              <span style={{ ...styles.calMonthDot, background: c.color }} />
+                              {c.label}
+                            </button>
+                          );
+                        })}
                       </div>
                       {calGranularity === "month" && (
-                        <CalendarMonthView monthDateStr={calDate} tasksByDate={calendarTasksByDate} todayStr={todayStr} ownerColorOf={ownerColorOf} onSelectDay={calSelectDay} />
+                        <CalendarMonthView monthDateStr={calDate} tasksByDate={calVisibleTasksByDate} todayStr={todayStr} ownerColorOf={ownerColorOf} onSelectDay={calSelectDay} />
                       )}
                       {calGranularity === "week" && (
-                        <CalendarTimeGrid dates={calWeekDates} tasksByDate={calendarTasksByDate} todayStr={todayStr} ownerColorOf={ownerColorOf} onToggleDone={toggleSubtaskDone} onSelectDay={calSelectDay} />
+                        <CalendarTimeGrid dates={calWeekDates} tasksByDate={calVisibleTasksByDate} todayStr={todayStr} ownerColorOf={ownerColorOf} onToggleDone={toggleSubtaskDone} onSelectDay={calSelectDay} />
                       )}
                       {calGranularity === "day" && (
-                        <CalendarTimeGrid dates={[calDate]} tasksByDate={calendarTasksByDate} todayStr={todayStr} ownerColorOf={ownerColorOf} onToggleDone={toggleSubtaskDone} onSelectDay={calSelectDay} />
+                        <CalendarTimeGrid dates={[calDate]} tasksByDate={calVisibleTasksByDate} todayStr={todayStr} ownerColorOf={ownerColorOf} onToggleDone={toggleSubtaskDone} onSelectDay={calSelectDay} />
                       )}
                     </div>
                   )}
@@ -2969,7 +3004,7 @@ const styles = {
   calNavBtn: { background: "none", border: "1.5px solid #D8D8D8", borderRadius: 5, color: "#2C3645", fontSize: 11, cursor: "pointer", width: 22, height: 22, padding: 0, fontFamily: "inherit" },
   calNavLabel: { fontSize: 12.5, fontWeight: 700, color: "#2C3645", minWidth: 90, textAlign: "center" },
   calLegend: { display: "flex", gap: 12, flexWrap: "wrap" },
-  calLegendItem: { display: "flex", alignItems: "center", gap: 4, fontSize: 10.5, color: "#7A7A7A", fontWeight: 700 },
+  calLegendItem: { display: "flex", alignItems: "center", gap: 4, fontSize: 10.5, color: "#7A7A7A", fontWeight: 700, background: "none", border: "none", padding: "2px 4px", cursor: "pointer", fontFamily: "inherit" },
 
   calMonthHeaderRow: { display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 3, marginBottom: 3 },
   calMonthHeaderCell: { fontSize: 10, fontWeight: 700, color: "#9B9B9B", textAlign: "center" },
@@ -2986,6 +3021,7 @@ const styles = {
   calGridDayHeaderCol: { flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2, padding: "4px 3px", borderLeft: "1px solid #E0E0E0" },
   calGridDayHeaderBtn: { background: "none", border: "none", fontSize: 10.5, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", padding: 0, textAlign: "left" },
   calGridUntimedChip: { fontSize: 9, fontWeight: 700, color: "#FFFFFF", border: "none", borderRadius: 4, padding: "1px 4px", cursor: "pointer", fontFamily: "inherit", textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+  calGridUntimedToggle: { fontSize: 8.5, fontWeight: 700, color: "#12314F", background: "none", border: "none", padding: "1px 2px", cursor: "pointer", fontFamily: "inherit", textAlign: "left" },
   calGridBody: { display: "flex", position: "relative", overflowY: "auto", maxHeight: 480 },
   calGridTimeCol: { width: 40, flexShrink: 0 },
   calGridTimeLabel: { fontSize: 9, color: "#9B9B9B", textAlign: "right", paddingRight: 4, boxSizing: "border-box", borderTop: "1px solid #F0F0F0" },
