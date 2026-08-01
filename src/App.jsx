@@ -2305,60 +2305,66 @@ export default function App() {
           {dashboardOpen && <DashboardModal projects={visibleProjects} onClose={() => setDashboardOpen(false)} />}
           {showTaskSections && (
             <>
-              <div style={styles.brainRow}>
-                <BrainBadge label="1日" ratio={dayBrainRatio} moyaCount={totalMoyamoyaCount} />
-                <BrainBadge label="今週" ratio={weekSummary.brainRatio} />
-                <BrainBadge label="来週" ratio={nextWeekSummary.ratio} />
-                <BrainBadge label="先週" ratio={lastWeekSummary.ratio} />
-              </div>
-              {projects !== null && renderPrioritySection({ key: "moyamoya", label: "もやもや", color: MOYAMOYA_COLOR, small: false, moyamoya: true, group: visibleProjects.filter((pp) => !pp.status && pp.moyamoya) })}
-
-              <div style={styles.sectionTitleRow}>
-                <h3 style={styles.sectionTitleFlush}>カレンダー</h3>
-                <button type="button" onClick={() => setCalCollapsed((v) => !v)} style={styles.collapseBtnSm} aria-label={calCollapsed ? "カレンダーを展開する" : "カレンダーを折りたたむ"}>
-                  {calCollapsed ? "▸" : "▾"}
-                </button>
-              </div>
-              {!calCollapsed && (
-                <div style={styles.calWrap}>
-                  <div style={styles.calToolbar}>
-                    <div style={styles.granularityGroup}>
-                      {[{ key: "month", label: "月" }, { key: "week", label: "週" }, { key: "day", label: "日" }].map((g) => (
-                        <button
-                          key={g.key}
-                          type="button"
-                          onClick={() => setCalGranularity(g.key)}
-                          style={{ ...styles.granularityBtn, background: calGranularity === g.key ? "#2C3645" : "transparent", color: calGranularity === g.key ? "#FFFFFF" : "#2C3645" }}
-                        >
-                          {g.label}
-                        </button>
-                      ))}
-                    </div>
-                    <div style={styles.calNavGroup}>
-                      <button type="button" onClick={() => calShift(-1)} aria-label="前へ" style={styles.calNavBtn}>◀</button>
-                      <span style={styles.calNavLabel}>{calLabel}</span>
-                      <button type="button" onClick={() => calShift(1)} aria-label="次へ" style={styles.calNavBtn}>▶</button>
-                      <button type="button" onClick={calGoToday} style={styles.inlineAddBtn}>今日</button>
-                    </div>
-                  </div>
-                  <div style={styles.calLegend}>
-                    {TOP_TABS.filter((c) => c.key !== "総合").map((c) => (
-                      <span key={c.key} style={styles.calLegendItem}>
-                        <span style={{ ...styles.calMonthDot, background: c.color }} />
-                        {c.label}
-                      </span>
-                    ))}
-                  </div>
-                  {calGranularity === "month" && (
-                    <CalendarMonthView monthDateStr={calDate} tasksByDate={calendarTasksByDate} todayStr={todayStr} ownerColorOf={ownerColorOf} onSelectDay={calSelectDay} />
-                  )}
-                  {calGranularity === "week" && (
-                    <CalendarTimeGrid dates={calWeekDates} tasksByDate={calendarTasksByDate} todayStr={todayStr} ownerColorOf={ownerColorOf} onToggleDone={toggleSubtaskDone} onSelectDay={calSelectDay} />
-                  )}
-                  {calGranularity === "day" && (
-                    <CalendarTimeGrid dates={[calDate]} tasksByDate={calendarTasksByDate} todayStr={todayStr} ownerColorOf={ownerColorOf} onToggleDone={toggleSubtaskDone} onSelectDay={calSelectDay} />
-                  )}
+              {showWorkSummary && (
+                <div style={styles.brainRow}>
+                  <BrainBadge label="1日" ratio={dayBrainRatio} moyaCount={totalMoyamoyaCount} />
+                  <BrainBadge label="今週" ratio={weekSummary.brainRatio} />
+                  <BrainBadge label="来週" ratio={nextWeekSummary.ratio} />
+                  <BrainBadge label="先週" ratio={lastWeekSummary.ratio} />
                 </div>
+              )}
+              {showWorkSummary && projects !== null && renderPrioritySection({ key: "moyamoya", label: "もやもや", color: MOYAMOYA_COLOR, small: false, moyamoya: true, group: visibleProjects.filter((pp) => !pp.status && pp.moyamoya) })}
+
+              {topTab === "総合" && (
+                <>
+                  <div style={styles.sectionTitleRow}>
+                    <h3 style={styles.sectionTitleFlush}>カレンダー</h3>
+                    <button type="button" onClick={() => setCalCollapsed((v) => !v)} style={styles.collapseBtnSm} aria-label={calCollapsed ? "カレンダーを展開する" : "カレンダーを折りたたむ"}>
+                      {calCollapsed ? "▸" : "▾"}
+                    </button>
+                  </div>
+                  {!calCollapsed && (
+                    <div style={styles.calWrap}>
+                      <div style={styles.calToolbar}>
+                        <div style={styles.granularityGroup}>
+                          {[{ key: "month", label: "月" }, { key: "week", label: "週" }, { key: "day", label: "日" }].map((g) => (
+                            <button
+                              key={g.key}
+                              type="button"
+                              onClick={() => setCalGranularity(g.key)}
+                              style={{ ...styles.granularityBtn, background: calGranularity === g.key ? "#2C3645" : "transparent", color: calGranularity === g.key ? "#FFFFFF" : "#2C3645" }}
+                            >
+                              {g.label}
+                            </button>
+                          ))}
+                        </div>
+                        <div style={styles.calNavGroup}>
+                          <button type="button" onClick={() => calShift(-1)} aria-label="前へ" style={styles.calNavBtn}>◀</button>
+                          <span style={styles.calNavLabel}>{calLabel}</span>
+                          <button type="button" onClick={() => calShift(1)} aria-label="次へ" style={styles.calNavBtn}>▶</button>
+                          <button type="button" onClick={calGoToday} style={styles.inlineAddBtn}>今日</button>
+                        </div>
+                      </div>
+                      <div style={styles.calLegend}>
+                        {TOP_TABS.filter((c) => c.key !== "総合").map((c) => (
+                          <span key={c.key} style={styles.calLegendItem}>
+                            <span style={{ ...styles.calMonthDot, background: c.color }} />
+                            {c.label}
+                          </span>
+                        ))}
+                      </div>
+                      {calGranularity === "month" && (
+                        <CalendarMonthView monthDateStr={calDate} tasksByDate={calendarTasksByDate} todayStr={todayStr} ownerColorOf={ownerColorOf} onSelectDay={calSelectDay} />
+                      )}
+                      {calGranularity === "week" && (
+                        <CalendarTimeGrid dates={calWeekDates} tasksByDate={calendarTasksByDate} todayStr={todayStr} ownerColorOf={ownerColorOf} onToggleDone={toggleSubtaskDone} onSelectDay={calSelectDay} />
+                      )}
+                      {calGranularity === "day" && (
+                        <CalendarTimeGrid dates={[calDate]} tasksByDate={calendarTasksByDate} todayStr={todayStr} ownerColorOf={ownerColorOf} onToggleDone={toggleSubtaskDone} onSelectDay={calSelectDay} />
+                      )}
+                    </div>
+                  )}
+                </>
               )}
 
               <div style={styles.sectionTitleRow}>
