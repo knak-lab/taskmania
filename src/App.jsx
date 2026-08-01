@@ -223,6 +223,32 @@ function addDaysStr(dateStr, days) {
 }
 
 const WEEKDAY_LABELS = ["日", "月", "火", "水", "木", "金", "土"];
+const MON_FIRST_LABELS = ["月", "火", "水", "木", "金", "土", "日"];
+
+function addMonthsStr(dateStr, months) {
+  const [y, m] = dateStr.split("-").map(Number);
+  const d = new Date(y, m - 1 + months, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+}
+
+// 月表示用に、その月を含む週の月曜始まりを7日区切りで敷き詰めた日付一覧を返す(前後月の日付も含む)
+function monthGridDates(dateStr) {
+  const [y, m] = dateStr.split("-").map(Number);
+  const firstOfMonth = new Date(y, m - 1, 1);
+  const lastOfMonth = new Date(y, m, 0);
+  const gridStart = startOfWeek(firstOfMonth);
+  const gridEnd = startOfWeek(lastOfMonth);
+  gridEnd.setDate(gridEnd.getDate() + 6);
+  const dates = [];
+  for (let d = new Date(gridStart); d <= gridEnd; d.setDate(d.getDate() + 1)) dates.push(toDateStr(d));
+  return dates;
+}
+
+function timeToMinutes(time) {
+  if (!time) return null;
+  const [h, m] = time.split(":").map(Number);
+  return h * 60 + m;
+}
 
 function nthWeekdayOfMonth(year, month, weekday, nth) {
   const d = new Date(year, month - 1, 1);
@@ -712,6 +738,115 @@ function DateGroupedTaskList({ dates, tasks, openDates, onToggleDate, onToggleDo
   );
 }
 
+const CAL_HOUR_START = 6;
+const CAL_HOUR_END = 24;
+const CAL_HOUR_HEIGHT = 36;
+
+function CalendarMonthView({ monthDateStr, tasksByDate, todayStr, ownerColorOf, onSelectDay }) {
+  const [y, m] = monthDateStr.split("-").map(Number);
+  const dates = monthGridDates(monthDateStr);
+  return (
+    <div>
+      <div style={styles.calMonthHeaderRow}>
+        {MON_FIRST_LABELS.map((l) => <span key={l} style={styles.calMonthHeaderCell}>{l}</span>)}
+      </div>
+      <div style={styles.calMonthGrid}>
+        {dates.map((d) => {
+          const dt = new Date(d + "T00:00:00");
+          const inMonth = dt.getMonth() + 1 === m && dt.getFullYear() === y;
+          const items = tasksByDate[d] || [];
+          const owners = [...new Set(items.map((i) => i.owner))];
+          const holiday = isJapanHoliday(d);
+          const weekday = dt.getDay();
+          const dateColor = holiday || weekday === 0 ? "#D64550" : weekday === 6 ? "#2E86DE" : "#2C3645";
+          return (
+            <button
+              type="button"
+              key={d}
+              onClick={() => onSelectDay(d)}
+              style={{ ...styles.calMonthCell, opacity: inMonth ? 1 : 0.4, background: d === todayStr ? "#FFF6E5" : "#FFFFFF" }}
+              title={holiday ? d : undefined}
+            >
+              <span style={{ ...styles.calMonthDateNum, color: dateColor }}>{dt.getDate()}</span>
+              {items.length > 0 && <span style={styles.calMonthBadge}>{items.length}</span>}
+              {owners.length > 0 && (
+                <span style={styles.calMonthDots}>
+                  {owners.map((o) => <span key={o} style={{ ...styles.calMonthDot, background: ownerColorOf(o) }} />)}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function CalendarTimeGrid({ dates, tasksByDate, todayStr, ownerColorOf, onToggleDone, onSelectDay }) {
+  const hours = Array.from({ length: CAL_HOUR_END - CAL_HOUR_START }, (_, i) => i + CAL_HOUR_START);
+  const gridHeight = hours.length * CAL_HOUR_HEIGHT;
+  const rangeStartMin = CAL_HOUR_START * 60;
+  return (
+    <div style={styles.calGridWrap}>
+      <div style={styles.calGridHeaderRow}>
+        <span style={styles.calGridTimeColHeader} />
+        {dates.map((d) => {
+          const dt = new Date(d + "T00:00:00");
+          const items = tasksByDate[d] || [];
+          const untimed = items.filter((i) => !i.sub.startTime);
+          return (
+            <div key={d} style={styles.calGridDayHeaderCol}>
+              <button type="button" onClick={() => onSelectDay(d)} style={{ ...styles.calGridDayHeaderBtn, color: d === todayStr ? "#F39800" : "#2C3645" }}>
+                {formatDate(d)}({DAY_JP[dt.getDay()]})
+              </button>
+              {untimed.map(({ pjId, taskId, sub: s, owner }) => (
+                <button
+                  type="button"
+                  key={s.id}
+                  onClick={() => onToggleDone(pjId, taskId, s.id)}
+                  style={{ ...styles.calGridUntimedChip, background: ownerColorOf(owner), textDecoration: s.done ? "line-through" : "none" }}
+                  title={s.text}
+                >
+                  {s.text}
+                </button>
+              ))}
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ ...styles.calGridBody, height: gridHeight }}>
+        <div style={styles.calGridTimeCol}>
+          {hours.map((h) => <div key={h} style={{ ...styles.calGridTimeLabel, height: CAL_HOUR_HEIGHT }}>{h}:00</div>)}
+        </div>
+        {dates.map((d) => {
+          const items = (tasksByDate[d] || []).filter((i) => i.sub.startTime);
+          return (
+            <div key={d} style={{ ...styles.calGridDayCol, height: gridHeight }}>
+              {hours.map((h) => <div key={h} style={{ ...styles.calGridHourLine, top: (h - CAL_HOUR_START) * CAL_HOUR_HEIGHT }} />)}
+              {items.map(({ pjId, taskId, pjName, sub: s, owner }) => {
+                const startMin = timeToMinutes(s.startTime);
+                const top = Math.max(0, (startMin - rangeStartMin) / 60) * CAL_HOUR_HEIGHT;
+                const height = Math.max(16, ((s.estimatedMinutes || 30) / 60) * CAL_HOUR_HEIGHT);
+                return (
+                  <button
+                    type="button"
+                    key={s.id}
+                    onClick={() => onToggleDone(pjId, taskId, s.id)}
+                    style={{ ...styles.calGridBlock, top, height, background: ownerColorOf(owner), textDecoration: s.done ? "line-through" : "none" }}
+                    title={`${s.startTime} ${s.text}(${pjName})`}
+                  >
+                    {s.startTime} {s.text}
+                  </button>
+                );
+              })}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 const DASHBOARD_CATEGORICAL_COLORS = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#4a3aa7", "#e34948"];
 const DASHBOARD_OTHER_COLOR = "#9B9B9B";
 
@@ -1109,6 +1244,9 @@ export default function App() {
   const [copyDateModal, setCopyDateModal] = useState(null);
   const [dashboardOpen, setDashboardOpen] = useState(false);
   const [moveDateModal, setMoveDateModal] = useState(null);
+  const [calGranularity, setCalGranularity] = useState("month");
+  const [calDate, setCalDate] = useState(() => toDateStr(new Date()));
+  const [calCollapsed, setCalCollapsed] = useState(false);
 
   const inputRef = useRef(null);
   const saveTimer = useRef(null);
@@ -1217,6 +1355,51 @@ export default function App() {
   }
 
   const visibleDayTasks = dayTasks.filter((t) => !t.sub.done);
+
+  // カレンダー(月/週/日)用: 予定日が入っている全サブタスクを日付ごとにグルーピング
+  const calendarTasksByDate = useMemo(() => {
+    const map = {};
+    if (!showTaskSections) return map;
+    for (const p of visibleProjects) {
+      for (const t of p.tasks) {
+        for (const s of t.subtasks) {
+          if (!s.scheduledDate) continue;
+          (map[s.scheduledDate] ||= []).push({ pjId: p.id, pjName: p.name, taskId: t.id, taskName: t.name, owner: p.owner, sub: s });
+        }
+      }
+    }
+    for (const d of Object.keys(map)) {
+      map[d].sort((a, b) => {
+        if (!a.sub.startTime && !b.sub.startTime) return 0;
+        if (!a.sub.startTime) return 1;
+        if (!b.sub.startTime) return -1;
+        return a.sub.startTime.localeCompare(b.sub.startTime);
+      });
+    }
+    return map;
+  }, [visibleProjects, showTaskSections]);
+
+  function calShift(delta) {
+    if (calGranularity === "month") setCalDate((d) => addMonthsStr(d, delta));
+    else if (calGranularity === "week") setCalDate((d) => addDaysStr(d, delta * 7));
+    else setCalDate((d) => addDaysStr(d, delta));
+  }
+  function calGoToday() {
+    setCalDate(toDateStr(new Date()));
+  }
+  function calSelectDay(d) {
+    setCalDate(d);
+    setCalGranularity("day");
+  }
+  const calWeekDates = useMemo(() => {
+    const monday = startOfWeek(new Date(calDate + "T00:00:00"));
+    return Array.from({ length: 7 }, (_, i) => addDaysStr(toDateStr(monday), i));
+  }, [calDate]);
+  const calLabel = calGranularity === "month"
+    ? `${calDate.slice(0, 4)}年${Number(calDate.slice(5, 7))}月`
+    : calGranularity === "week"
+      ? `${formatDate(calWeekDates[0])} 〜 ${formatDate(calWeekDates[6])}`
+      : `${formatDate(calDate)}(${DAY_JP[new Date(calDate + "T00:00:00").getDay()]})`;
 
   const showWorkSummary = topTab === "kkr" && subTab === "仕事";
   const totalEstMin = dayTasks.reduce((sum, t) => sum + (t.sub.estimatedMinutes || 0), 0);
@@ -2129,6 +2312,55 @@ export default function App() {
                 <BrainBadge label="先週" ratio={lastWeekSummary.ratio} />
               </div>
               {projects !== null && renderPrioritySection({ key: "moyamoya", label: "もやもや", color: MOYAMOYA_COLOR, small: false, moyamoya: true, group: visibleProjects.filter((pp) => !pp.status && pp.moyamoya) })}
+
+              <div style={styles.sectionTitleRow}>
+                <h3 style={styles.sectionTitleFlush}>カレンダー</h3>
+                <button type="button" onClick={() => setCalCollapsed((v) => !v)} style={styles.collapseBtnSm} aria-label={calCollapsed ? "カレンダーを展開する" : "カレンダーを折りたたむ"}>
+                  {calCollapsed ? "▸" : "▾"}
+                </button>
+              </div>
+              {!calCollapsed && (
+                <div style={styles.calWrap}>
+                  <div style={styles.calToolbar}>
+                    <div style={styles.granularityGroup}>
+                      {[{ key: "month", label: "月" }, { key: "week", label: "週" }, { key: "day", label: "日" }].map((g) => (
+                        <button
+                          key={g.key}
+                          type="button"
+                          onClick={() => setCalGranularity(g.key)}
+                          style={{ ...styles.granularityBtn, background: calGranularity === g.key ? "#2C3645" : "transparent", color: calGranularity === g.key ? "#FFFFFF" : "#2C3645" }}
+                        >
+                          {g.label}
+                        </button>
+                      ))}
+                    </div>
+                    <div style={styles.calNavGroup}>
+                      <button type="button" onClick={() => calShift(-1)} aria-label="前へ" style={styles.calNavBtn}>◀</button>
+                      <span style={styles.calNavLabel}>{calLabel}</span>
+                      <button type="button" onClick={() => calShift(1)} aria-label="次へ" style={styles.calNavBtn}>▶</button>
+                      <button type="button" onClick={calGoToday} style={styles.inlineAddBtn}>今日</button>
+                    </div>
+                  </div>
+                  <div style={styles.calLegend}>
+                    {TOP_TABS.filter((c) => c.key !== "総合").map((c) => (
+                      <span key={c.key} style={styles.calLegendItem}>
+                        <span style={{ ...styles.calMonthDot, background: c.color }} />
+                        {c.label}
+                      </span>
+                    ))}
+                  </div>
+                  {calGranularity === "month" && (
+                    <CalendarMonthView monthDateStr={calDate} tasksByDate={calendarTasksByDate} todayStr={todayStr} ownerColorOf={ownerColorOf} onSelectDay={calSelectDay} />
+                  )}
+                  {calGranularity === "week" && (
+                    <CalendarTimeGrid dates={calWeekDates} tasksByDate={calendarTasksByDate} todayStr={todayStr} ownerColorOf={ownerColorOf} onToggleDone={toggleSubtaskDone} onSelectDay={calSelectDay} />
+                  )}
+                  {calGranularity === "day" && (
+                    <CalendarTimeGrid dates={[calDate]} tasksByDate={calendarTasksByDate} todayStr={todayStr} ownerColorOf={ownerColorOf} onToggleDone={toggleSubtaskDone} onSelectDay={calSelectDay} />
+                  )}
+                </div>
+              )}
+
               <div style={styles.sectionTitleRow}>
                 <h3 style={styles.sectionTitleFlush}>1日のタスク</h3>
                 <input type="date" value={dayViewDate} onChange={(e) => setDayViewDate(e.target.value)} style={styles.scheduleEditInput} aria-label="表示する日付" />
@@ -2724,4 +2956,34 @@ const styles = {
   subTextInput: { flex: 1, fontSize: 13, lineHeight: 1.4, minWidth: 0, border: "none", background: "transparent", fontFamily: "inherit", padding: "2px 4px", borderRadius: 5, width: "100%" },
   metaTag: { fontSize: 9.5, fontWeight: 700, padding: "1px 6px", borderRadius: 10, border: "1px solid", flexShrink: 0 },
   deleteBtn: { background: "none", border: "none", color: "#D8D8D8", fontSize: 16, cursor: "pointer", padding: "0 2px", flexShrink: 0, lineHeight: 1 },
+
+  calWrap: { display: "flex", flexDirection: "column", gap: 8, marginBottom: 4 },
+  calToolbar: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" },
+  calNavGroup: { display: "flex", alignItems: "center", gap: 6 },
+  calNavBtn: { background: "none", border: "1.5px solid #D8D8D8", borderRadius: 5, color: "#2C3645", fontSize: 11, cursor: "pointer", width: 22, height: 22, padding: 0, fontFamily: "inherit" },
+  calNavLabel: { fontSize: 12.5, fontWeight: 700, color: "#2C3645", minWidth: 90, textAlign: "center" },
+  calLegend: { display: "flex", gap: 12, flexWrap: "wrap" },
+  calLegendItem: { display: "flex", alignItems: "center", gap: 4, fontSize: 10.5, color: "#7A7A7A", fontWeight: 700 },
+
+  calMonthHeaderRow: { display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 3, marginBottom: 3 },
+  calMonthHeaderCell: { fontSize: 10, fontWeight: 700, color: "#9B9B9B", textAlign: "center" },
+  calMonthGrid: { display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 3 },
+  calMonthCell: { position: "relative", aspectRatio: "1", minHeight: 40, border: "1px solid #E0E0E0", borderRadius: 6, cursor: "pointer", fontFamily: "inherit", display: "flex", flexDirection: "column", alignItems: "flex-start", padding: 4, gap: 2 },
+  calMonthDateNum: { fontSize: 11, fontWeight: 700 },
+  calMonthBadge: { position: "absolute", top: 3, right: 3, minWidth: 14, height: 14, borderRadius: 7, background: "#12314F", color: "#FFFFFF", fontSize: 8.5, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 3px" },
+  calMonthDots: { display: "flex", gap: 2, marginTop: "auto" },
+  calMonthDot: { width: 6, height: 6, borderRadius: "50%", flexShrink: 0 },
+
+  calGridWrap: { border: "1px solid #E0E0E0", borderRadius: 6, overflow: "hidden" },
+  calGridHeaderRow: { display: "flex", borderBottom: "1px solid #E0E0E0", background: "#F9F9F9" },
+  calGridTimeColHeader: { width: 40, flexShrink: 0 },
+  calGridDayHeaderCol: { flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2, padding: "4px 3px", borderLeft: "1px solid #E0E0E0" },
+  calGridDayHeaderBtn: { background: "none", border: "none", fontSize: 10.5, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", padding: 0, textAlign: "left" },
+  calGridUntimedChip: { fontSize: 9, fontWeight: 700, color: "#FFFFFF", border: "none", borderRadius: 4, padding: "1px 4px", cursor: "pointer", fontFamily: "inherit", textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+  calGridBody: { display: "flex", position: "relative", overflowY: "auto", maxHeight: 480 },
+  calGridTimeCol: { width: 40, flexShrink: 0 },
+  calGridTimeLabel: { fontSize: 9, color: "#9B9B9B", textAlign: "right", paddingRight: 4, boxSizing: "border-box", borderTop: "1px solid #F0F0F0" },
+  calGridDayCol: { flex: 1, minWidth: 0, position: "relative", borderLeft: "1px solid #E0E0E0" },
+  calGridHourLine: { position: "absolute", left: 0, right: 0, borderTop: "1px solid #F0F0F0" },
+  calGridBlock: { position: "absolute", left: 2, right: 2, border: "none", borderRadius: 4, color: "#FFFFFF", fontSize: 9.5, fontWeight: 700, padding: "1px 4px", cursor: "pointer", fontFamily: "inherit", textAlign: "left", overflow: "hidden", whiteSpace: "nowrap" },
 };
