@@ -10,6 +10,8 @@
  * API:
  *   GET  {webAppUrl}            → { projects: [...] } (PJ→タスク→サブタスクのネスト構造。フロント側のprojects stateとそのまま互換)
  *   POST {webAppUrl}            → body: { projects: [...] } を受け取り、3シートを全件書き換え
+ *   POST {webAppUrl}            → body: { calendarEvent: { title, date, startTime, estimatedMinutes } } を受け取り、
+ *                                  このスクリプトのデフォルトGoogleカレンダーに予定を1件作成する
  *
  * 使い方(初回のみ):
  *   1. Google Sheetsで新規スプレッドシートを作成
@@ -106,6 +108,16 @@ const STEPS_HEADERS = ["id", "subtaskId", "text", "done"];
 const MOYAMOYA_HEADERS = ["id", "text"];
 const WORKADJ_HEADERS = ["date", "hours"];
 
+/**
+ * Googleカレンダー送信機能の初回権限付与用。エディタの関数選択でこれを選び、
+ * 一度だけ手動実行してカレンダーへのアクセスを許可する(実行するとポップアップで
+ * 承認画面が出る)。Web App(doPost)側は新しいスコープを自動では要求できないため、
+ * この手動実行が必要。
+ */
+function authorizeCalendarAccess() {
+  CalendarApp.getDefaultCalendar();
+}
+
 /** 初回セットアップ用。エディタから手動で一度だけ実行する */
 function setup() {
   getOrCreateSheet_(SHEET_PROJECTS, PROJECTS_HEADERS);
@@ -130,6 +142,7 @@ function doPost(e) {
     let projectCount = null;
     let moyamoyaCount = null;
     let workAdjCount = null;
+    let calendarEventId = null;
     if (body.projects !== undefined) {
       writeProjects_(body.projects || []);
       projectCount = (body.projects || []).length;
@@ -142,10 +155,31 @@ function doPost(e) {
       writeWorkAdj_(body.workAdj || []);
       workAdjCount = (body.workAdj || []).length;
     }
-    return jsonResponse_({ ok: true, projectCount: projectCount, moyamoyaCount: moyamoyaCount, workAdjCount: workAdjCount });
+    if (body.calendarEvent !== undefined) {
+      calendarEventId = createCalendarEvent_(body.calendarEvent);
+    }
+    return jsonResponse_({ ok: true, projectCount: projectCount, moyamoyaCount: moyamoyaCount, workAdjCount: workAdjCount, calendarEventId: calendarEventId });
   } catch (err) {
     return jsonResponse_({ ok: false, error: String(err) });
   }
+}
+
+// サブタスクをGoogleカレンダー(このスクリプトのデフォルトカレンダー)へ予定として送る。
+// startTimeがあれば時間指定の予定(想定時間分、なければ30分)、日付だけなら終日予定にする。
+function createCalendarEvent_(ev) {
+  if (!ev || !ev.date) throw new Error("date is required");
+  const title = ev.title || "(無題)";
+  const calendar = CalendarApp.getDefaultCalendar();
+  if (ev.startTime) {
+    const start = new Date(ev.date + "T" + ev.startTime + ":00");
+    const minutes = ev.estimatedMinutes && ev.estimatedMinutes > 0 ? ev.estimatedMinutes : 30;
+    const end = new Date(start.getTime() + minutes * 60000);
+    const event = calendar.createEvent(title, start, end);
+    return event.getId();
+  }
+  const day = new Date(ev.date + "T00:00:00");
+  const event = calendar.createAllDayEvent(title, day);
+  return event.getId();
 }
 
 // ---- 読み込み ----

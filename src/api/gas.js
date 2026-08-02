@@ -43,6 +43,14 @@ export async function saveMoyamoyaNotes(moyamoyaNotes) {
   });
 }
 
+export async function sendToCalendar({ title, date, startTime, estimatedMinutes }) {
+  return fetchGasJson(GAS_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({ calendarEvent: { title, date, startTime, estimatedMinutes } }),
+  });
+}
+
 export async function saveWorkAdj(workAdj) {
   return fetchGasJson(GAS_URL, {
     method: 'POST',

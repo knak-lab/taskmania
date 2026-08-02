@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import * as XLSX from "xlsx";
-import { loadAppData, loadKamoTodos, saveProjects as gasSave, saveMoyamoyaNotes as gasSaveMoyamoyaNotes, saveWorkAdj as gasSaveWorkAdj } from "./api/gas";
+import { loadAppData, loadKamoTodos, saveProjects as gasSave, saveMoyamoyaNotes as gasSaveMoyamoyaNotes, saveWorkAdj as gasSaveWorkAdj, sendToCalendar as gasSendToCalendar } from "./api/gas";
 
 const TOP_TABS = [
   { key: "総合", label: "総合", color: "#2C3645" },
@@ -1998,6 +1998,37 @@ export default function App() {
     );
   }
 
+  // サブタスクをGoogleカレンダーへ送る(予定日が入っているサブタスクのみ)
+  const [sendingCalId, setSendingCalId] = useState(null);
+  const [calSendFeedback, setCalSendFeedback] = useState({});
+  async function sendSubtaskToCalendar(s) {
+    setSendingCalId(s.id);
+    try {
+      await gasSendToCalendar({ title: s.text, date: s.scheduledDate, startTime: s.startTime, estimatedMinutes: s.estimatedMinutes });
+      setCalSendFeedback((prev) => ({ ...prev, [s.id]: "ok" }));
+    } catch {
+      setCalSendFeedback((prev) => ({ ...prev, [s.id]: "error" }));
+    } finally {
+      setSendingCalId(null);
+      setTimeout(() => setCalSendFeedback((prev) => {
+        const next = { ...prev };
+        delete next[s.id];
+        return next;
+      }), 2000);
+    }
+  }
+  function renderSendToCalendarButton(s) {
+    if (!s.scheduledDate) return null;
+    const sending = sendingCalId === s.id;
+    const feedback = calSendFeedback[s.id];
+    const label = sending ? "送信中" : feedback === "ok" ? "✓送った" : feedback === "error" ? "!失敗" : "📤送る";
+    return (
+      <button type="button" onClick={() => sendSubtaskToCalendar(s)} disabled={sending} aria-label="Googleカレンダーに送る" style={styles.inlineAddBtn}>
+        {label}
+      </button>
+    );
+  }
+
   function moveSubtask(fromPjId, fromTaskId, subId, toPjId, toTaskId) {
     setProjects((prev) => {
       let moved = null;
@@ -2302,6 +2333,7 @@ export default function App() {
                                         <span style={{ ...styles.metaTag, borderColor: pInfo.color, color: pInfo.color }}>{pInfo.label}</span>
                                         <button type="button" onClick={() => openStepsModal(p.id, t.id, s.id)} aria-label="ステップを開く" style={styles.inlineAddBtn}>☑ステップ</button>
                                         <button type="button" onClick={() => setCopyDateModal({ pjId: p.id, taskId: t.id, subId: s.id, date: s.scheduledDate || todayStr, text: s.text })} aria-label="サブタスクをコピー" style={styles.inlineAddBtn}>📋コピー</button>
+                                        {renderSendToCalendarButton(s)}
                                         <button onClick={() => removeSubtask(p.id, t.id, s.id)} aria-label="削除" style={styles.deleteBtn}>×</button>
                                       </div>
                                     </li>
@@ -2540,6 +2572,7 @@ export default function App() {
                         <button type="button" onClick={() => openStepsModal(pjId, taskId, s.id)} aria-label="ステップを開く" style={styles.inlineAddBtn}>☑ステップ</button>
                         <button type="button" onClick={() => setMoveDateModal({ pjId, taskId, subId: s.id, date: s.scheduledDate || dayViewDate })} aria-label="予定日を変更" style={styles.inlineAddBtn}>📅変更</button>
                         <button type="button" onClick={() => setCopyDateModal({ pjId, taskId, subId: s.id, date: dayViewDate, text: s.text })} aria-label="サブタスクをコピー" style={styles.inlineAddBtn}>📋コピー</button>
+                        {renderSendToCalendarButton(s)}
                         <span style={styles.calPjCol} title={pjName}>{pjName}</span>
                         <span style={styles.calTaskCol} title={taskName}>{taskName}</span>
                       </div>
