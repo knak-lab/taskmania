@@ -296,20 +296,18 @@ function readWorkAdj_() {
 
 function writeMoyamoyaNotes_(notes) {
   const sheet = getOrCreateSheet_(SHEET_MOYAMOYA, MOYAMOYA_HEADERS);
-  clearDataRows_(sheet);
   const rows = (notes || []).map(function (n) {
     return [n.id, n.text || ""];
   });
-  writeRows_(sheet, rows, MOYAMOYA_HEADERS.length);
+  writeRowsReplacing_(sheet, rows, MOYAMOYA_HEADERS.length);
 }
 
 function writeWorkAdj_(workAdj) {
   const sheet = getOrCreateSheet_(SHEET_WORKADJ, WORKADJ_HEADERS);
-  clearDataRows_(sheet);
   const rows = (workAdj || []).map(function (a) {
     return [a.date, a.hours || 0];
   });
-  writeRows_(sheet, rows, WORKADJ_HEADERS.length);
+  writeRowsReplacing_(sheet, rows, WORKADJ_HEADERS.length);
 }
 
 function writeProjects_(projects) {
@@ -317,11 +315,6 @@ function writeProjects_(projects) {
   const taskSheet = getOrCreateSheet_(SHEET_TASKS, TASKS_HEADERS);
   const subSheet = getOrCreateSheet_(SHEET_SUBTASKS, SUBTASKS_HEADERS);
   const stepSheet = getOrCreateSheet_(SHEET_STEPS, STEPS_HEADERS);
-
-  clearDataRows_(projSheet);
-  clearDataRows_(taskSheet);
-  clearDataRows_(subSheet);
-  clearDataRows_(stepSheet);
 
   const projRows = [];
   const taskRows = [];
@@ -355,10 +348,10 @@ function writeProjects_(projects) {
     });
   });
 
-  writeRows_(projSheet, projRows, PROJECTS_HEADERS.length);
-  writeRows_(taskSheet, taskRows, TASKS_HEADERS.length);
-  writeRows_(subSheet, subRows, SUBTASKS_HEADERS.length);
-  writeRows_(stepSheet, stepRows, STEPS_HEADERS.length);
+  writeRowsReplacing_(projSheet, projRows, PROJECTS_HEADERS.length);
+  writeRowsReplacing_(taskSheet, taskRows, TASKS_HEADERS.length);
+  writeRowsReplacing_(subSheet, subRows, SUBTASKS_HEADERS.length);
+  writeRowsReplacing_(stepSheet, stepRows, STEPS_HEADERS.length);
 }
 
 // ---- ユーティリティ ----
@@ -393,16 +386,18 @@ function getDataRows_(sheet) {
   return sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
 }
 
-function clearDataRows_(sheet) {
-  const lastRow = sheet.getLastRow();
-  if (lastRow > 1) {
-    sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).clearContent();
+// 既存データ範囲を新データで上書きする(clear→writeの2手順を1回のsetValuesにまとめて
+// GAS Sheets APIの呼び出し回数を減らし保存を高速化。新データの方が行数が少ない場合は
+// はみ出す旧行を空文字で埋めて消す)
+function writeRowsReplacing_(sheet, rows, numCols) {
+  const oldDataRowCount = Math.max(sheet.getLastRow() - 1, 0);
+  const totalRows = Math.max(oldDataRowCount, rows.length);
+  if (totalRows === 0) return;
+  const padded = rows.slice();
+  for (let i = rows.length; i < totalRows; i++) {
+    padded.push(new Array(numCols).fill(""));
   }
-}
-
-function writeRows_(sheet, rows, numCols) {
-  if (rows.length === 0) return;
-  sheet.getRange(2, 1, rows.length, numCols).setValues(rows);
+  sheet.getRange(2, 1, totalRows, numCols).setValues(padded);
 }
 
 function jsonResponse_(obj) {

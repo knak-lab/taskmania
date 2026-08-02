@@ -1348,6 +1348,13 @@ export default function App() {
   // これがないと、読み込み結果がたまたま不完全だった場合にその内容がそのまま
   // 自動保存され、スプレッドシートの全件洗い替えで実データを消してしまう。
   const skipNextSaveRef = useRef(false);
+  // 保存リクエストが多重に飛ぶと(GAS側はスプレッドシートのロックで直列化するため)
+  // かえって待ち時間が伸びたりエラーになったりするので、実行中は次を「保留」にして
+  // 完了後にまとめて最新状態を1回だけ送るようにするためのガード。
+  const savingProjectsRef = useRef(false);
+  const pendingProjectsSaveRef = useRef(false);
+  const projectsRef = useRef(projects);
+  useEffect(() => { projectsRef.current = projects; }, [projects]);
   const moyamoyaSaveTimer = useRef(null);
   const skipNextMoyamoyaSaveRef = useRef(false);
   const workAdjSaveTimer = useRef(null);
@@ -1388,20 +1395,29 @@ export default function App() {
   useEffect(() => { handleLoad(); }, []);
 
   // 変更時に自動保存(初回読み込みが成功するまでは保存しない)
+  function runProjectsSave() {
+    if (savingProjectsRef.current) { pendingProjectsSaveRef.current = true; return; }
+    savingProjectsRef.current = true;
+    gasSave(projectsRef.current)
+      .then(() => {
+        setSaveState("saved");
+        setTimeout(() => setSaveState("idle"), 2000);
+      })
+      .catch(() => setSaveState("error"))
+      .finally(() => {
+        savingProjectsRef.current = false;
+        if (pendingProjectsSaveRef.current) {
+          pendingProjectsSaveRef.current = false;
+          runProjectsSave();
+        }
+      });
+  }
   useEffect(() => {
     if (projects === null || !hasLoadedRef.current) return;
     if (skipNextSaveRef.current) { skipNextSaveRef.current = false; return; }
     setSaveState("saving");
     clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(async () => {
-      try {
-        await gasSave(projects);
-        setSaveState("saved");
-        setTimeout(() => setSaveState("idle"), 2000);
-      } catch {
-        setSaveState("error");
-      }
-    }, 800);
+    saveTimer.current = setTimeout(runProjectsSave, 800);
     return () => clearTimeout(saveTimer.current);
   }, [projects]);
 
@@ -3005,7 +3021,7 @@ const styles = {
   collapseBtn: { background: "none", border: "none", fontSize: 13, color: "#2C3645", cursor: "pointer", width: 18, padding: 0, flexShrink: 0 },
   collapseBtnSm: { background: "none", border: "none", fontSize: 11, color: "#12314F", cursor: "pointer", width: 16, padding: 0, flexShrink: 0 },
   pjNameInput: { flex: 1, fontSize: 14, fontWeight: 700, color: "#2C3645", minWidth: 0, textAlign: "left", border: "none", background: "transparent", fontFamily: "inherit", padding: "3px 5px", borderRadius: 5 },
-  taskNameInput: { flex: 1, fontSize: 13, fontWeight: 600, color: "#2C3645", minWidth: 0, border: "none", background: "transparent", fontFamily: "inherit", padding: "2px 4px", borderRadius: 5 },
+  taskNameInput: { flex: 1, fontSize: 13, fontWeight: 600, color: "#2C3645", minWidth: 0, border: "none", background: "transparent", fontFamily: "inherit", padding: "2px 4px", borderRadius: 5, textDecoration: "underline" },
   ganttToggleBtn: { flexShrink: 0, border: "none", borderRadius: 5, padding: "3px 6px", fontSize: 13, cursor: "pointer", fontFamily: "inherit", lineHeight: 1 },
   eyeToggleBtn: { flexShrink: 0, border: "none", borderRadius: 5, padding: "3px 6px", fontSize: 12, cursor: "pointer", fontFamily: "inherit", lineHeight: 1 },
   doneMark: { flexShrink: 0, fontSize: 12 },
@@ -3068,7 +3084,7 @@ const styles = {
   hankoEmpty: { width: 20, height: 20, borderRadius: "50%", border: "2px solid #D8D8D8", display: "block" },
   hankoStamp: { width: 22, height: 22, borderRadius: "50%", border: "2px solid #F39800", color: "#F39800", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Shippori Mincho', serif", fontWeight: 700, fontSize: 9.5, transform: "rotate(-10deg)" },
   subText: { flex: 1, fontSize: 13, lineHeight: 1.4, wordBreak: "break-word", minWidth: 0 },
-  subTextInput: { flex: 1, fontSize: 13, lineHeight: 1.4, minWidth: 0, border: "none", background: "transparent", fontFamily: "inherit", padding: "2px 4px", borderRadius: 5, width: "100%" },
+  subTextInput: { flex: 1, fontSize: 13, fontWeight: 700, lineHeight: 1.4, minWidth: 0, border: "none", background: "transparent", fontFamily: "inherit", padding: "2px 4px", borderRadius: 5, width: "100%" },
   metaTag: { fontSize: 9.5, fontWeight: 700, padding: "1px 6px", borderRadius: 10, border: "1px solid", flexShrink: 0 },
   deleteBtn: { background: "none", border: "none", color: "#D8D8D8", fontSize: 16, cursor: "pointer", padding: "0 2px", flexShrink: 0, lineHeight: 1 },
 
