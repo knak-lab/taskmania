@@ -245,6 +245,11 @@ function taskEstimatedEffective(t) {
   return t.estimatedMinutes != null ? t.estimatedMinutes : taskEstimatedSubtotal(t);
 }
 
+// 過去の予定日は実績時間、未来(今日以降)の予定日は想定時間で集計する(ダッシュボード用)
+function subEffectiveMinutes(s, todayStr) {
+  return s.scheduledDate >= todayStr ? (s.estimatedMinutes || 0) : (s.actualMinutes || 0);
+}
+
 function pjProgress(p) {
   let done = 0, total = 0;
   for (const t of p.tasks) {
@@ -1068,7 +1073,7 @@ function StackedBarChart({ dates, series }) {
 
   return (
     <div style={styles.dashboardBarWrap}>
-      <h4 style={styles.dashboardChartTitle}>日別 実績時間(PJ別積み上げ)</h4>
+      <h4 style={styles.dashboardChartTitle}>日別 実績/想定時間(PJ別積み上げ)</h4>
       {series.length === 0 ? (
         <p style={styles.emptySmall}>データなし</p>
       ) : (
@@ -1128,6 +1133,7 @@ function StackedBarChart({ dates, series }) {
 function DashboardModal({ projects, onClose }) {
   const [range, setRange] = useState("thisWeek");
   const { start, end } = useMemo(() => dashboardRangeDates(range), [range]);
+  const todayStr = toDateStr(new Date());
 
   const filteredSubs = useMemo(() => {
     const list = [];
@@ -1141,17 +1147,17 @@ function DashboardModal({ projects, onClose }) {
     return list;
   }, [projects, start, end]);
 
-  // 選択中の期間内の実績時間が多い順にPJを並べ、上位のみ固有色を割り当てる。
+  // 選択中の期間内の実績/想定時間(過去は実績、未来は想定)が多い順にPJを並べ、上位のみ固有色を割り当てる。
   // (プロジェクト総数が多いと全PJ分の固有色は用意できないため、それ以外は「その他」にまとめる)
   const projectTotals = useMemo(() => {
     const totals = new Map();
     for (const { p, s } of filteredSubs) {
       const cur = totals.get(p.id) || { p, minutes: 0 };
-      cur.minutes += s.actualMinutes || 0;
+      cur.minutes += subEffectiveMinutes(s, todayStr);
       totals.set(p.id, cur);
     }
     return [...totals.values()].filter((d) => d.minutes > 0).sort((a, b) => b.minutes - a.minutes);
-  }, [filteredSubs]);
+  }, [filteredSubs, todayStr]);
 
   const topProjectIds = useMemo(
     () => new Set(projectTotals.slice(0, DASHBOARD_CATEGORICAL_COLORS.length).map((d) => d.p.id)),
@@ -1181,17 +1187,18 @@ function DashboardModal({ projects, onClose }) {
     const totals = new Map();
     for (const { p, s } of filteredSubs) {
       const v = p.priority || 2;
-      totals.set(v, (totals.get(v) || 0) + (s.actualMinutes || 0));
+      totals.set(v, (totals.get(v) || 0) + subEffectiveMinutes(s, todayStr));
     }
     return PJ_PRIORITIES.map((pri) => ({ label: pri.label, color: pri.color, minutes: totals.get(pri.v) || 0 })).filter((d) => d.minutes > 0);
-  }, [filteredSubs]);
+  }, [filteredSubs, todayStr]);
 
   const barDates = useMemo(() => generateBuckets(start, end, "day"), [start, end]);
 
   const barSeries = useMemo(() => {
     const seriesMap = new Map();
     for (const { p, s } of filteredSubs) {
-      if (!s.actualMinutes) continue;
+      const minutes = subEffectiveMinutes(s, todayStr);
+      if (!minutes) continue;
       const isTop = topProjectIds.has(p.id);
       const key = isTop ? p.id : "__other__";
       let entry = seriesMap.get(key);
@@ -1199,15 +1206,15 @@ function DashboardModal({ projects, onClose }) {
         entry = { pjId: key, label: isTop ? p.name : "その他", color: isTop ? pjColorMap.get(p.id) : DASHBOARD_OTHER_COLOR, valuesByDate: new Map() };
         seriesMap.set(key, entry);
       }
-      entry.valuesByDate.set(s.scheduledDate, (entry.valuesByDate.get(s.scheduledDate) || 0) + s.actualMinutes);
+      entry.valuesByDate.set(s.scheduledDate, (entry.valuesByDate.get(s.scheduledDate) || 0) + minutes);
     }
     const ordered = projectTotals.filter((d) => topProjectIds.has(d.p.id) && seriesMap.has(d.p.id)).map((d) => seriesMap.get(d.p.id));
     const other = seriesMap.get("__other__");
     if (other) ordered.push(other);
     return ordered;
-  }, [filteredSubs, projectTotals, topProjectIds, pjColorMap]);
+  }, [filteredSubs, projectTotals, topProjectIds, pjColorMap, todayStr]);
 
-  const totalActualMin = pjPieData.reduce((sum, d) => sum + d.minutes, 0);
+  const totalMin = pjPieData.reduce((sum, d) => sum + d.minutes, 0);
 
   return (
     <div style={styles.modalOverlay} onClick={onClose}>
@@ -1227,8 +1234,8 @@ function DashboardModal({ projects, onClose }) {
           <span style={styles.dashboardRangeLabel}>{formatDate(start)}〜{formatDate(end)}</span>
         </div>
 
-        {totalActualMin === 0 ? (
-          <p style={styles.emptySmall}>この期間の実績時間の記録はない。</p>
+        {totalMin === 0 ? (
+          <p style={styles.emptySmall}>この期間の実績・想定時間の記録はない。</p>
         ) : (
           <>
             <div style={styles.dashboardPieRow}>
