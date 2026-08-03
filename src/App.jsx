@@ -265,6 +265,11 @@ function pjProgress(p) {
   return { done, total };
 }
 
+// PJ内に未完了タスク・未完了サブタスクがどちらも無い(=やり残しが無い)場合にtrue
+function pjEffectivelyDone(p) {
+  return p.tasks.length > 0 && p.tasks.every(taskEffectivelyDone);
+}
+
 const GRANULARITIES = [
   { key: "day", label: "日" },
   { key: "week", label: "週" },
@@ -1311,7 +1316,8 @@ export default function App() {
   const [openPJ, setOpenPJ] = useState(() => new Set());
   const [openTask, setOpenTask] = useState(() => new Set());
   const [showDoneSubtasks, setShowDoneSubtasks] = useState(() => new Set());
-  const [hideEmptyTasks, setHideEmptyTasks] = useState(() => new Set());
+  const [showCompletedTasks, setShowCompletedTasks] = useState(() => new Set());
+  const [showCompletedPJSections, setShowCompletedPJSections] = useState(() => new Set());
   const [ganttCollapsed, setGanttCollapsed] = useState(true);
   const [pjDetailModal, setPjDetailModal] = useState(null);
   const [runningTarget, setRunningTarget] = useState(() => {
@@ -1835,7 +1841,8 @@ export default function App() {
   function toggleOpenPJ(id) { setOpenPJ((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; }); }
   function toggleOpenTask(id) { setOpenTask((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; }); }
   function toggleShowDoneSubtasks(id) { setShowDoneSubtasks((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; }); }
-  function toggleHideEmptyTasks(pjId) { setHideEmptyTasks((prev) => { const next = new Set(prev); next.has(pjId) ? next.delete(pjId) : next.add(pjId); return next; }); }
+  function toggleShowCompletedTasks(pjId) { setShowCompletedTasks((prev) => { const next = new Set(prev); next.has(pjId) ? next.delete(pjId) : next.add(pjId); return next; }); }
+  function toggleShowCompletedPJSection(key) { setShowCompletedPJSections((prev) => { const next = new Set(prev); next.has(key) ? next.delete(key) : next.add(key); return next; }); }
   function togglePrioritySection(v) { setCollapsedPrioritySection((prev) => { const next = new Set(prev); next.has(v) ? next.delete(v) : next.add(v); return next; }); }
 
   function updatePJPriority(pjId, priority) {
@@ -2246,11 +2253,20 @@ export default function App() {
     const sectionOpen = !collapsedPrioritySection.has(sec.key);
     return (
       <div key={sec.key} style={sec.small ? styles.statusSection : styles.prioritySection}>
-        <button type="button" onClick={() => togglePrioritySection(sec.key)} style={{ ...(sec.small ? styles.statusSectionHeader : styles.prioritySectionHeader), color: sec.color, borderColor: sec.color }}>
-          <span>{sectionOpen ? "▾" : "▸"}</span>
-          <span>{sec.label}</span>
-          <span style={styles.prioritySectionCount}>{group.length}</span>
-        </button>
+        <div style={{ display: "flex", alignItems: "center", width: "100%", borderBottom: sec.small ? "1px dashed" : "1.5px solid", borderColor: sec.color, paddingBottom: sec.small ? 3 : 4, opacity: sec.small ? 0.85 : 1 }}>
+          <button type="button" onClick={() => togglePrioritySection(sec.key)} style={{ display: "flex", alignItems: "center", gap: 6, flex: 1, minWidth: 0, background: "transparent", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", fontSize: sec.small ? 11 : 12.5, fontWeight: 700, textAlign: "left", color: sec.color }}>
+            <span>{sectionOpen ? "▾" : "▸"}</span>
+            <span>{sec.label}</span>
+            <span style={styles.prioritySectionCount}>{group.length}</span>
+          </button>
+          {!sec.small && !sec.moyamoya && (
+            <button type="button" onClick={() => toggleShowCompletedPJSection(sec.key)}
+              style={{ ...styles.eyeToggleBtn, background: showCompletedPJSections.has(sec.key) ? "#F0F0F0" : "transparent" }}
+              aria-label={showCompletedPJSections.has(sec.key) ? "完了済みPJを隠す" : "完了済みPJを表示"}>
+              {showCompletedPJSections.has(sec.key) ? "👁" : "🙈"}
+            </button>
+          )}
+        </div>
         {sectionOpen && (
           <div style={styles.prioritySectionBody}>
             {sec.moyamoya && (
@@ -2269,7 +2285,11 @@ export default function App() {
                 ))}
               </div>
             )}
+            {!sec.small && !sec.moyamoya && !showCompletedPJSections.has(sec.key) && group.length > 0 && group.every(pjEffectivelyDone) && (
+              <p style={styles.emptySmall}>完了済みPJのみ(👁で表示できる)</p>
+            )}
             {group.map((p, pIdx) => {
+              if (!sec.small && !sec.moyamoya && !showCompletedPJSections.has(sec.key) && pjEffectivelyDone(p)) return null;
               const groupIds = group.map((gp) => gp.id);
               const pjOpen = openPJ.has(p.id);
               const { done: pd, total: pt } = pjProgress(p);
@@ -2285,10 +2305,10 @@ export default function App() {
                     <input type="text" value={p.name} onChange={(e) => updatePJName(p.id, e.target.value)} style={styles.pjNameInput} className="pj-title-input" aria-label="PJ名を編集" />
                     {pt > 0 && pd === pt && <span style={styles.doneMark}>✅</span>}
                     <button type="button" onClick={() => setPjDetailModal(p.id)} style={styles.ganttToggleBtn} aria-label="ガントチャートを表示">📊</button>
-                    <button type="button" onClick={() => toggleHideEmptyTasks(p.id)}
-                      style={{ ...styles.eyeToggleBtn, background: hideEmptyTasks.has(p.id) ? "#F0F0F0" : "transparent" }}
-                      aria-label={hideEmptyTasks.has(p.id) ? "完了済みタスクを表示" : "完了済みタスクを隠す"}>
-                      {hideEmptyTasks.has(p.id) ? "🙈" : "👁"}
+                    <button type="button" onClick={() => toggleShowCompletedTasks(p.id)}
+                      style={{ ...styles.eyeToggleBtn, background: showCompletedTasks.has(p.id) ? "#F0F0F0" : "transparent" }}
+                      aria-label={showCompletedTasks.has(p.id) ? "完了済みタスクを隠す" : "完了済みタスクを表示"}>
+                      {showCompletedTasks.has(p.id) ? "👁" : "🙈"}
                     </button>
                     <button type="button" onClick={() => togglePJMoyamoya(p.id)}
                       style={{ ...styles.moyamoyaToggleBtn, background: p.moyamoya ? MOYAMOYA_COLOR : "transparent", color: p.moyamoya ? "#FFFFFF" : MOYAMOYA_COLOR, borderColor: MOYAMOYA_COLOR }}
@@ -2311,11 +2331,11 @@ export default function App() {
                   {pjOpen && (
                     <div style={styles.taskList}>
                       {p.tasks.length === 0 && <p style={styles.emptySmall}>タスクなし</p>}
-                      {p.tasks.length > 0 && hideEmptyTasks.has(p.id) && p.tasks.every(taskEffectivelyDone) && (
+                      {p.tasks.length > 0 && !showCompletedTasks.has(p.id) && p.tasks.every(taskEffectivelyDone) && (
                         <p style={styles.emptySmall}>完了済みタスクのみ(👁で表示できる)</p>
                       )}
                       {p.tasks.map((t, tIdx) => {
-                        if (hideEmptyTasks.has(p.id) && taskEffectivelyDone(t)) return null;
+                        if (!showCompletedTasks.has(p.id) && taskEffectivelyDone(t)) return null;
                         const taskOpen = openTask.has(t.id);
                         const { done: td, total: tt } = taskProgress(t);
                         return (
@@ -2633,7 +2653,7 @@ export default function App() {
               )}
 
               <div style={styles.sectionTitleRow}>
-                <h3 style={styles.sectionTitleFlush}>1日のタスク</h3>
+                <h3 style={{ ...styles.sectionTitleFlush, fontWeight: 900 }}>1日のタスク</h3>
                 <input type="date" value={dayViewDate} onChange={(e) => setDayViewDate(e.target.value)} style={styles.scheduleEditInput} aria-label="表示する日付" />
               </div>
               <div style={styles.workSummaryBar}>
@@ -2690,7 +2710,7 @@ export default function App() {
               )}
 
               <div style={styles.sectionTitleRow}>
-                <h3 style={styles.sectionTitleFlush}>残タスク</h3>
+                <h3 style={{ ...styles.sectionTitleFlush, fontWeight: 900 }}>残タスク</h3>
                 <button type="button" onClick={() => setOverdueCollapsed((v) => !v)} style={styles.collapseBtnSm} aria-label={overdueCollapsed ? "詳細を展開する" : "詳細を折りたたむ"}>
                   {overdueCollapsed ? "▸" : "▾"}
                 </button>
@@ -2711,7 +2731,7 @@ export default function App() {
               )}
 
               <div style={styles.sectionTitleRow}>
-                <h3 style={styles.sectionTitleFlush}>日次未設定タスク一覧</h3>
+                <h3 style={{ ...styles.sectionTitleFlush, fontWeight: 900 }}>日次未設定タスク一覧</h3>
                 <button type="button" onClick={() => setUnscheduledCollapsed((v) => !v)} style={styles.collapseBtnSm} aria-label={unscheduledCollapsed ? "詳細を展開する" : "詳細を折りたたむ"}>
                   {unscheduledCollapsed ? "▸" : "▾"}
                 </button>
@@ -2761,7 +2781,7 @@ export default function App() {
               )}
 
               <div style={styles.sectionTitleRow}>
-                <h3 style={styles.sectionTitleFlush}>今週のタスク</h3>
+                <h3 style={{ ...styles.sectionTitleFlush, fontWeight: 900 }}>今週のタスク</h3>
                 <button type="button" onClick={() => exportWeekTasksExcel("今週のタスク", weekTasks)} style={styles.inlineAddBtn}>Excelで出力</button>
               </div>
               <div style={styles.workSummaryBar}>
@@ -2825,7 +2845,7 @@ export default function App() {
               )}
 
               <div style={styles.sectionTitleRow}>
-                <h3 style={styles.sectionTitleFlush}>来週のタスク</h3>
+                <h3 style={{ ...styles.sectionTitleFlush, fontWeight: 900 }}>来週のタスク</h3>
                 <button type="button" onClick={() => exportWeekTasksExcel("来週のタスク", nextWeekTasks)} style={styles.inlineAddBtn}>Excelで出力</button>
               </div>
               <div style={styles.workSummaryBar}>
@@ -2889,7 +2909,7 @@ export default function App() {
               )}
 
               <div style={styles.sectionTitleRow}>
-                <h3 style={styles.sectionTitleFlush}>先週のタスク</h3>
+                <h3 style={{ ...styles.sectionTitleFlush, fontWeight: 900 }}>先週のタスク</h3>
                 <button type="button" onClick={() => exportWeekTasksExcel("先週のタスク", lastWeekTasks)} style={styles.inlineAddBtn}>Excelで出力</button>
               </div>
               <div style={styles.workSummaryBar}>
@@ -2920,7 +2940,7 @@ export default function App() {
           {showTaskSections && (
             <>
               <div style={styles.sectionTitleRow}>
-                <h3 style={styles.sectionTitleFlush}>総合ガントチャート</h3>
+                <h3 style={{ ...styles.sectionTitleFlush, fontWeight: 900 }}>総合ガントチャート</h3>
                 <button type="button" onClick={() => setGanttCollapsed((v) => !v)} style={styles.collapseBtnSm} aria-label={ganttCollapsed ? "総合ガントチャートを展開する" : "総合ガントチャートを折りたたむ"}>
                   {ganttCollapsed ? "▸" : "▾"}
                 </button>
@@ -2929,7 +2949,7 @@ export default function App() {
             </>
           )}
 
-          {showTaskSections && <h3 style={styles.sectionTitle}>タスク一覧</h3>}
+          {showTaskSections && <h3 style={{ ...styles.sectionTitle, fontWeight: 900 }}>タスク一覧</h3>}
 
           {(() => {
             const modalTargetTask = addLevel === "subtask" ? (projects || []).find((pp) => pp.id === addPJId)?.tasks.find((tt) => tt.id === addTaskId) : null;
