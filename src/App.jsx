@@ -1516,6 +1516,20 @@ export default function App() {
   }
   const overdueDates = [...new Set(overdueTasks.map((t) => t.sub.scheduledDate))].sort();
 
+  // 日次未設定タスク一覧: 予定日が設定されておらず、まだ完了していないサブタスク
+  const [unscheduledCollapsed, setUnscheduledCollapsed] = useState(false);
+  const unscheduledTasks = [];
+  if (showTaskSections) {
+    for (const p of visibleProjects) {
+      for (const t of p.tasks) {
+        for (const s of t.subtasks) {
+          if (!s.scheduledDate && !s.done) unscheduledTasks.push({ pjId: p.id, pjName: p.name, taskId: t.id, taskName: t.name, sub: s });
+        }
+      }
+    }
+    unscheduledTasks.sort((a, b) => a.pjName.localeCompare(b.pjName) || a.taskName.localeCompare(b.taskName));
+  }
+
   // カレンダー(月/週/日)用: 予定日が入っている全サブタスクを日付ごとにグルーピング
   const calendarTasksByDate = useMemo(() => {
     const map = {};
@@ -2676,6 +2690,56 @@ export default function App() {
                   dayViewDate={dayViewDate}
                   emptyMessage="予定日が過去で残っているタスクはない。"
                 />
+              )}
+
+              <div style={styles.sectionTitleRow}>
+                <h3 style={styles.sectionTitleFlush}>日次未設定タスク一覧</h3>
+                <button type="button" onClick={() => setUnscheduledCollapsed((v) => !v)} style={styles.collapseBtnSm} aria-label={unscheduledCollapsed ? "詳細を展開する" : "詳細を折りたたむ"}>
+                  {unscheduledCollapsed ? "▸" : "▾"}
+                </button>
+              </div>
+
+              {!unscheduledCollapsed && (
+                unscheduledTasks.length === 0 ? (
+                  <p style={styles.emptySmall}>予定日が未設定のタスクはない。</p>
+                ) : (
+                  <ul style={styles.todayList}>
+                    {unscheduledTasks.map(({ pjId, pjName, taskId, taskName, sub: s }) => (
+                      <li key={s.id} style={styles.calendarCard} className="row-in">
+                        <div style={styles.calendarLine1}>
+                          <button onClick={() => toggleSubtaskDone(pjId, taskId, s.id)} aria-label={s.done ? "未完了に戻す" : "完了にする"} style={styles.stampWrap}>
+                            {s.done ? <span style={styles.hankoStamp} className={stamping === s.id ? "hanko-pop" : ""}>済</span> : <span style={styles.hankoEmpty} />}
+                          </button>
+                          <input
+                            type="text"
+                            value={s.text}
+                            onChange={(e) => updateSubtaskText(pjId, taskId, s.id, e.target.value)}
+                            aria-label="サブタスク名を編集"
+                            style={{ ...styles.calSubCol, border: "none", background: "transparent", fontFamily: "inherit", padding: 0, textDecoration: s.done ? "line-through" : "none", color: s.done ? "#9B9B9B" : "#2C3645" }}
+                          />
+                        </div>
+                        <div style={styles.calendarLine2}>
+                          <span style={styles.calendarLine2Label}>想定</span>
+                          <select value={s.estimatedMinutes || ""} onChange={(e) => updateSubtaskSchedule(pjId, taskId, s.id, "estimatedMinutes", e.target.value ? Number(e.target.value) : "")} style={{ ...styles.scheduleEditInput, width: 64 }}>
+                            <option value="">―</option>
+                            {MINUTE_OPTIONS.map((m) => <option key={m} value={m}>{formatDuration(m)}</option>)}
+                          </select>
+                          <span style={styles.calendarLine2Label}>実績</span>
+                          <select value={s.actualMinutes || ""} onChange={(e) => updateSubtaskSchedule(pjId, taskId, s.id, "actualMinutes", e.target.value ? Number(e.target.value) : "")} style={{ ...styles.scheduleEditInput, width: 64 }}>
+                            <option value="">―</option>
+                            {MINUTE_OPTIONS.map((m) => <option key={m} value={m}>{formatDuration(m)}</option>)}
+                          </select>
+                          {renderStopwatchControl(pjId, taskId, s.id)}
+                          <button type="button" onClick={() => openStepsModal(pjId, taskId, s.id)} aria-label="ステップを開く" style={styles.inlineAddBtn}>☑ステップ</button>
+                          <button type="button" onClick={() => setMoveDateModal({ pjId, taskId, subId: s.id, date: s.scheduledDate || dayViewDate })} aria-label="予定日を設定" style={styles.inlineAddBtn}>📅設定</button>
+                          <button type="button" onClick={() => setCopyDateModal({ pjId, taskId, subId: s.id, date: dayViewDate, text: s.text })} aria-label="サブタスクをコピー" style={styles.inlineAddBtn}>📋コピー</button>
+                          <span style={styles.calPjCol} title={pjName}>{pjName}</span>
+                          <span style={styles.calTaskCol} title={taskName}>{taskName}</span>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )
               )}
 
               <div style={styles.sectionTitleRow}>
