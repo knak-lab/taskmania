@@ -1543,7 +1543,7 @@ export default function App() {
 
   function calShift(delta) {
     if (calGranularity === "month") setCalDate((d) => addMonthsStr(d, delta));
-    else if (calGranularity === "week") setCalDate((d) => addDaysStr(d, delta * 7));
+    else if (calGranularity === "week" || calGranularity === "weekday" || calGranularity === "weekend") setCalDate((d) => addDaysStr(d, delta * 7));
     else setCalDate((d) => addDaysStr(d, delta));
   }
   function calGoToday() {
@@ -1557,11 +1557,17 @@ export default function App() {
     const monday = startOfWeek(new Date(calDate + "T00:00:00"));
     return Array.from({ length: 7 }, (_, i) => addDaysStr(toDateStr(monday), i));
   }, [calDate]);
+  const calWeekdayDates = calWeekDates.slice(0, 5);
+  const calWeekendDates = calWeekDates.slice(5, 7);
   const calLabel = calGranularity === "month"
     ? `${calDate.slice(0, 4)}年${Number(calDate.slice(5, 7))}月`
     : calGranularity === "week"
       ? `${formatDate(calWeekDates[0])} 〜 ${formatDate(calWeekDates[6])}`
-      : `${formatDate(calDate)}(${DAY_JP[new Date(calDate + "T00:00:00").getDay()]})`;
+      : calGranularity === "weekday"
+        ? `${formatDate(calWeekdayDates[0])} 〜 ${formatDate(calWeekdayDates[4])}`
+        : calGranularity === "weekend"
+          ? `${formatDate(calWeekendDates[0])} 〜 ${formatDate(calWeekendDates[1])}`
+          : `${formatDate(calDate)}(${DAY_JP[new Date(calDate + "T00:00:00").getDay()]})`;
 
   const showWorkSummary = topTab === "kkr" && subTab === "仕事";
   const totalEstMin = dayTasks.reduce((sum, t) => sum + (t.sub.estimatedMinutes || 0), 0);
@@ -2524,7 +2530,7 @@ export default function App() {
                     <div style={styles.calWrap}>
                       <div style={styles.calToolbar}>
                         <div style={styles.granularityGroup}>
-                          {[{ key: "month", label: "月" }, { key: "week", label: "週" }, { key: "day", label: "日" }].map((g) => (
+                          {[{ key: "month", label: "月" }, { key: "week", label: "週" }, { key: "weekday", label: "平日" }, { key: "weekend", label: "休日" }, { key: "day", label: "日" }].map((g) => (
                             <button
                               key={g.key}
                               type="button"
@@ -2561,6 +2567,12 @@ export default function App() {
                       )}
                       {calGranularity === "week" && (
                         <CalendarTimeGrid dates={calWeekDates} tasksByDate={calVisibleTasksByDate} todayStr={todayStr} ownerColorOf={ownerColorOf} onOpenSubtask={(pjId, taskId, subId) => setCalSubtaskModal({ pjId, taskId, subId })} onSelectDay={calSelectDay} />
+                      )}
+                      {calGranularity === "weekday" && (
+                        <CalendarTimeGrid dates={calWeekdayDates} tasksByDate={calVisibleTasksByDate} todayStr={todayStr} ownerColorOf={ownerColorOf} onOpenSubtask={(pjId, taskId, subId) => setCalSubtaskModal({ pjId, taskId, subId })} onSelectDay={calSelectDay} />
+                      )}
+                      {calGranularity === "weekend" && (
+                        <CalendarTimeGrid dates={calWeekendDates} tasksByDate={calVisibleTasksByDate} todayStr={todayStr} ownerColorOf={ownerColorOf} onOpenSubtask={(pjId, taskId, subId) => setCalSubtaskModal({ pjId, taskId, subId })} onSelectDay={calSelectDay} />
                       )}
                       {calGranularity === "day" && (
                         <CalendarTimeGrid dates={[calDate]} tasksByDate={calVisibleTasksByDate} todayStr={todayStr} ownerColorOf={ownerColorOf} onOpenSubtask={(pjId, taskId, subId) => setCalSubtaskModal({ pjId, taskId, subId })} onSelectDay={calSelectDay} />
