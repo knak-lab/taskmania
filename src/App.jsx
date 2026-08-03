@@ -1306,6 +1306,7 @@ export default function App() {
   const [openPJ, setOpenPJ] = useState(() => new Set());
   const [openTask, setOpenTask] = useState(() => new Set());
   const [showDoneSubtasks, setShowDoneSubtasks] = useState(() => new Set());
+  const [hideEmptyTasks, setHideEmptyTasks] = useState(() => new Set());
   const [ganttCollapsed, setGanttCollapsed] = useState(true);
   const [pjDetailModal, setPjDetailModal] = useState(null);
   const [runningTarget, setRunningTarget] = useState(() => {
@@ -1815,6 +1816,7 @@ export default function App() {
   function toggleOpenPJ(id) { setOpenPJ((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; }); }
   function toggleOpenTask(id) { setOpenTask((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; }); }
   function toggleShowDoneSubtasks(id) { setShowDoneSubtasks((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; }); }
+  function toggleHideEmptyTasks(pjId) { setHideEmptyTasks((prev) => { const next = new Set(prev); next.has(pjId) ? next.delete(pjId) : next.add(pjId); return next; }); }
   function togglePrioritySection(v) { setCollapsedPrioritySection((prev) => { const next = new Set(prev); next.has(v) ? next.delete(v) : next.add(v); return next; }); }
 
   function updatePJPriority(pjId, priority) {
@@ -2254,6 +2256,11 @@ export default function App() {
                     <input type="text" value={p.name} onChange={(e) => updatePJName(p.id, e.target.value)} style={styles.pjNameInput} className="pj-title-input" aria-label="PJ名を編集" />
                     {pt > 0 && pd === pt && <span style={styles.doneMark}>✅</span>}
                     <button type="button" onClick={() => setPjDetailModal(p.id)} style={styles.ganttToggleBtn} aria-label="ガントチャートを表示">📊</button>
+                    <button type="button" onClick={() => toggleHideEmptyTasks(p.id)}
+                      style={{ ...styles.eyeToggleBtn, background: hideEmptyTasks.has(p.id) ? "#F0F0F0" : "transparent" }}
+                      aria-label={hideEmptyTasks.has(p.id) ? "サブタスクが無いタスクを表示" : "サブタスクが無いタスクを隠す"}>
+                      {hideEmptyTasks.has(p.id) ? "🙈" : "👁"}
+                    </button>
                     <button type="button" onClick={() => togglePJMoyamoya(p.id)}
                       style={{ ...styles.moyamoyaToggleBtn, background: p.moyamoya ? MOYAMOYA_COLOR : "transparent", color: p.moyamoya ? "#FFFFFF" : MOYAMOYA_COLOR, borderColor: MOYAMOYA_COLOR }}
                       aria-label={p.moyamoya ? "もやもやから外す" : "もやもやに入れる"}>もや</button>
@@ -2275,7 +2282,11 @@ export default function App() {
                   {pjOpen && (
                     <div style={styles.taskList}>
                       {p.tasks.length === 0 && <p style={styles.emptySmall}>タスクなし</p>}
+                      {p.tasks.length > 0 && hideEmptyTasks.has(p.id) && p.tasks.every((t) => t.subtasks.length === 0) && (
+                        <p style={styles.emptySmall}>サブタスクが無いタスクのみ(👁で表示できる)</p>
+                      )}
                       {p.tasks.map((t, tIdx) => {
+                        if (hideEmptyTasks.has(p.id) && t.subtasks.length === 0) return null;
                         const taskOpen = openTask.has(t.id);
                         const { done: td, total: tt } = taskProgress(t);
                         return (
