@@ -874,6 +874,46 @@ function CalendarMonthView({ monthDateStr, tasksByDate, todayStr, ownerColorOf, 
   );
 }
 
+// 時間指定ありサブタスクの重なりを検出し、同時間帯のものは列分割して並列表示できるよう col/totalCols を付与する
+function layoutTimedCalItems(items) {
+  const sorted = [...items].sort((a, b) => a.startMin - b.startMin || a.endMin - b.endMin);
+  const laidOut = [];
+  let cluster = [];
+  let clusterEnd = -Infinity;
+  const flushCluster = () => {
+    if (cluster.length === 0) return;
+    const columnEnds = [];
+    for (const it of cluster) {
+      let colIndex = columnEnds.findIndex((end) => end <= it.startMin);
+      if (colIndex === -1) {
+        colIndex = columnEnds.length;
+        columnEnds.push(it.endMin);
+      } else {
+        columnEnds[colIndex] = it.endMin;
+      }
+      it.col = colIndex;
+    }
+    const totalCols = columnEnds.length;
+    for (const it of cluster) {
+      it.totalCols = totalCols;
+      laidOut.push(it);
+    }
+    cluster = [];
+  };
+  for (const it of sorted) {
+    if (cluster.length === 0 || it.startMin < clusterEnd) {
+      cluster.push(it);
+      clusterEnd = Math.max(clusterEnd, it.endMin);
+    } else {
+      flushCluster();
+      cluster.push(it);
+      clusterEnd = it.endMin;
+    }
+  }
+  flushCluster();
+  return laidOut;
+}
+
 const CAL_UNTIMED_COLLAPSED_ROWS = 3;
 
 function CalendarTimeGrid({ dates, tasksByDate, todayStr, ownerColorOf, onOpenSubtask, onSelectDay }) {
@@ -932,21 +972,38 @@ function CalendarTimeGrid({ dates, tasksByDate, todayStr, ownerColorOf, onOpenSu
           {hours.map((h) => <div key={h} style={{ ...styles.calGridTimeLabel, height: CAL_HOUR_HEIGHT, background: calBandColorForHour(h) }}>{h}:00</div>)}
         </div>
         {dates.map((d) => {
-          const items = (tasksByDate[d] || []).filter((i) => i.sub.startTime);
+          const rawItems = (tasksByDate[d] || [])
+            .filter((i) => i.sub.startTime)
+            .map((i) => {
+              const startMin = timeToMinutes(i.sub.startTime);
+              const endMin = startMin + Math.max(i.sub.estimatedMinutes || 30, 15);
+              return { ...i, startMin, endMin };
+            });
+          const items = layoutTimedCalItems(rawItems);
           return (
             <div key={d} style={{ ...styles.calGridDayCol, height: gridHeight }}>
               {timeBands.map((b, i) => <div key={i} style={{ position: "absolute", left: 0, right: 0, top: b.top, height: b.height, background: b.color }} />)}
               {hours.map((h) => <div key={h} style={{ ...styles.calGridHourLine, top: (h - CAL_HOUR_START) * CAL_HOUR_HEIGHT }} />)}
-              {items.map(({ pjId, taskId, pjName, sub: s, owner }) => {
-                const startMin = timeToMinutes(s.startTime);
+              {items.map(({ pjId, taskId, pjName, sub: s, owner, startMin, col, totalCols }) => {
                 const top = Math.max(0, (startMin - rangeStartMin) / 60) * CAL_HOUR_HEIGHT;
                 const height = Math.max(16, ((s.estimatedMinutes || 30) / 60) * CAL_HOUR_HEIGHT);
+                const widthPct = 100 / totalCols;
+                const leftPct = col * widthPct;
                 return (
                   <button
                     type="button"
                     key={s.id}
                     onClick={() => onOpenSubtask(pjId, taskId, s.id)}
-                    style={{ ...styles.calGridBlock, top, height, background: ownerColorOf(owner), textDecoration: s.done ? "line-through" : "none" }}
+                    style={{
+                      ...styles.calGridBlock,
+                      top,
+                      height,
+                      left: `calc(${leftPct}% + 2px)`,
+                      right: "auto",
+                      width: `calc(${widthPct}% - 4px)`,
+                      background: ownerColorOf(owner),
+                      textDecoration: s.done ? "line-through" : "none",
+                    }}
                     title={`${s.startTime} ${s.text}(${pjName})`}
                   >
                     {s.startTime} {s.text}
