@@ -1493,7 +1493,7 @@ export default function App() {
   const visibleDayTasks = dayTasks.filter((t) => !t.sub.done);
 
   // 残タスク: 表示中の日付(dayViewDate)より前が予定日で、まだ完了していないサブタスク
-  const [overdueCollapsed, setOverdueCollapsed] = useState(false);
+  const [overdueCollapsed, setOverdueCollapsed] = useState(true);
   const [overdueOpenDates, setOverdueOpenDates] = useState(() => new Set());
   function toggleOverdueDate(date) { setOverdueOpenDates((prev) => { const next = new Set(prev); next.has(date) ? next.delete(date) : next.add(date); return next; }); }
 
@@ -1517,7 +1517,7 @@ export default function App() {
   const overdueDates = [...new Set(overdueTasks.map((t) => t.sub.scheduledDate))].sort();
 
   // 日次未設定タスク一覧: 予定日が設定されておらず、まだ完了していないサブタスク
-  const [unscheduledCollapsed, setUnscheduledCollapsed] = useState(false);
+  const [unscheduledCollapsed, setUnscheduledCollapsed] = useState(true);
   const unscheduledTasks = [];
   if (showTaskSections) {
     for (const p of visibleProjects) {
@@ -2272,7 +2272,7 @@ export default function App() {
                     <button type="button" onClick={() => setPjDetailModal(p.id)} style={styles.ganttToggleBtn} aria-label="ガントチャートを表示">📊</button>
                     <button type="button" onClick={() => toggleHideEmptyTasks(p.id)}
                       style={{ ...styles.eyeToggleBtn, background: hideEmptyTasks.has(p.id) ? "#F0F0F0" : "transparent" }}
-                      aria-label={hideEmptyTasks.has(p.id) ? "サブタスクが無いタスクを表示" : "サブタスクが無いタスクを隠す"}>
+                      aria-label={hideEmptyTasks.has(p.id) ? "未完了サブタスクが無いタスクを表示" : "未完了サブタスクが無いタスクを隠す"}>
                       {hideEmptyTasks.has(p.id) ? "🙈" : "👁"}
                     </button>
                     <button type="button" onClick={() => togglePJMoyamoya(p.id)}
@@ -2296,11 +2296,11 @@ export default function App() {
                   {pjOpen && (
                     <div style={styles.taskList}>
                       {p.tasks.length === 0 && <p style={styles.emptySmall}>タスクなし</p>}
-                      {p.tasks.length > 0 && hideEmptyTasks.has(p.id) && p.tasks.every((t) => t.subtasks.length === 0) && (
-                        <p style={styles.emptySmall}>サブタスクが無いタスクのみ(👁で表示できる)</p>
+                      {p.tasks.length > 0 && hideEmptyTasks.has(p.id) && p.tasks.every((t) => !t.subtasks.some((s) => !s.done)) && (
+                        <p style={styles.emptySmall}>未完了サブタスクが無いタスクのみ(👁で表示できる)</p>
                       )}
                       {p.tasks.map((t, tIdx) => {
-                        if (hideEmptyTasks.has(p.id) && t.subtasks.length === 0) return null;
+                        if (hideEmptyTasks.has(p.id) && !t.subtasks.some((s) => !s.done)) return null;
                         const taskOpen = openTask.has(t.id);
                         const { done: td, total: tt } = taskProgress(t);
                         return (
