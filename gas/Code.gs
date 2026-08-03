@@ -88,7 +88,7 @@ const SHEET_MOYAMOYA = "MoyamoyaNotes";
 const SHEET_WORKADJ = "WorkAdjustments";
 
 const PROJECTS_HEADERS = ["id", "owner", "name", "subcategory", "priority", "status", "completedNote", "nextAction", "moyamoya"];
-const TASKS_HEADERS = ["id", "projectId", "name", "startDate", "endDate", "estimatedMinutes", "sourceTodoId"];
+const TASKS_HEADERS = ["id", "projectId", "name", "startDate", "endDate", "estimatedMinutes", "sourceTodoId", "done"];
 const SUBTASKS_HEADERS = [
   "id",
   "taskId",
@@ -257,7 +257,8 @@ function readProjects_() {
       startDate = r[3],
       endDate = r[4],
       estimatedMinutes = r[5],
-      sourceTodoId = r[6];
+      sourceTodoId = r[6],
+      done = r[7];
     if (!id || !projectId) return;
     if (!tasksByProject[projectId]) tasksByProject[projectId] = [];
     tasksByProject[projectId].push({
@@ -268,6 +269,7 @@ function readProjects_() {
       estimatedMinutes: estimatedMinutes ? Number(estimatedMinutes) : null,
       subtasks: subtasksByTask[id] || [],
       sourceTodoId: sourceTodoId ? String(sourceTodoId) : null,
+      done: done === true || done === "TRUE" || done === "true",
     });
   });
 
@@ -358,7 +360,7 @@ function writeProjects_(projects) {
   (projects || []).forEach(function (p) {
     projRows.push([p.id, p.owner || "", p.name || "", p.subcategory || "", p.priority || 2, p.status || "", p.completedNote || "", p.nextAction || "", !!p.moyamoya]);
     (p.tasks || []).forEach(function (t) {
-      taskRows.push([t.id, p.id, t.name || "", t.startDate || "", t.endDate || "", t.estimatedMinutes || "", t.sourceTodoId || ""]);
+      taskRows.push([t.id, p.id, t.name || "", t.startDate || "", t.endDate || "", t.estimatedMinutes || "", t.sourceTodoId || "", !!t.done]);
       (t.subtasks || []).forEach(function (s) {
         subRows.push([
           s.id,

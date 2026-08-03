@@ -140,7 +140,7 @@ function addMinutesToTime(time, minutes) {
 }
 
 function task(name, subtasks, startDate, endDate, estimatedMinutes) {
-  return { id: uid(), name, subtasks, startDate: startDate || null, endDate: endDate || null, estimatedMinutes: estimatedMinutes || null };
+  return { id: uid(), name, subtasks, startDate: startDate || null, endDate: endDate || null, estimatedMinutes: estimatedMinutes || null, done: false };
 }
 
 function project(owner, name, tasks, subcategory, priority) {
@@ -232,6 +232,11 @@ function countSubtasks(items) {
 }
 
 function taskProgress(t) { return countSubtasks(t.subtasks); }
+
+// タスク自体がdone、またはサブタスクに未完了が無い(0件含む)場合に「実質完了」とみなす
+function taskEffectivelyDone(t) {
+  return !!t.done || !t.subtasks.some((s) => !s.done);
+}
 
 function taskEstimatedSubtotal(t) {
   return t.subtasks.reduce((sum, s) => sum + (s.estimatedMinutes || 0), 0);
@@ -1884,6 +1889,16 @@ export default function App() {
     setProjects((prev) => prev.map((p) => p.id !== pjId ? p : { ...p, tasks: p.tasks.map((t) => (t.id === taskId ? { ...t, name } : t)) }));
   }
 
+  function toggleTaskDone(pjId, taskId) {
+    const p = projects.find((p) => p.id === pjId);
+    const t = p?.tasks.find((t) => t.id === taskId);
+    if (t && !t.done) {
+      setStamping(taskId);
+      setTimeout(() => setStamping(null), 550);
+    }
+    setProjects((prev) => prev.map((p) => p.id !== pjId ? p : { ...p, tasks: p.tasks.map((t) => (t.id === taskId ? { ...t, done: !t.done } : t)) }));
+  }
+
   function updateSubtaskText(pjId, taskId, subId, text) {
     setProjects((prev) => prev.map((p) => p.id !== pjId ? p : { ...p, tasks: p.tasks.map((t) => t.id !== taskId ? t : { ...t, subtasks: t.subtasks.map((s) => (s.id === subId ? { ...s, text } : s)) }) }));
   }
@@ -2272,7 +2287,7 @@ export default function App() {
                     <button type="button" onClick={() => setPjDetailModal(p.id)} style={styles.ganttToggleBtn} aria-label="ガントチャートを表示">📊</button>
                     <button type="button" onClick={() => toggleHideEmptyTasks(p.id)}
                       style={{ ...styles.eyeToggleBtn, background: hideEmptyTasks.has(p.id) ? "#F0F0F0" : "transparent" }}
-                      aria-label={hideEmptyTasks.has(p.id) ? "未完了サブタスクが無いタスクを表示" : "未完了サブタスクが無いタスクを隠す"}>
+                      aria-label={hideEmptyTasks.has(p.id) ? "完了済みタスクを表示" : "完了済みタスクを隠す"}>
                       {hideEmptyTasks.has(p.id) ? "🙈" : "👁"}
                     </button>
                     <button type="button" onClick={() => togglePJMoyamoya(p.id)}
@@ -2296,11 +2311,11 @@ export default function App() {
                   {pjOpen && (
                     <div style={styles.taskList}>
                       {p.tasks.length === 0 && <p style={styles.emptySmall}>タスクなし</p>}
-                      {p.tasks.length > 0 && hideEmptyTasks.has(p.id) && p.tasks.every((t) => !t.subtasks.some((s) => !s.done)) && (
-                        <p style={styles.emptySmall}>未完了サブタスクが無いタスクのみ(👁で表示できる)</p>
+                      {p.tasks.length > 0 && hideEmptyTasks.has(p.id) && p.tasks.every(taskEffectivelyDone) && (
+                        <p style={styles.emptySmall}>完了済みタスクのみ(👁で表示できる)</p>
                       )}
                       {p.tasks.map((t, tIdx) => {
-                        if (hideEmptyTasks.has(p.id) && !t.subtasks.some((s) => !s.done)) return null;
+                        if (hideEmptyTasks.has(p.id) && taskEffectivelyDone(t)) return null;
                         const taskOpen = openTask.has(t.id);
                         const { done: td, total: tt } = taskProgress(t);
                         return (
@@ -2311,8 +2326,11 @@ export default function App() {
                                 <button type="button" onClick={() => moveTaskInPJ(p.id, t.id, "down")} disabled={tIdx === p.tasks.length - 1} style={{ ...styles.reorderBtn, opacity: tIdx === p.tasks.length - 1 ? 0.3 : 1, cursor: tIdx === p.tasks.length - 1 ? "default" : "pointer" }} aria-label="下へ移動">▼</button>
                               </div>
                               <button onClick={() => toggleOpenTask(t.id)} style={styles.collapseBtnSm} aria-label={taskOpen ? "折りたたむ" : "展開する"}>{taskOpen ? "▾" : "▸"}</button>
-                              <input type="text" value={t.name} onChange={(e) => updateTaskName(p.id, t.id, e.target.value)} style={styles.taskNameInput} className="task-title-input" aria-label="タスク名を編集" />
-                              {tt > 0 && td === tt && <span style={styles.doneMark}>✅</span>}
+                              <button onClick={() => toggleTaskDone(p.id, t.id)} aria-label={t.done ? "未完了に戻す" : "完了にする"} style={styles.stampWrap}>
+                                {t.done ? <span style={styles.hankoStamp} className={stamping === t.id ? "hanko-pop" : ""}>済</span> : <span style={styles.hankoEmpty} />}
+                              </button>
+                              <input type="text" value={t.name} onChange={(e) => updateTaskName(p.id, t.id, e.target.value)} style={{ ...styles.taskNameInput, textDecoration: t.done ? "line-through" : "underline", color: t.done ? "#9B9B9B" : "#2C3645" }} className="task-title-input" aria-label="タスク名を編集" />
+                              {(t.done || (tt > 0 && td === tt)) && <span style={styles.doneMark}>✅</span>}
                               <span style={styles.progressTagSm}>{td}/{tt}</span>
                               <button type="button" onClick={() => toggleShowDoneSubtasks(t.id)}
                                 style={{ ...styles.eyeToggleBtn, background: showDoneSubtasks.has(t.id) ? "#F0F0F0" : "transparent" }}
