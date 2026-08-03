@@ -2417,6 +2417,8 @@ export default function App() {
           50% { transform: rotate(8deg); }
         }
         .loading-wobble { animation: wobble 0.9s ease-in-out infinite; }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        .spin-loading { animation: spin 0.8s linear infinite; }
         input:focus, select:focus, button:focus-visible { outline: 2px solid #12314F; outline-offset: 2px; }
         ::placeholder { color: #9B9B9B; }
         @media (min-width: 768px) {
@@ -2538,6 +2540,9 @@ export default function App() {
                           <span style={styles.calNavLabel}>{calLabel}</span>
                           <button type="button" onClick={() => calShift(1)} aria-label="次へ" style={styles.calNavBtn}>▶</button>
                           <button type="button" onClick={calGoToday} style={styles.inlineAddBtn}>今日</button>
+                          <button type="button" onClick={handleLoad} disabled={saveState === "loading"} aria-label="カレンダーを更新" style={styles.calNavBtn}>
+                            <span className={saveState === "loading" ? "spin-loading" : ""} style={{ display: "inline-block" }}>🔄</span>
+                          </button>
                         </div>
                       </div>
                       <div style={styles.calLegend}>
