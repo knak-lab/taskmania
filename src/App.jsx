@@ -851,7 +851,7 @@ function CalendarMonthView({ monthDateStr, tasksByDate, todayStr, ownerColorOf, 
 
 const CAL_UNTIMED_COLLAPSED_ROWS = 3;
 
-function CalendarTimeGrid({ dates, tasksByDate, todayStr, ownerColorOf, onToggleDone, onSelectDay }) {
+function CalendarTimeGrid({ dates, tasksByDate, todayStr, ownerColorOf, onOpenSubtask, onSelectDay }) {
   const hours = Array.from({ length: CAL_HOUR_END - CAL_HOUR_START }, (_, i) => i + CAL_HOUR_START);
   const gridHeight = hours.length * CAL_HOUR_HEIGHT;
   const rangeStartMin = CAL_HOUR_START * 60;
@@ -881,7 +881,7 @@ function CalendarTimeGrid({ dates, tasksByDate, todayStr, ownerColorOf, onToggle
                 <button
                   type="button"
                   key={s.id}
-                  onClick={() => onToggleDone(pjId, taskId, s.id)}
+                  onClick={() => onOpenSubtask(pjId, taskId, s.id)}
                   style={{ ...styles.calGridUntimedChip, background: ownerColorOf(owner), textDecoration: s.done ? "line-through" : "none" }}
                   title={s.text}
                 >
@@ -914,7 +914,7 @@ function CalendarTimeGrid({ dates, tasksByDate, todayStr, ownerColorOf, onToggle
                   <button
                     type="button"
                     key={s.id}
-                    onClick={() => onToggleDone(pjId, taskId, s.id)}
+                    onClick={() => onOpenSubtask(pjId, taskId, s.id)}
                     style={{ ...styles.calGridBlock, top, height, background: ownerColorOf(owner), textDecoration: s.done ? "line-through" : "none" }}
                     title={`${s.startTime} ${s.text}(${pjName})`}
                   >
@@ -1327,6 +1327,7 @@ export default function App() {
   const [copyDateModal, setCopyDateModal] = useState(null);
   const [dashboardOpen, setDashboardOpen] = useState(false);
   const [moveDateModal, setMoveDateModal] = useState(null);
+  const [calSubtaskModal, setCalSubtaskModal] = useState(null);
   const [calGranularity, setCalGranularity] = useState("month");
   const [calDate, setCalDate] = useState(() => toDateStr(new Date()));
   const [calCollapsed, setCalCollapsed] = useState(false);
@@ -2538,10 +2539,10 @@ export default function App() {
                         <CalendarMonthView monthDateStr={calDate} tasksByDate={calVisibleTasksByDate} todayStr={todayStr} ownerColorOf={ownerColorOf} onSelectDay={calSelectDay} />
                       )}
                       {calGranularity === "week" && (
-                        <CalendarTimeGrid dates={calWeekDates} tasksByDate={calVisibleTasksByDate} todayStr={todayStr} ownerColorOf={ownerColorOf} onToggleDone={toggleSubtaskDone} onSelectDay={calSelectDay} />
+                        <CalendarTimeGrid dates={calWeekDates} tasksByDate={calVisibleTasksByDate} todayStr={todayStr} ownerColorOf={ownerColorOf} onOpenSubtask={(pjId, taskId, subId) => setCalSubtaskModal({ pjId, taskId, subId })} onSelectDay={calSelectDay} />
                       )}
                       {calGranularity === "day" && (
-                        <CalendarTimeGrid dates={[calDate]} tasksByDate={calVisibleTasksByDate} todayStr={todayStr} ownerColorOf={ownerColorOf} onToggleDone={toggleSubtaskDone} onSelectDay={calSelectDay} />
+                        <CalendarTimeGrid dates={[calDate]} tasksByDate={calVisibleTasksByDate} todayStr={todayStr} ownerColorOf={ownerColorOf} onOpenSubtask={(pjId, taskId, subId) => setCalSubtaskModal({ pjId, taskId, subId })} onSelectDay={calSelectDay} />
                       )}
                     </div>
                   )}
@@ -2976,6 +2977,67 @@ export default function App() {
                   </label>
                   <div style={styles.modalActions}>
                     <button type="button" onClick={() => { updateSubtaskSchedule(p.id, t.id, s.id, "scheduledDate", moveDateModal.date || null); setMoveDateModal(null); }} style={styles.addBtn}>変更</button>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
+          {calSubtaskModal && (() => {
+            const p = (projects || []).find((pp) => pp.id === calSubtaskModal.pjId);
+            const t = p?.tasks.find((tt) => tt.id === calSubtaskModal.taskId);
+            const s = t?.subtasks.find((ss) => ss.id === calSubtaskModal.subId);
+            if (!s) return null;
+            const { pjId, taskId } = calSubtaskModal;
+            return (
+              <div style={styles.modalOverlay} onClick={() => setCalSubtaskModal(null)}>
+                <div style={styles.modalBox} onClick={(e) => e.stopPropagation()}>
+                  <div style={styles.modalHeader}>
+                    <h3 style={styles.modalTitle}>サブタスクを編集</h3>
+                    <button type="button" onClick={() => setCalSubtaskModal(null)} aria-label="閉じる" style={styles.modalCloseBtn}>×</button>
+                  </div>
+                  <p style={styles.modalContext}>{p.name} ／ {t.name}</p>
+                  <div style={{ ...styles.calendarLine1, marginBottom: 10 }}>
+                    <button onClick={() => toggleSubtaskDone(pjId, taskId, s.id)} aria-label={s.done ? "未完了に戻す" : "完了にする"} style={styles.stampWrap}>
+                      {s.done ? <span style={styles.hankoStamp} className={stamping === s.id ? "hanko-pop" : ""}>済</span> : <span style={styles.hankoEmpty} />}
+                    </button>
+                    <input
+                      type="text"
+                      value={s.text}
+                      onChange={(e) => updateSubtaskText(pjId, taskId, s.id, e.target.value)}
+                      aria-label="サブタスク名を編集"
+                      style={{ ...styles.calSubCol, border: "1.5px solid #E5E5E5", borderRadius: 5, padding: "3px 6px", fontFamily: "inherit", textDecoration: s.done ? "line-through" : "none", color: s.done ? "#9B9B9B" : "#2C3645" }}
+                    />
+                  </div>
+                  <div style={styles.scheduleEditRow}>
+                    <label style={styles.scheduleEditField}>
+                      <span style={styles.scheduleEditLabel}>予定日</span>
+                      <input type="date" value={s.scheduledDate || ""} onChange={(e) => updateSubtaskSchedule(pjId, taskId, s.id, "scheduledDate", e.target.value)} min={t.startDate || undefined} max={t.endDate || undefined} style={styles.scheduleEditInput} />
+                    </label>
+                    <label style={styles.scheduleEditField}>
+                      <span style={styles.scheduleEditLabel}>開始時刻</span>
+                      <TimeDropdown value={s.startTime || ""} onChange={(v) => updateSubtaskSchedule(pjId, taskId, s.id, "startTime", v)} />
+                    </label>
+                    <label style={styles.scheduleEditField}>
+                      <span style={styles.scheduleEditLabel}>想定</span>
+                      <select value={s.estimatedMinutes || ""} onChange={(e) => updateSubtaskSchedule(pjId, taskId, s.id, "estimatedMinutes", e.target.value ? Number(e.target.value) : "")} style={{ ...styles.scheduleEditInput, width: 72 }}>
+                        <option value="">―</option>
+                        {MINUTE_OPTIONS.map((m) => <option key={m} value={m}>{formatDuration(m)}</option>)}
+                      </select>
+                    </label>
+                    <label style={styles.scheduleEditField}>
+                      <span style={styles.scheduleEditLabel}>実績</span>
+                      <select value={s.actualMinutes || ""} onChange={(e) => updateSubtaskSchedule(pjId, taskId, s.id, "actualMinutes", e.target.value ? Number(e.target.value) : "")} style={{ ...styles.scheduleEditInput, width: 72 }}>
+                        <option value="">―</option>
+                        {MINUTE_OPTIONS.map((m) => <option key={m} value={m}>{formatDuration(m)}</option>)}
+                      </select>
+                    </label>
+                  </div>
+                  <div style={{ ...styles.modalActions, justifyContent: "flex-start", flexWrap: "wrap", gap: 6 }}>
+                    {renderStopwatchControl(pjId, taskId, s.id)}
+                    <button type="button" onClick={() => openStepsModal(pjId, taskId, s.id)} aria-label="ステップを開く" style={styles.inlineAddBtn}>☑ステップ</button>
+                    <button type="button" onClick={() => setCopyDateModal({ pjId, taskId, subId: s.id, date: s.scheduledDate || dayViewDate, text: s.text })} aria-label="サブタスクをコピー" style={styles.inlineAddBtn}>📋コピー</button>
+                    {renderSendToCalendarButton(s)}
                   </div>
                 </div>
               </div>
