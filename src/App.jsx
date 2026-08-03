@@ -808,6 +808,16 @@ function DateGroupedTaskList({ dates, tasks, openDates, onToggleDate, onToggleDo
 const CAL_HOUR_START = 6;
 const CAL_HOUR_END = 24;
 const CAL_HOUR_HEIGHT = 36;
+const CAL_TIME_BANDS = [
+  { start: 0, end: 7, color: "#EAE6F7" },
+  { start: 7, end: 9, color: "#FFF6D9" },
+  { start: 9, end: 18, color: "#E4F5E9" },
+  { start: 18, end: 24, color: "#E1F0FA" },
+];
+function calBandColorForHour(h) {
+  const band = CAL_TIME_BANDS.find((b) => h >= b.start && h < b.end);
+  return band ? band.color : "#FFFFFF";
+}
 
 function CalendarMonthView({ monthDateStr, tasksByDate, todayStr, ownerColorOf, onSelectDay }) {
   const [y, m] = monthDateStr.split("-").map(Number);
@@ -855,6 +865,11 @@ function CalendarTimeGrid({ dates, tasksByDate, todayStr, ownerColorOf, onOpenSu
   const hours = Array.from({ length: CAL_HOUR_END - CAL_HOUR_START }, (_, i) => i + CAL_HOUR_START);
   const gridHeight = hours.length * CAL_HOUR_HEIGHT;
   const rangeStartMin = CAL_HOUR_START * 60;
+  const timeBands = CAL_TIME_BANDS.map((b) => {
+    const visStart = Math.max(b.start, CAL_HOUR_START);
+    const visEnd = Math.min(b.end, CAL_HOUR_END);
+    return { color: b.color, top: (visStart - CAL_HOUR_START) * CAL_HOUR_HEIGHT, height: (visEnd - visStart) * CAL_HOUR_HEIGHT };
+  }).filter((b) => b.height > 0);
   const [expandedUntimed, setExpandedUntimed] = useState(() => new Set());
   const toggleUntimedExpanded = (d) => setExpandedUntimed((prev) => {
     const next = new Set(prev);
@@ -899,12 +914,13 @@ function CalendarTimeGrid({ dates, tasksByDate, todayStr, ownerColorOf, onOpenSu
       </div>
       <div style={{ ...styles.calGridBody, height: gridHeight }}>
         <div style={styles.calGridTimeCol}>
-          {hours.map((h) => <div key={h} style={{ ...styles.calGridTimeLabel, height: CAL_HOUR_HEIGHT }}>{h}:00</div>)}
+          {hours.map((h) => <div key={h} style={{ ...styles.calGridTimeLabel, height: CAL_HOUR_HEIGHT, background: calBandColorForHour(h) }}>{h}:00</div>)}
         </div>
         {dates.map((d) => {
           const items = (tasksByDate[d] || []).filter((i) => i.sub.startTime);
           return (
             <div key={d} style={{ ...styles.calGridDayCol, height: gridHeight }}>
+              {timeBands.map((b, i) => <div key={i} style={{ position: "absolute", left: 0, right: 0, top: b.top, height: b.height, background: b.color }} />)}
               {hours.map((h) => <div key={h} style={{ ...styles.calGridHourLine, top: (h - CAL_HOUR_START) * CAL_HOUR_HEIGHT }} />)}
               {items.map(({ pjId, taskId, pjName, sub: s, owner }) => {
                 const startMin = timeToMinutes(s.startTime);
