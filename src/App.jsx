@@ -1467,6 +1467,30 @@ export default function App() {
 
   const visibleDayTasks = dayTasks.filter((t) => !t.sub.done);
 
+  // 残タスク: 表示中の日付(dayViewDate)より前が予定日で、まだ完了していないサブタスク
+  const [overdueCollapsed, setOverdueCollapsed] = useState(false);
+  const [overdueOpenDates, setOverdueOpenDates] = useState(() => new Set());
+  function toggleOverdueDate(date) { setOverdueOpenDates((prev) => { const next = new Set(prev); next.has(date) ? next.delete(date) : next.add(date); return next; }); }
+
+  const overdueTasks = [];
+  if (showTaskSections) {
+    for (const p of visibleProjects) {
+      for (const t of p.tasks) {
+        for (const s of t.subtasks) {
+          if (s.scheduledDate && s.scheduledDate < dayViewDate && !s.done) overdueTasks.push({ pjId: p.id, pjName: p.name, taskId: t.id, taskName: t.name, sub: s });
+        }
+      }
+    }
+    overdueTasks.sort((a, b) => {
+      if (a.sub.scheduledDate !== b.sub.scheduledDate) return a.sub.scheduledDate.localeCompare(b.sub.scheduledDate);
+      if (!a.sub.startTime && !b.sub.startTime) return 0;
+      if (!a.sub.startTime) return 1;
+      if (!b.sub.startTime) return -1;
+      return a.sub.startTime.localeCompare(b.sub.startTime);
+    });
+  }
+  const overdueDates = [...new Set(overdueTasks.map((t) => t.sub.scheduledDate))].sort();
+
   // カレンダー(月/週/日)用: 予定日が入っている全サブタスクを日付ごとにグルーピング
   const calendarTasksByDate = useMemo(() => {
     const map = {};
@@ -2579,6 +2603,27 @@ export default function App() {
                     </li>
                   ))}
                 </ul>
+              )}
+
+              <div style={styles.sectionTitleRow}>
+                <h3 style={styles.sectionTitleFlush}>残タスク</h3>
+                <button type="button" onClick={() => setOverdueCollapsed((v) => !v)} style={styles.collapseBtnSm} aria-label={overdueCollapsed ? "詳細を展開する" : "詳細を折りたたむ"}>
+                  {overdueCollapsed ? "▸" : "▾"}
+                </button>
+              </div>
+
+              {!overdueCollapsed && (
+                <DateGroupedTaskList
+                  dates={overdueDates}
+                  tasks={overdueTasks}
+                  openDates={overdueOpenDates}
+                  onToggleDate={toggleOverdueDate}
+                  onToggleDone={toggleSubtaskDone}
+                  onMoveDate={setMoveDateModal}
+                  stamping={stamping}
+                  dayViewDate={dayViewDate}
+                  emptyMessage="予定日が過去で残っているタスクはない。"
+                />
               )}
 
               <div style={styles.sectionTitleRow}>
