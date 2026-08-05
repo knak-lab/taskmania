@@ -307,6 +307,20 @@ function addDaysStr(dateStr, days) {
 const WEEKDAY_LABELS = ["日", "月", "火", "水", "木", "金", "土"];
 const MON_FIRST_LABELS = ["月", "火", "水", "木", "金", "土", "日"];
 
+function repeatWeekdayShortLabel(v) {
+  if (v === "daily") return "毎日";
+  if (v === "weekday") return "平日";
+  if (v === "satsun") return "土日";
+  return `${WEEKDAY_LABELS[v]}曜`;
+}
+
+function repeatWeekdayTitle(v) {
+  if (v === "daily") return "毎日";
+  if (v === "weekday") return "平日(月〜金・祝日除く)";
+  if (v === "satsun") return "毎週土曜・日曜";
+  return `毎週${WEEKDAY_LABELS[v]}曜`;
+}
+
 function addMonthsStr(dateStr, months) {
   const [y, m] = dateStr.split("-").map(Number);
   const d = new Date(y, m - 1 + months, 1);
@@ -415,6 +429,13 @@ function nextBusinessDayOnOrAfter(dateStr) {
 
 // 次回発生日を計算。weekdayが"weekday"なら平日(月~金・祝日除く)を繰り返す。shiftHolidayがtrueなら祝日・土日の場合1日ずつ後ろへずらす
 function computeNextRecurrenceDate(currentDateStr, weekday, shiftHoliday) {
+  if (weekday === "daily") {
+    let d = addDaysStr(currentDateStr, 1);
+    if (shiftHoliday) {
+      while (isWeekendOrHoliday(d)) d = addDaysStr(d, 1);
+    }
+    return d;
+  }
   if (weekday === "weekday") {
     return nextBusinessDayOnOrAfter(addDaysStr(currentDateStr, 1));
   }
@@ -805,7 +826,7 @@ function DateGroupedTaskList({ dates, tasks, openDates, onToggleDate, onToggleDo
                       <span style={{ ...styles.calSubCol, textDecoration: s.done ? "line-through" : "none", color: s.done ? "#9B9B9B" : "#2C3645" }} title={s.text}>{s.text}</span>
                     </div>
                     <div style={styles.calendarLine2}>
-                      <button type="button" onClick={() => onMoveDate({ pjId, taskId, subId: s.id, date: s.scheduledDate || dayViewDate })} aria-label="予定日を変更" style={styles.inlineAddBtn}>📅変更</button>
+                      <button type="button" onClick={() => onMoveDate({ pjId, taskId, subId: s.id, date: s.scheduledDate || dayViewDate, time: s.startTime || "" })} aria-label="予定日を変更" style={styles.inlineAddBtn}>📅変更</button>
                       <span style={styles.calPjCol} title={pjName}>{pjName}</span>
                       <span style={styles.calTaskCol} title={taskName}>{taskName}</span>
                     </div>
@@ -1373,8 +1394,8 @@ export default function App() {
   const [openPJ, setOpenPJ] = useState(() => new Set());
   const [openTask, setOpenTask] = useState(() => new Set());
   const [showDoneSubtasks, setShowDoneSubtasks] = useState(() => new Set());
-  const [showCompletedTasks, setShowCompletedTasks] = useState(() => new Set());
-  const [showCompletedPJSections, setShowCompletedPJSections] = useState(() => new Set());
+  const [hiddenCompletedTasks, setHiddenCompletedTasks] = useState(() => new Set());
+  const [hiddenCompletedPJSections, setHiddenCompletedPJSections] = useState(() => new Set());
   const [ganttCollapsed, setGanttCollapsed] = useState(true);
   const [pjDetailModal, setPjDetailModal] = useState(null);
   const [runningTarget, setRunningTarget] = useState(() => {
@@ -1898,8 +1919,8 @@ export default function App() {
   function toggleOpenPJ(id) { setOpenPJ((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; }); }
   function toggleOpenTask(id) { setOpenTask((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; }); }
   function toggleShowDoneSubtasks(id) { setShowDoneSubtasks((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; }); }
-  function toggleShowCompletedTasks(pjId) { setShowCompletedTasks((prev) => { const next = new Set(prev); next.has(pjId) ? next.delete(pjId) : next.add(pjId); return next; }); }
-  function toggleShowCompletedPJSection(key) { setShowCompletedPJSections((prev) => { const next = new Set(prev); next.has(key) ? next.delete(key) : next.add(key); return next; }); }
+  function toggleShowCompletedTasks(pjId) { setHiddenCompletedTasks((prev) => { const next = new Set(prev); next.has(pjId) ? next.delete(pjId) : next.add(pjId); return next; }); }
+  function toggleShowCompletedPJSection(key) { setHiddenCompletedPJSections((prev) => { const next = new Set(prev); next.has(key) ? next.delete(key) : next.add(key); return next; }); }
   function togglePrioritySection(v) { setCollapsedPrioritySection((prev) => { const next = new Set(prev); next.has(v) ? next.delete(v) : next.add(v); return next; }); }
 
   function updatePJPriority(pjId, priority) {
@@ -2039,7 +2060,9 @@ export default function App() {
           if (completing && s.repeatWeekday != null && s.scheduledDate) {
             const shiftHoliday = pp.owner === "kkr" && pp.subcategory === "仕事";
             const nextDate = computeNextRecurrenceDate(s.scheduledDate, s.repeatWeekday, shiftHoliday);
-            if (!tt.endDate || nextDate <= tt.endDate) {
+            const withinTaskEnd = !tt.endDate || nextDate <= tt.endDate;
+            const withinRepeatEnd = !s.repeatEndDate || nextDate <= s.repeatEndDate;
+            if (withinTaskEnd && withinRepeatEnd) {
               const idx = subtasks.findIndex((ss) => ss.id === subId);
               const nextSub = {
                 ...s,
@@ -2318,9 +2341,9 @@ export default function App() {
           </button>
           {!sec.small && !sec.moyamoya && (
             <button type="button" onClick={() => toggleShowCompletedPJSection(sec.key)}
-              style={{ ...styles.eyeToggleBtn, background: showCompletedPJSections.has(sec.key) ? "#F0F0F0" : "transparent" }}
-              aria-label={showCompletedPJSections.has(sec.key) ? "完了済みPJを隠す" : "完了済みPJを表示"}>
-              {showCompletedPJSections.has(sec.key) ? "👁" : "🙈"}
+              style={{ ...styles.eyeToggleBtn, background: !hiddenCompletedPJSections.has(sec.key) ? "#F0F0F0" : "transparent" }}
+              aria-label={!hiddenCompletedPJSections.has(sec.key) ? "完了済みPJを隠す" : "完了済みPJを表示"}>
+              {!hiddenCompletedPJSections.has(sec.key) ? "👁" : "🙈"}
             </button>
           )}
         </div>
@@ -2342,11 +2365,11 @@ export default function App() {
                 ))}
               </div>
             )}
-            {!sec.small && !sec.moyamoya && !showCompletedPJSections.has(sec.key) && group.length > 0 && group.every(pjEffectivelyDone) && (
+            {!sec.small && !sec.moyamoya && hiddenCompletedPJSections.has(sec.key) && group.length > 0 && group.every(pjEffectivelyDone) && (
               <p style={styles.emptySmall}>完了済みPJのみ(👁で表示できる)</p>
             )}
             {group.map((p, pIdx) => {
-              if (!sec.small && !sec.moyamoya && !showCompletedPJSections.has(sec.key) && pjEffectivelyDone(p)) return null;
+              if (!sec.small && !sec.moyamoya && hiddenCompletedPJSections.has(sec.key) && pjEffectivelyDone(p)) return null;
               const groupIds = group.map((gp) => gp.id);
               const pjOpen = openPJ.has(p.id);
               const { done: pd, total: pt } = pjProgress(p);
@@ -2363,9 +2386,9 @@ export default function App() {
                     {pt > 0 && pd === pt && <span style={styles.doneMark}>✅</span>}
                     <button type="button" onClick={() => setPjDetailModal(p.id)} style={styles.ganttToggleBtn} aria-label="ガントチャートを表示">📊</button>
                     <button type="button" onClick={() => toggleShowCompletedTasks(p.id)}
-                      style={{ ...styles.eyeToggleBtn, background: showCompletedTasks.has(p.id) ? "#F0F0F0" : "transparent" }}
-                      aria-label={showCompletedTasks.has(p.id) ? "完了済みタスクを隠す" : "完了済みタスクを表示"}>
-                      {showCompletedTasks.has(p.id) ? "👁" : "🙈"}
+                      style={{ ...styles.eyeToggleBtn, background: !hiddenCompletedTasks.has(p.id) ? "#F0F0F0" : "transparent" }}
+                      aria-label={!hiddenCompletedTasks.has(p.id) ? "完了済みタスクを隠す" : "完了済みタスクを表示"}>
+                      {!hiddenCompletedTasks.has(p.id) ? "👁" : "🙈"}
                     </button>
                     <button type="button" onClick={() => togglePJMoyamoya(p.id)}
                       style={{ ...styles.moyamoyaToggleBtn, background: p.moyamoya ? MOYAMOYA_COLOR : "transparent", color: p.moyamoya ? "#FFFFFF" : MOYAMOYA_COLOR, borderColor: MOYAMOYA_COLOR }}
@@ -2388,11 +2411,11 @@ export default function App() {
                   {pjOpen && (
                     <div style={styles.taskList}>
                       {p.tasks.length === 0 && <p style={styles.emptySmall}>タスクなし</p>}
-                      {p.tasks.length > 0 && !showCompletedTasks.has(p.id) && p.tasks.every(taskEffectivelyDone) && (
+                      {p.tasks.length > 0 && hiddenCompletedTasks.has(p.id) && p.tasks.every(taskEffectivelyDone) && (
                         <p style={styles.emptySmall}>完了済みタスクのみ(👁で表示できる)</p>
                       )}
                       {p.tasks.map((t, tIdx) => {
-                        if (!showCompletedTasks.has(p.id) && taskEffectivelyDone(t)) return null;
+                        if (hiddenCompletedTasks.has(p.id) && taskEffectivelyDone(t)) return null;
                         const taskOpen = openTask.has(t.id);
                         const { done: td, total: tt } = taskProgress(t);
                         return (
@@ -2461,13 +2484,20 @@ export default function App() {
                                             </label>
                                             <label style={styles.scheduleEditField}>
                                               <span style={styles.scheduleEditLabel}>繰り返し{p.owner === "kkr" && p.subcategory === "仕事" ? "(休日は翌日へ)" : ""}</span>
-                                              <select value={s.repeatWeekday ?? ""} onChange={(e) => updateSubtaskSchedule(p.id, t.id, s.id, "repeatWeekday", e.target.value === "" ? "" : (["weekday", "satsun"].includes(e.target.value) ? e.target.value : Number(e.target.value)))} style={styles.scheduleEditInput}>
+                                              <select value={s.repeatWeekday ?? ""} onChange={(e) => updateSubtaskSchedule(p.id, t.id, s.id, "repeatWeekday", e.target.value === "" ? "" : (["weekday", "satsun", "daily"].includes(e.target.value) ? e.target.value : Number(e.target.value)))} style={styles.scheduleEditInput}>
                                                 <option value="">なし</option>
+                                                <option value="daily">毎日</option>
                                                 <option value="weekday">平日(月〜金・祝日除く)</option>
                                                 <option value="satsun">毎週土曜・日曜</option>
                                                 {WEEKDAY_LABELS.map((label, idx) => <option key={idx} value={idx}>毎週{label}曜</option>)}
                                               </select>
                                             </label>
+                                            {s.repeatWeekday != null && (
+                                              <label style={styles.scheduleEditField}>
+                                                <span style={styles.scheduleEditLabel}>繰り返し終了日</span>
+                                                <input type="date" value={s.repeatEndDate || ""} onChange={(e) => updateSubtaskSchedule(p.id, t.id, s.id, "repeatEndDate", e.target.value)} min={s.scheduledDate || undefined} max={t.endDate || undefined} style={styles.scheduleEditInput} />
+                                              </label>
+                                            )}
                                             <label style={styles.scheduleEditField}>
                                               <span style={styles.scheduleEditLabel}>想定(分)</span>
                                               <select value={s.estimatedMinutes || ""} onChange={(e) => updateSubtaskSchedule(p.id, t.id, s.id, "estimatedMinutes", e.target.value ? Number(e.target.value) : "")} style={{ ...styles.scheduleEditInput, width: 64 }}>
@@ -2740,7 +2770,7 @@ export default function App() {
                           aria-label="サブタスク名を編集"
                           style={{ ...styles.calSubCol, border: "none", background: "transparent", fontFamily: "inherit", padding: 0, textDecoration: s.done ? "line-through" : "none", color: s.done ? "#9B9B9B" : "#2C3645" }}
                         />
-                        {s.repeatWeekday != null && <span title={s.repeatWeekday === "weekday" ? "平日(月〜金・祝日除く)" : s.repeatWeekday === "satsun" ? "毎週土曜・日曜" : `毎週${WEEKDAY_LABELS[s.repeatWeekday]}曜`} style={styles.calEstTag}>🔁{s.repeatWeekday === "weekday" ? "平日" : s.repeatWeekday === "satsun" ? "土日" : WEEKDAY_LABELS[s.repeatWeekday]}</span>}
+                        {s.repeatWeekday != null && <span title={repeatWeekdayTitle(s.repeatWeekday)} style={styles.calEstTag}>🔁{repeatWeekdayShortLabel(s.repeatWeekday)}</span>}
                       </div>
                       <div style={styles.calendarLine2}>
                         <span style={styles.calendarLine2Label}>想定</span>
@@ -2755,7 +2785,7 @@ export default function App() {
                         </select>
                         {renderStopwatchControl(pjId, taskId, s.id)}
                         <button type="button" onClick={() => openStepsModal(pjId, taskId, s.id)} aria-label="ステップを開く" style={styles.inlineAddBtn}>☑ステップ</button>
-                        <button type="button" onClick={() => setMoveDateModal({ pjId, taskId, subId: s.id, date: s.scheduledDate || dayViewDate })} aria-label="予定日を変更" style={styles.inlineAddBtn}>📅変更</button>
+                        <button type="button" onClick={() => setMoveDateModal({ pjId, taskId, subId: s.id, date: s.scheduledDate || dayViewDate, time: s.startTime || "" })} aria-label="予定日を変更" style={styles.inlineAddBtn}>📅変更</button>
                         <button type="button" onClick={() => setCopyDateModal({ pjId, taskId, subId: s.id, date: dayViewDate, text: s.text })} aria-label="サブタスクをコピー" style={styles.inlineAddBtn}>📋コピー</button>
                         {renderSendToCalendarButton(s)}
                         <span style={styles.calPjCol} title={pjName}>{pjName}</span>
@@ -2826,7 +2856,7 @@ export default function App() {
                           </select>
                           {renderStopwatchControl(pjId, taskId, s.id)}
                           <button type="button" onClick={() => openStepsModal(pjId, taskId, s.id)} aria-label="ステップを開く" style={styles.inlineAddBtn}>☑ステップ</button>
-                          <button type="button" onClick={() => setMoveDateModal({ pjId, taskId, subId: s.id, date: s.scheduledDate || dayViewDate })} aria-label="予定日を設定" style={styles.inlineAddBtn}>📅設定</button>
+                          <button type="button" onClick={() => setMoveDateModal({ pjId, taskId, subId: s.id, date: s.scheduledDate || dayViewDate, time: s.startTime || "" })} aria-label="予定日を設定" style={styles.inlineAddBtn}>📅設定</button>
                           <button type="button" onClick={() => setCopyDateModal({ pjId, taskId, subId: s.id, date: dayViewDate, text: s.text })} aria-label="サブタスクをコピー" style={styles.inlineAddBtn}>📋コピー</button>
                           <span style={styles.calPjCol} title={pjName}>{pjName}</span>
                           <span style={styles.calTaskCol} title={taskName}>{taskName}</span>
@@ -3177,7 +3207,7 @@ export default function App() {
               <div style={styles.modalOverlay} onClick={() => setMoveDateModal(null)}>
                 <div style={styles.modalBox} onClick={(e) => e.stopPropagation()}>
                   <div style={styles.modalHeader}>
-                    <h3 style={styles.modalTitle}>予定日を変更</h3>
+                    <h3 style={styles.modalTitle}>予定日・開始時間を変更</h3>
                     <button type="button" onClick={() => setMoveDateModal(null)} aria-label="閉じる" style={styles.modalCloseBtn}>×</button>
                   </div>
                   <p style={styles.modalContext}>{s.text}</p>
@@ -3185,8 +3215,12 @@ export default function App() {
                     <span style={styles.scheduleEditLabel}>新しい予定日</span>
                     <input type="date" value={moveDateModal.date} onChange={(e) => setMoveDateModal((prev) => ({ ...prev, date: e.target.value }))} min={t.startDate || undefined} max={t.endDate || undefined} style={styles.scheduleEditInput} />
                   </label>
+                  <label style={styles.scheduleEditField}>
+                    <span style={styles.scheduleEditLabel}>新しい開始時間</span>
+                    <TimeDropdown value={moveDateModal.time || ""} onChange={(v) => setMoveDateModal((prev) => ({ ...prev, time: v }))} />
+                  </label>
                   <div style={styles.modalActions}>
-                    <button type="button" onClick={() => { updateSubtaskSchedule(p.id, t.id, s.id, "scheduledDate", moveDateModal.date || null); setMoveDateModal(null); }} style={styles.addBtn}>変更</button>
+                    <button type="button" onClick={() => { updateSubtaskSchedule(p.id, t.id, s.id, "scheduledDate", moveDateModal.date || null); updateSubtaskSchedule(p.id, t.id, s.id, "startTime", moveDateModal.time || null); setMoveDateModal(null); }} style={styles.addBtn}>変更</button>
                   </div>
                 </div>
               </div>
@@ -3438,7 +3472,7 @@ const styles = {
   metaTag: { fontSize: 9.5, fontWeight: 700, padding: "1px 6px", borderRadius: 10, border: "1px solid", flexShrink: 0 },
   deleteBtn: { background: "none", border: "none", color: "#D8D8D8", fontSize: 16, cursor: "pointer", padding: "0 2px", flexShrink: 0, lineHeight: 1 },
 
-  calWrap: { display: "flex", flexDirection: "column", gap: 8, marginBottom: 4 },
+  calWrap: { display: "flex", flexDirection: "column", gap: 8, marginBottom: 4, width: "150%", maxWidth: "150%" },
   calToolbar: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" },
   calNavGroup: { display: "flex", alignItems: "center", gap: 6 },
   calNavBtn: { background: "none", border: "1.5px solid #D8D8D8", borderRadius: 5, color: "#2C3645", fontSize: 11, cursor: "pointer", width: 22, height: 22, padding: 0, fontFamily: "inherit" },

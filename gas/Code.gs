@@ -4,7 +4,7 @@
  * シート構成:
  *   Projects: id | owner | name | subcategory | priority | status
  *   Tasks:    id | projectId | name | startDate | endDate | estimatedMinutes
- *   Subtasks: id | taskId | text | done | priority | scheduledDate | startTime | estimatedMinutes | actualMinutes | createdAt | repeatWeekday
+ *   Subtasks: id | taskId | text | done | priority | scheduledDate | startTime | estimatedMinutes | actualMinutes | createdAt | repeatWeekday | sourceSubtaskId | doneUpdatedAt | repeatEndDate
  *   Steps:    id | subtaskId | text | done
  *
  * API:
@@ -78,6 +78,11 @@
  *   既存のTasksシートのG1セルに手動で "sourceTodoId" と入力しておくこと。
  *   既存のSubtasksシートのL1・M1セルに手動で "sourceSubtaskId" "doneUpdatedAt" と入力しておくこと。
  *   既存行が空欄の場合はカモの小屋と未連携のタスク/サブタスクとして扱われるので、値が入っていなくても壊れない。
+ *
+ * 既存スプレッドシートを使っている場合の移行手順(繰り返しに「毎日」と終了日を追加した際):
+ *   既存のSubtasksシートのN1セルに手動で "repeatEndDate" と入力しておくこと。
+ *   既存行のN列が空欄の場合は繰り返し終了日未設定(無期限)として扱われるので、値が入っていなくても壊れない。
+ *   repeatWeekday列には既存の 0〜6/"weekday"/"satsun" に加えて "daily" も入るようになった。
  */
 
 const SHEET_PROJECTS = "Projects";
@@ -103,6 +108,7 @@ const SUBTASKS_HEADERS = [
   "repeatWeekday",
   "sourceSubtaskId",
   "doneUpdatedAt",
+  "repeatEndDate",
 ];
 const STEPS_HEADERS = ["id", "subtaskId", "text", "done"];
 const MOYAMOYA_HEADERS = ["id", "text"];
@@ -224,7 +230,8 @@ function readProjects_() {
       createdAt = r[9],
       repeatWeekday = r[10],
       sourceSubtaskId = r[11],
-      doneUpdatedAt = r[12];
+      doneUpdatedAt = r[12],
+      repeatEndDate = r[13];
     if (!id || !taskId) return;
     if (!subtasksByTask[taskId]) subtasksByTask[taskId] = [];
     subtasksByTask[taskId].push({
@@ -240,12 +247,13 @@ function readProjects_() {
       repeatWeekday:
         repeatWeekday === "" || repeatWeekday == null
           ? null
-          : repeatWeekday === "weekday" || repeatWeekday === "satsun"
+          : repeatWeekday === "weekday" || repeatWeekday === "satsun" || repeatWeekday === "daily"
             ? repeatWeekday
             : Number(repeatWeekday),
       steps: stepsBySubtask[id] || [],
       sourceSubtaskId: sourceSubtaskId ? String(sourceSubtaskId) : null,
       doneUpdatedAt: doneUpdatedAt ? Number(doneUpdatedAt) : 0,
+      repeatEndDate: repeatEndDate ? String(repeatEndDate) : null,
     });
   });
 
@@ -376,6 +384,7 @@ function writeProjects_(projects) {
           s.repeatWeekday != null ? s.repeatWeekday : "",
           s.sourceSubtaskId || "",
           s.doneUpdatedAt || "",
+          s.repeatEndDate || "",
         ]);
         (s.steps || []).forEach(function (st) {
           stepRows.push([st.id, s.id, st.text || "", !!st.done]);
@@ -404,6 +413,8 @@ function getOrCreateSheet_(name, headers) {
   // "2026-07-20" などが日付型に自動変換されてズレるのを防ぐ
   if (name === SHEET_SUBTASKS) {
     sheet.getRange(2, 6, Math.max(sheet.getMaxRows() - 1, 1), 2).setNumberFormat("@");
+    // repeatEndDate列(Subtasksの14列目)も同様にテキスト形式に固定
+    sheet.getRange(2, 14, Math.max(sheet.getMaxRows() - 1, 1), 1).setNumberFormat("@");
   }
   // startDate / endDate 列(Tasksの4,5列目)も同様にテキスト形式に固定
   if (name === SHEET_TASKS) {
