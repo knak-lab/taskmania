@@ -792,7 +792,7 @@ function PJDetailModal({ project, onUpdateNote, onClose }) {
 
 const DAY_JP = ["日", "月", "火", "水", "木", "金", "土"];
 
-function DateGroupedTaskList({ dates, tasks, openDates, onToggleDate, onToggleDone, onMoveDate, stamping, dayViewDate, emptyMessage, showActual }) {
+function DateGroupedTaskList({ dates, tasks, openDates, onToggleDate, onToggleDone, onMoveDate, stamping, dayViewDate, emptyMessage, showActual, renderSendButton }) {
   const groups = dates
     .map((d) => ({ date: d, items: tasks.filter((t) => t.sub.scheduledDate === d) }))
     .filter((g) => g.items.length > 0);
@@ -827,6 +827,7 @@ function DateGroupedTaskList({ dates, tasks, openDates, onToggleDate, onToggleDo
                     </div>
                     <div style={styles.calendarLine2}>
                       <button type="button" onClick={() => onMoveDate({ pjId, taskId, subId: s.id, date: s.scheduledDate || dayViewDate, time: s.startTime || "" })} aria-label="予定日を変更" style={styles.inlineAddBtn}>📅変更</button>
+                      {renderSendButton && renderSendButton(s)}
                       <span style={styles.calPjCol} title={pjName}>{pjName}</span>
                       <span style={styles.calTaskCol} title={taskName}>{taskName}</span>
                     </div>
@@ -2927,6 +2928,7 @@ export default function App() {
                     stamping={stamping}
                     dayViewDate={dayViewDate}
                     emptyMessage="今週の予定日が入ってるサブタスクはない。"
+                    renderSendButton={renderSendToCalendarButton}
                   />
                 </>
               )}
@@ -2991,6 +2993,7 @@ export default function App() {
                     stamping={stamping}
                     dayViewDate={dayViewDate}
                     emptyMessage="来週の予定日が入ってるサブタスクはない。"
+                    renderSendButton={renderSendToCalendarButton}
                   />
                 </>
               )}
