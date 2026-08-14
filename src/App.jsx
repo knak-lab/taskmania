@@ -311,6 +311,9 @@ function repeatWeekdayShortLabel(v) {
   if (v === "daily") return "毎日";
   if (v === "weekday") return "平日";
   if (v === "satsun") return "土日";
+  if (v === "3m") return "3ヶ月毎";
+  if (v === "6m") return "半年毎";
+  if (v === "1y") return "1年毎";
   return `${WEEKDAY_LABELS[v]}曜`;
 }
 
@@ -318,7 +321,15 @@ function repeatWeekdayTitle(v) {
   if (v === "daily") return "毎日";
   if (v === "weekday") return "平日(月〜金・祝日除く)";
   if (v === "satsun") return "毎週土曜・日曜";
+  if (v === "3m") return "3ヶ月毎";
+  if (v === "6m") return "半年毎";
+  if (v === "1y") return "1年毎";
   return `毎週${WEEKDAY_LABELS[v]}曜`;
+}
+
+function addMonthsPreserveDay(dateStr, months) {
+  const [y, m, day] = dateStr.split("-").map(Number);
+  return toDateStr(new Date(y, m - 1 + months, day));
 }
 
 function addMonthsStr(dateStr, months) {
@@ -444,6 +455,9 @@ function computeNextRecurrenceDate(currentDateStr, weekday, shiftHoliday) {
     while (![0, 6].includes(new Date(d + "T00:00:00").getDay())) d = addDaysStr(d, 1);
     return d;
   }
+  if (weekday === "3m") return addMonthsPreserveDay(currentDateStr, 3);
+  if (weekday === "6m") return addMonthsPreserveDay(currentDateStr, 6);
+  if (weekday === "1y") return addMonthsPreserveDay(currentDateStr, 12);
   let next = nextWeekdayOnOrAfter(addDaysStr(currentDateStr, 1), weekday);
   if (shiftHoliday) {
     while (isWeekendOrHoliday(next)) next = addDaysStr(next, 1);
@@ -2485,12 +2499,15 @@ export default function App() {
                                             </label>
                                             <label style={styles.scheduleEditField}>
                                               <span style={styles.scheduleEditLabel}>繰り返し{p.owner === "kkr" && p.subcategory === "仕事" ? "(休日は翌日へ)" : ""}</span>
-                                              <select value={s.repeatWeekday ?? ""} onChange={(e) => updateSubtaskSchedule(p.id, t.id, s.id, "repeatWeekday", e.target.value === "" ? "" : (["weekday", "satsun", "daily"].includes(e.target.value) ? e.target.value : Number(e.target.value)))} style={styles.scheduleEditInput}>
+                                              <select value={s.repeatWeekday ?? ""} onChange={(e) => updateSubtaskSchedule(p.id, t.id, s.id, "repeatWeekday", e.target.value === "" ? "" : (["weekday", "satsun", "daily", "3m", "6m", "1y"].includes(e.target.value) ? e.target.value : Number(e.target.value)))} style={styles.scheduleEditInput}>
                                                 <option value="">なし</option>
                                                 <option value="daily">毎日</option>
                                                 <option value="weekday">平日(月〜金・祝日除く)</option>
                                                 <option value="satsun">毎週土曜・日曜</option>
                                                 {WEEKDAY_LABELS.map((label, idx) => <option key={idx} value={idx}>毎週{label}曜</option>)}
+                                                <option value="3m">3ヶ月毎</option>
+                                                <option value="6m">半年毎</option>
+                                                <option value="1y">1年毎</option>
                                               </select>
                                             </label>
                                             {s.repeatWeekday != null && (
