@@ -110,6 +110,7 @@ function sub(text, done, priority, scheduledDate, startTime, estimatedMinutes, a
     actualMinutes: actualMinutes || null,
     createdAt: Date.now(),
     steps: [],
+    skipCount: 0,
   };
 }
 
@@ -2097,6 +2098,32 @@ export default function App() {
     }));
   }
 
+  // 繰り返しタスクは次回発生日へ、通常タスクは翌日へ予定日をずらしてスキップ回数を+1する
+  function skipSubtask(pjId, taskId, subId) {
+    setProjects((prev) => prev.map((p) => {
+      if (p.id !== pjId) return p;
+      return {
+        ...p, tasks: p.tasks.map((t) => {
+          if (t.id !== taskId) return t;
+          return {
+            ...t, subtasks: t.subtasks.map((s) => {
+              if (s.id !== subId) return s;
+              const baseDate = s.scheduledDate || todayStr;
+              let nextDate;
+              if (s.repeatWeekday != null) {
+                const shiftHoliday = p.owner === "kkr" && p.subcategory === "仕事";
+                nextDate = computeNextRecurrenceDate(baseDate, s.repeatWeekday, shiftHoliday);
+              } else {
+                nextDate = addDaysStr(baseDate, 1);
+              }
+              return { ...s, scheduledDate: nextDate, skipCount: (s.skipCount || 0) + 1 };
+            }),
+          };
+        }),
+      };
+    }));
+  }
+
   function updateSubtaskSchedule(pjId, taskId, subId, field, value) {
     setProjects((prev) => prev.map((p) => p.id !== pjId ? p : {
       ...p, tasks: p.tasks.map((t) => {
@@ -2555,6 +2582,10 @@ export default function App() {
                                         <span style={{ ...styles.metaTag, borderColor: pInfo.color, color: pInfo.color }}>{pInfo.label}</span>
                                         <button type="button" onClick={() => openStepsModal(p.id, t.id, s.id)} aria-label="ステップを開く" style={styles.inlineAddBtn}>☑ステップ</button>
                                         <button type="button" onClick={() => setCopyDateModal({ pjId: p.id, taskId: t.id, subId: s.id, date: s.scheduledDate || todayStr, text: s.text })} aria-label="サブタスクをコピー" style={styles.inlineAddBtn}>📋コピー</button>
+                                        <button type="button" onClick={() => skipSubtask(p.id, t.id, s.id)}
+                                          title={s.repeatWeekday != null ? "次回発生日へスキップ" : "翌日へスキップ"}
+                                          aria-label="スキップ" style={styles.inlineAddBtn}>⏭スキップ</button>
+                                        {!!s.skipCount && <span style={styles.skipBadge} title={`スキップ${s.skipCount}回`}>⏭×{s.skipCount}</span>}
                                         {renderSendToCalendarButton(s)}
                                         <button onClick={() => removeSubtask(p.id, t.id, s.id)} aria-label="削除" style={styles.deleteBtn}>×</button>
                                       </div>
@@ -3392,6 +3423,7 @@ const styles = {
   calendarLine2Label: { fontSize: 9.5, color: "#9B9B9B", fontWeight: 700 },
   calTimeCol: { width: 40, flexShrink: 0, fontSize: 10.5, fontWeight: 700, color: "#7A7A7A", fontVariantNumeric: "tabular-nums" },
   calEstTag: { fontSize: 9.5, fontWeight: 700, color: "#6B7F6E", background: "#F0F0F0", padding: "1px 6px", borderRadius: 8, flexShrink: 0, whiteSpace: "nowrap" },
+  skipBadge: { fontSize: 9.5, fontWeight: 700, color: "#F39800", background: "#FFF3E0", padding: "1px 6px", borderRadius: 8, flexShrink: 0, whiteSpace: "nowrap" },
   calSubCol: { flex: "1 1 auto", minWidth: 0, fontSize: 12.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
   calPjCol: { fontSize: 10, color: "#12314F", fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 90 },
   calTaskCol: { fontSize: 10, color: "#8B6F3E", fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 90 },
