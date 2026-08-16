@@ -188,7 +188,7 @@ function mergeKamoSync(projects, kamoTodos, kamoSubtasks) {
       const wantText = `【${kamoSub.assignee}】${kamoSub.name}`;
       let s = t.subtasks.find((ss) => ss.sourceSubtaskId === kamoSub.id);
       if (!s) {
-        s = sub(wantText, kamoSub.status === "完了", 2, null, null, null, null);
+        s = sub(wantText, kamoSub.status === "完了", 2, kamoSub.deadline || null, null, null, null);
         s.sourceSubtaskId = kamoSub.id;
         s.doneUpdatedAt = kamoSub.statusUpdatedAt || Date.now();
         t.subtasks.push(s);
@@ -197,6 +197,10 @@ function mergeKamoSync(projects, kamoTodos, kamoSubtasks) {
       }
       if (s.text !== wantText) {
         s.text = wantText;
+        changed = true;
+      }
+      if (kamoSub.deadline && s.scheduledDate !== kamoSub.deadline) {
+        s.scheduledDate = kamoSub.deadline;
         changed = true;
       }
       const kamoUpdatedAt = kamoSub.statusUpdatedAt || 0;
