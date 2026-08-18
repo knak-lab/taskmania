@@ -2031,6 +2031,10 @@ export default function App() {
     setProjects((prev) => prev.map((p) => (p.id === pjId ? { ...p, status: status || null } : p)));
   }
 
+  function updatePJSubcategory(pjId, subcategory) {
+    setProjects((prev) => prev.map((p) => (p.id === pjId ? { ...p, subcategory: subcategory || null } : p)));
+  }
+
   function updatePJName(pjId, name) {
     setProjects((prev) => prev.map((p) => (p.id === pjId ? { ...p, name } : p)));
   }
@@ -2496,8 +2500,10 @@ export default function App() {
                       {PJ_STATUSES.map((st) => <option key={st.v} value={st.v}>{st.label}</option>)}
                     </select>
                     {topTab === "総合" && <span style={{ ...styles.metaTag, borderColor: oColor, color: oColor }}>{TOP_TABS.find((c) => c.key === p.owner)?.label}</span>}
-                    {(topTab === "総合" || subTab === "総合") && p.subcategory && (
-                      <span style={{ ...styles.metaTag, borderColor: SUB_TABS.find((s) => s.key === p.subcategory)?.color, color: SUB_TABS.find((s) => s.key === p.subcategory)?.color }}>{p.subcategory}</span>
+                    {PERSON_KEYS.includes(p.owner) && (
+                      <select value={p.subcategory || ""} onChange={(e) => updatePJSubcategory(p.id, e.target.value)} style={styles.moveSelect} aria-label="サブカテゴリを変更">
+                        {REAL_SUBS.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+                      </select>
                     )}
                     <span style={styles.progressTag}>{pd}/{pt}</span>
                     <button type="button" onClick={() => openAddTaskModal(p.id, p.name)} style={styles.inlineAddBtn}>＋タスク</button>
