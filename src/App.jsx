@@ -2880,11 +2880,11 @@ export default function App() {
                       <div style={styles.calendarLine1}>
                         <TimeDropdown value={s.startTime || ""} onChange={(v) => updateSubtaskSchedule(pjId, taskId, s.id, "startTime", v)} style={{ width: 54 }} />
                         <span style={{ ...styles.calTimeCol, width: 40 }}>{addMinutesToTime(s.startTime, s.estimatedMinutes) || "―"}</span>
-                        <button type="button" onClick={() => setMoveDateModal({ pjId, taskId, subId: s.id, date: s.scheduledDate || dayViewDate, time: s.startTime || "" })} aria-label="予定日を変更" style={styles.inlineAddBtn}>📅変更</button>
-                        <button type="button" onClick={() => setCopyDateModal({ pjId, taskId, subId: s.id, date: dayViewDate, text: s.text })} aria-label="サブタスクをコピー" style={styles.inlineAddBtn}>📋コピー</button>
+                        <button type="button" onClick={() => setMoveDateModal({ pjId, taskId, subId: s.id, date: s.scheduledDate || dayViewDate, time: s.startTime || "" })} aria-label="予定日を変更" style={{ ...styles.inlineAddBtn, borderWidth: 0.5 }}>📅変更</button>
+                        <button type="button" onClick={() => setCopyDateModal({ pjId, taskId, subId: s.id, date: dayViewDate, text: s.text })} aria-label="サブタスクをコピー" style={{ ...styles.inlineAddBtn, borderWidth: 0.5 }}>📋コピー</button>
                         <button type="button" onClick={() => skipSubtask(pjId, taskId, s.id)}
                           title={s.repeatWeekday != null ? "次回発生日へスキップ" : "翌日へスキップ"}
-                          aria-label="スキップ" style={styles.inlineAddBtn}>⏭スキップ</button>
+                          aria-label="スキップ" style={{ ...styles.inlineAddBtn, borderWidth: 0.5 }}>⏭スキップ</button>
                         {!!s.skipCount && <span style={styles.skipBadge} title={`スキップ${s.skipCount}回`}>⏭×{s.skipCount}</span>}
                       </div>
                       <div style={styles.calendarLine1}>
@@ -2896,7 +2896,7 @@ export default function App() {
                           value={s.text}
                           onChange={(e) => updateSubtaskText(pjId, taskId, s.id, e.target.value)}
                           aria-label="サブタスク名を編集"
-                          style={{ ...styles.calSubCol, border: "none", background: "transparent", fontFamily: "inherit", padding: 0, textDecoration: s.done ? "line-through" : "none", color: s.done ? "#9B9B9B" : "#2C3645" }}
+                          style={{ ...styles.calSubCol, border: "none", background: "transparent", fontFamily: "inherit", padding: 0, fontWeight: 700, textDecoration: s.done ? "line-through" : "none", color: s.done ? "#9B9B9B" : "#2C3645" }}
                         />
                         {s.repeatWeekday != null && <span title={repeatWeekdayTitle(s.repeatWeekday)} style={styles.calEstTag}>🔁{repeatWeekdayShortLabel(s.repeatWeekday)}</span>}
                       </div>
