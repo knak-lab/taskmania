@@ -1244,7 +1244,7 @@ function StackedBarChart({ dates, series }) {
   );
 }
 
-function DashboardModal({ projects, onClose }) {
+function DashboardModal({ projects, onClose, onToggleDone, onMoveDate, stamping, dayViewDate, renderSendButton, workAdj, onAddWorkAdj, onRemoveWorkAdj }) {
   const [range, setRange] = useState("thisWeek");
   const { start, end } = useMemo(() => dashboardRangeDates(range), [range]);
   const todayStr = toDateStr(new Date());
@@ -1254,7 +1254,7 @@ function DashboardModal({ projects, onClose }) {
     for (const p of projects) {
       for (const t of p.tasks) {
         for (const s of t.subtasks) {
-          if (s.scheduledDate && s.scheduledDate >= start && s.scheduledDate <= end) list.push({ p, s });
+          if (s.scheduledDate && s.scheduledDate >= start && s.scheduledDate <= end) list.push({ p, t, s });
         }
       }
     }
@@ -1330,6 +1330,30 @@ function DashboardModal({ projects, onClose }) {
 
   const totalMin = pjPieData.reduce((sum, d) => sum + d.minutes, 0);
 
+  const dashboardTasks = useMemo(() => {
+    const tasks = filteredSubs.map(({ p, t, s }) => ({ pjId: p.id, pjName: p.name, taskId: t.id, taskName: t.name, sub: s }));
+    tasks.sort((a, b) => {
+      if (a.sub.scheduledDate !== b.sub.scheduledDate) return a.sub.scheduledDate.localeCompare(b.sub.scheduledDate);
+      if (!a.sub.startTime && !b.sub.startTime) return 0;
+      if (!a.sub.startTime) return 1; if (!b.sub.startTime) return -1;
+      return a.sub.startTime.localeCompare(b.sub.startTime);
+    });
+    return tasks;
+  }, [filteredSubs]);
+
+  const [openDates, setOpenDates] = useState(() => new Set());
+  function toggleDate(date) { setOpenDates((prev) => { const next = new Set(prev); next.has(date) ? next.delete(date) : next.add(date); return next; }); }
+
+  // 稼働調整: 選択中の期間に含まれる未来の平日のみ対象にできる
+  const futureWeekdaysInRange = useMemo(() => barDates.filter((d) => d >= todayStr && isWeekdayStr(d)), [barDates, todayStr]);
+  const [adjDateVal, setAdjDateVal] = useState("");
+  const [adjHoursVal, setAdjHoursVal] = useState(1);
+  useEffect(() => {
+    setAdjDateVal((prev) => (futureWeekdaysInRange.includes(prev) ? prev : (futureWeekdaysInRange[0] || "")));
+  }, [futureWeekdaysInRange]);
+  const rangeWorkAdj = useMemo(() => workAdj.filter((a) => barDates.includes(a.date)), [workAdj, barDates]);
+  const addAdj = () => { if (adjDateVal && adjHoursVal) onAddWorkAdj(adjDateVal, Number(adjHoursVal)); };
+
   return (
     <div style={styles.modalOverlay} onClick={onClose}>
       <div style={styles.modalBoxDashboard} onClick={(e) => e.stopPropagation()}>
@@ -1359,6 +1383,61 @@ function DashboardModal({ projects, onClose }) {
             <StackedBarChart dates={barDates} series={barSeries} />
           </>
         )}
+
+        <div style={styles.sectionTitleRow}>
+          <h3 style={{ ...styles.sectionTitleFlush, fontWeight: 900 }}>稼働調整</h3>
+        </div>
+        {futureWeekdaysInRange.length > 0 && (
+          <div style={styles.scheduleEditRow}>
+            <label style={styles.scheduleEditField}>
+              <span style={styles.scheduleEditLabel}>稼働調整日</span>
+              <select value={adjDateVal} onChange={(e) => setAdjDateVal(e.target.value)} style={styles.scheduleEditInput}>
+                {futureWeekdaysInRange.map((d) => {
+                  const dt = new Date(d + "T00:00:00");
+                  return <option key={d} value={d}>{formatDate(d)}({DAY_JP[dt.getDay()]})</option>;
+                })}
+              </select>
+            </label>
+            <label style={styles.scheduleEditField}>
+              <span style={styles.scheduleEditLabel}>減らす時間</span>
+              <select value={adjHoursVal} onChange={(e) => setAdjHoursVal(Number(e.target.value))} style={{ ...styles.scheduleEditInput, width: 64 }}>
+                {[1, 2, 3, 4, 5, 6, 7, 8].map((h) => <option key={h} value={h}>{h}時間</option>)}
+              </select>
+            </label>
+            <button type="button" onClick={addAdj} style={styles.addBtn}>調整を追加</button>
+          </div>
+        )}
+        {rangeWorkAdj.length > 0 && (
+          <ul style={styles.todayList}>
+            {rangeWorkAdj.map((a) => {
+              const dt = new Date(a.date + "T00:00:00");
+              return (
+                <li key={a.date} style={{ ...styles.calendarLine1, justifyContent: "space-between" }}>
+                  <span style={styles.calSubCol}>{formatDate(a.date)}({DAY_JP[dt.getDay()]}) 稼働 -{a.hours}時間</span>
+                  <button type="button" onClick={() => onRemoveWorkAdj(a.date)} style={styles.deleteBtn} aria-label="調整を削除">×</button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+
+        <div style={styles.sectionTitleRow}>
+          <h3 style={{ ...styles.sectionTitleFlush, fontWeight: 900 }}>タスク一覧</h3>
+          <button type="button" onClick={() => exportWeekTasksExcel(DASHBOARD_RANGES.find((r) => r.key === range)?.label || "タスク一覧", dashboardTasks)} style={styles.inlineAddBtn}>Excelで出力</button>
+        </div>
+        <DateGroupedTaskList
+          dates={barDates}
+          tasks={dashboardTasks}
+          openDates={openDates}
+          onToggleDate={toggleDate}
+          onToggleDone={onToggleDone}
+          onMoveDate={onMoveDate}
+          stamping={stamping}
+          dayViewDate={dayViewDate}
+          emptyMessage="この期間の予定日が入ってるサブタスクはない。"
+          renderSendButton={renderSendButton}
+          showActual
+        />
       </div>
     </div>
   );
@@ -1755,18 +1834,16 @@ export default function App() {
     return () => clearTimeout(workAdjSaveTimer.current);
   }, [workAdj]);
 
-  // 今週のタスク
-  const [adjDateVal, setAdjDateVal] = useState(() => {
-    const today = new Date(); const day = today.getDay();
-    if (day >= 1 && day <= 5) return toDateStr(today);
-    const next = new Date(today); next.setDate(today.getDate() + (day === 0 ? 1 : 8 - day));
-    return toDateStr(next);
-  });
-  const [adjHoursVal, setAdjHoursVal] = useState(1);
-  const [weekCollapsed, setWeekCollapsed] = useState(true);
-  const [weekOpenDates, setWeekOpenDates] = useState(() => new Set());
-  function toggleWeekDate(date) { setWeekOpenDates((prev) => { const next = new Set(prev); next.has(date) ? next.delete(date) : next.add(date); return next; }); }
+  // 稼働調整(ダッシュボードのタスク一覧から追加・削除する)
+  const addWorkAdj = (date, hours) => {
+    setWorkAdj((prev) => {
+      const others = prev.filter((a) => a.date !== date);
+      return [...others, { date, hours }].sort((a, b) => a.date.localeCompare(b.date));
+    });
+  };
+  const removeWorkAdj = (date) => setWorkAdj((prev) => prev.filter((a) => a.date !== date));
 
+  // 今週のタスク(ブレイン負荷バッジの集計に使用)
   const weekDates = useMemo(() => {
     const monday = startOfWeek(new Date());
     return Array.from({ length: 7 }, (_, i) => {
@@ -1813,28 +1890,7 @@ export default function App() {
     return { baseMinutes, adjMinutes, effectiveMinutes, estMinutes, ratio, warnLevel, brainRatio };
   }, [weekTasks, workAdj, weekDates, todayStr]);
 
-  const addWeekAdj = () => {
-    if (!adjDateVal || !adjHoursVal) return;
-    setWorkAdj((prev) => {
-      const others = prev.filter((a) => a.date !== adjDateVal);
-      return [...others, { date: adjDateVal, hours: Number(adjHoursVal) }].sort((a, b) => a.date.localeCompare(b.date));
-    });
-  };
-  const removeWeekAdj = (date) => setWorkAdj((prev) => prev.filter((a) => a.date !== date));
-
-  // 来週のタスク(今週のタスクと同じ内容、期間のみ+7日)
-  const [nextAdjDateVal, setNextAdjDateVal] = useState(() => {
-    const today = new Date(); const day = today.getDay();
-    const monday = startOfWeek(today);
-    if (day >= 1 && day <= 5) { const d = new Date(today); d.setDate(today.getDate() + 7); return toDateStr(d); }
-    const nextMonday = new Date(monday); nextMonday.setDate(monday.getDate() + 7);
-    return toDateStr(nextMonday);
-  });
-  const [nextAdjHoursVal, setNextAdjHoursVal] = useState(1);
-  const [nextWeekCollapsed, setNextWeekCollapsed] = useState(true);
-  const [nextWeekOpenDates, setNextWeekOpenDates] = useState(() => new Set());
-  function toggleNextWeekDate(date) { setNextWeekOpenDates((prev) => { const next = new Set(prev); next.has(date) ? next.delete(date) : next.add(date); return next; }); }
-
+  // 来週のタスク(今週のタスクと同じ内容、期間のみ+7日。ブレイン負荷バッジの集計に使用)
   const nextWeekDates = useMemo(() => {
     const monday = startOfWeek(new Date());
     return Array.from({ length: 7 }, (_, i) => {
@@ -1873,20 +1929,7 @@ export default function App() {
     return { baseMinutes, adjMinutes, effectiveMinutes, estMinutes, ratio, warnLevel };
   }, [nextWeekTasks, workAdj, nextWeekDates, todayStr]);
 
-  const addNextWeekAdj = () => {
-    if (!nextAdjDateVal || !nextAdjHoursVal) return;
-    setWorkAdj((prev) => {
-      const others = prev.filter((a) => a.date !== nextAdjDateVal);
-      return [...others, { date: nextAdjDateVal, hours: Number(nextAdjHoursVal) }].sort((a, b) => a.date.localeCompare(b.date));
-    });
-  };
-  const removeNextWeekAdj = (date) => setWorkAdj((prev) => prev.filter((a) => a.date !== date));
-
-  // 先週のタスク(今週のタスクと同じ内容、期間のみ-7日。稼働調整はworkAdjを日付で参照)
-  const [lastWeekCollapsed, setLastWeekCollapsed] = useState(true);
-  const [lastWeekOpenDates, setLastWeekOpenDates] = useState(() => new Set());
-  function toggleLastWeekDate(date) { setLastWeekOpenDates((prev) => { const next = new Set(prev); next.has(date) ? next.delete(date) : next.add(date); return next; }); }
-
+  // 先週のタスク(今週のタスクと同じ内容、期間のみ-7日。稼働調整はworkAdjを日付で参照。ブレイン負荷バッジの集計に使用)
   const lastWeekDates = useMemo(() => {
     const monday = startOfWeek(new Date());
     return Array.from({ length: 7 }, (_, i) => {
@@ -2721,7 +2764,20 @@ export default function App() {
               <button type="button" onClick={() => setDashboardOpen(true)} style={styles.addBtn}>📊ダッシュボード</button>
             </div>
           )}
-          {dashboardOpen && <DashboardModal projects={visibleProjects} onClose={() => setDashboardOpen(false)} />}
+          {dashboardOpen && (
+            <DashboardModal
+              projects={visibleProjects}
+              onClose={() => setDashboardOpen(false)}
+              onToggleDone={toggleSubtaskDone}
+              onMoveDate={setMoveDateModal}
+              stamping={stamping}
+              dayViewDate={dayViewDate}
+              renderSendButton={renderSendToCalendarButton}
+              workAdj={workAdj}
+              onAddWorkAdj={addWorkAdj}
+              onRemoveWorkAdj={removeWorkAdj}
+            />
+          )}
           {showTaskSections && (
             <>
               {showWorkSummary && (
@@ -2931,162 +2987,6 @@ export default function App() {
                 )
               )}
 
-              <div style={styles.sectionTitleRow}>
-                <h3 style={{ ...styles.sectionTitleFlush, fontWeight: 900 }}>今週のタスク</h3>
-                <button type="button" onClick={() => exportWeekTasksExcel("今週のタスク", weekTasks)} style={styles.inlineAddBtn}>Excelで出力</button>
-              </div>
-              <div style={styles.workSummaryBar}>
-                <span style={styles.workSummaryItem}>稼働可能 {formatDuration(weekSummary.effectiveMinutes) || "0分"}</span>
-                <span style={styles.workSummaryItem}>
-                  想定時間計 {weekSummary.estMinutes ? formatDuration(weekSummary.estMinutes) : "0分"}
-                  {weekSummary.warnLevel && <span style={{ ...styles.workWarnIcon, color: weekSummary.warnLevel === "red" ? "#F39800" : "#2C3645" }}>⚠</span>}
-                </span>
-                <button type="button" onClick={() => setWeekCollapsed((v) => !v)} style={styles.collapseBtnSm} aria-label={weekCollapsed ? "詳細を展開する" : "詳細を折りたたむ"}>
-                  {weekCollapsed ? "▸" : "▾"}
-                </button>
-              </div>
-
-              {!weekCollapsed && (
-                <>
-                  <div style={styles.scheduleEditRow}>
-                    <label style={styles.scheduleEditField}>
-                      <span style={styles.scheduleEditLabel}>稼働調整日</span>
-                      <select value={adjDateVal} onChange={(e) => setAdjDateVal(e.target.value)} style={styles.scheduleEditInput}>
-                        {weekDates.filter(isWeekdayStr).map((d) => {
-                          const dt = new Date(d + "T00:00:00");
-                          return <option key={d} value={d}>{formatDate(d)}({DAY_JP[dt.getDay()]})</option>;
-                        })}
-                      </select>
-                    </label>
-                    <label style={styles.scheduleEditField}>
-                      <span style={styles.scheduleEditLabel}>減らす時間</span>
-                      <select value={adjHoursVal} onChange={(e) => setAdjHoursVal(Number(e.target.value))} style={{ ...styles.scheduleEditInput, width: 64 }}>
-                        {[1, 2, 3, 4, 5, 6, 7, 8].map((h) => <option key={h} value={h}>{h}時間</option>)}
-                      </select>
-                    </label>
-                    <button type="button" onClick={addWeekAdj} style={styles.addBtn}>調整を追加</button>
-                  </div>
-
-                  {workAdj.filter((a) => weekDates.includes(a.date)).length > 0 && (
-                    <ul style={styles.todayList}>
-                      {workAdj.filter((a) => weekDates.includes(a.date)).map((a) => {
-                        const dt = new Date(a.date + "T00:00:00");
-                        return (
-                          <li key={a.date} style={{ ...styles.calendarLine1, justifyContent: "space-between" }}>
-                            <span style={styles.calSubCol}>{formatDate(a.date)}({DAY_JP[dt.getDay()]}) 稼働 -{a.hours}時間</span>
-                            <button type="button" onClick={() => removeWeekAdj(a.date)} style={styles.deleteBtn} aria-label="調整を削除">×</button>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  )}
-
-                  <DateGroupedTaskList
-                    dates={weekDates}
-                    tasks={weekTasks}
-                    openDates={weekOpenDates}
-                    onToggleDate={toggleWeekDate}
-                    onToggleDone={toggleSubtaskDone}
-                    onMoveDate={setMoveDateModal}
-                    stamping={stamping}
-                    dayViewDate={dayViewDate}
-                    emptyMessage="今週の予定日が入ってるサブタスクはない。"
-                    renderSendButton={renderSendToCalendarButton}
-                  />
-                </>
-              )}
-
-              <div style={styles.sectionTitleRow}>
-                <h3 style={{ ...styles.sectionTitleFlush, fontWeight: 900 }}>来週のタスク</h3>
-                <button type="button" onClick={() => exportWeekTasksExcel("来週のタスク", nextWeekTasks)} style={styles.inlineAddBtn}>Excelで出力</button>
-              </div>
-              <div style={styles.workSummaryBar}>
-                <span style={styles.workSummaryItem}>稼働可能 {formatDuration(nextWeekSummary.effectiveMinutes) || "0分"}</span>
-                <span style={styles.workSummaryItem}>
-                  想定時間計 {nextWeekSummary.estMinutes ? formatDuration(nextWeekSummary.estMinutes) : "0分"}
-                  {nextWeekSummary.warnLevel && <span style={{ ...styles.workWarnIcon, color: nextWeekSummary.warnLevel === "red" ? "#F39800" : "#2C3645" }}>⚠</span>}
-                </span>
-                <button type="button" onClick={() => setNextWeekCollapsed((v) => !v)} style={styles.collapseBtnSm} aria-label={nextWeekCollapsed ? "詳細を展開する" : "詳細を折りたたむ"}>
-                  {nextWeekCollapsed ? "▸" : "▾"}
-                </button>
-              </div>
-
-              {!nextWeekCollapsed && (
-                <>
-                  <div style={styles.scheduleEditRow}>
-                    <label style={styles.scheduleEditField}>
-                      <span style={styles.scheduleEditLabel}>稼働調整日</span>
-                      <select value={nextAdjDateVal} onChange={(e) => setNextAdjDateVal(e.target.value)} style={styles.scheduleEditInput}>
-                        {nextWeekDates.filter(isWeekdayStr).map((d) => {
-                          const dt = new Date(d + "T00:00:00");
-                          return <option key={d} value={d}>{formatDate(d)}({DAY_JP[dt.getDay()]})</option>;
-                        })}
-                      </select>
-                    </label>
-                    <label style={styles.scheduleEditField}>
-                      <span style={styles.scheduleEditLabel}>減らす時間</span>
-                      <select value={nextAdjHoursVal} onChange={(e) => setNextAdjHoursVal(Number(e.target.value))} style={{ ...styles.scheduleEditInput, width: 64 }}>
-                        {[1, 2, 3, 4, 5, 6, 7, 8].map((h) => <option key={h} value={h}>{h}時間</option>)}
-                      </select>
-                    </label>
-                    <button type="button" onClick={addNextWeekAdj} style={styles.addBtn}>調整を追加</button>
-                  </div>
-
-                  {workAdj.filter((a) => nextWeekDates.includes(a.date)).length > 0 && (
-                    <ul style={styles.todayList}>
-                      {workAdj.filter((a) => nextWeekDates.includes(a.date)).map((a) => {
-                        const dt = new Date(a.date + "T00:00:00");
-                        return (
-                          <li key={a.date} style={{ ...styles.calendarLine1, justifyContent: "space-between" }}>
-                            <span style={styles.calSubCol}>{formatDate(a.date)}({DAY_JP[dt.getDay()]}) 稼働 -{a.hours}時間</span>
-                            <button type="button" onClick={() => removeNextWeekAdj(a.date)} style={styles.deleteBtn} aria-label="調整を削除">×</button>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  )}
-
-                  <DateGroupedTaskList
-                    dates={nextWeekDates}
-                    tasks={nextWeekTasks}
-                    openDates={nextWeekOpenDates}
-                    onToggleDate={toggleNextWeekDate}
-                    onToggleDone={toggleSubtaskDone}
-                    onMoveDate={setMoveDateModal}
-                    stamping={stamping}
-                    dayViewDate={dayViewDate}
-                    emptyMessage="来週の予定日が入ってるサブタスクはない。"
-                    renderSendButton={renderSendToCalendarButton}
-                  />
-                </>
-              )}
-
-              <div style={styles.sectionTitleRow}>
-                <h3 style={{ ...styles.sectionTitleFlush, fontWeight: 900 }}>先週のタスク</h3>
-                <button type="button" onClick={() => exportWeekTasksExcel("先週のタスク", lastWeekTasks)} style={styles.inlineAddBtn}>Excelで出力</button>
-              </div>
-              <div style={styles.workSummaryBar}>
-                <span style={styles.workSummaryItem}>想定時間計 {lastWeekSummary.estMinutes ? formatDuration(lastWeekSummary.estMinutes) : "0分"}</span>
-                <span style={styles.workSummaryItem}>実績時間計 {lastWeekSummary.actualMinutes ? formatDuration(lastWeekSummary.actualMinutes) : "0分"}</span>
-                <button type="button" onClick={() => setLastWeekCollapsed((v) => !v)} style={styles.collapseBtnSm} aria-label={lastWeekCollapsed ? "詳細を展開する" : "詳細を折りたたむ"}>
-                  {lastWeekCollapsed ? "▸" : "▾"}
-                </button>
-              </div>
-
-              {!lastWeekCollapsed && (
-                <DateGroupedTaskList
-                  dates={lastWeekDates}
-                  tasks={lastWeekTasks}
-                  openDates={lastWeekOpenDates}
-                  onToggleDate={toggleLastWeekDate}
-                  onToggleDone={toggleSubtaskDone}
-                  onMoveDate={setMoveDateModal}
-                  stamping={stamping}
-                  dayViewDate={dayViewDate}
-                  emptyMessage="先週の予定日が入ってるサブタスクはない。"
-                  showActual
-                />
-              )}
             </>
           )}
 
