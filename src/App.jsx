@@ -2905,15 +2905,17 @@ export default function App() {
                         </select>
                         {renderStopwatchControl(pjId, taskId, s.id)}
                         <button type="button" onClick={() => openStepsModal(pjId, taskId, s.id)} aria-label="ステップを開く" style={styles.inlineAddBtn}>☑ステップ</button>
+                        {!!s.skipCount && <span style={styles.skipBadge} title={`スキップ${s.skipCount}回`}>⏭×{s.skipCount}</span>}
+                        {renderSendToCalendarButton(s)}
+                        <span style={styles.calPjCol} title={pjName}>{pjName}</span>
+                        <span style={styles.calTaskCol} title={taskName}>{taskName}</span>
+                      </div>
+                      <div style={styles.calendarLine2}>
                         <button type="button" onClick={() => setMoveDateModal({ pjId, taskId, subId: s.id, date: s.scheduledDate || dayViewDate, time: s.startTime || "" })} aria-label="予定日を変更" style={styles.inlineAddBtn}>📅変更</button>
                         <button type="button" onClick={() => setCopyDateModal({ pjId, taskId, subId: s.id, date: dayViewDate, text: s.text })} aria-label="サブタスクをコピー" style={styles.inlineAddBtn}>📋コピー</button>
                         <button type="button" onClick={() => skipSubtask(pjId, taskId, s.id)}
                           title={s.repeatWeekday != null ? "次回発生日へスキップ" : "翌日へスキップ"}
                           aria-label="スキップ" style={styles.inlineAddBtn}>⏭スキップ</button>
-                        {!!s.skipCount && <span style={styles.skipBadge} title={`スキップ${s.skipCount}回`}>⏭×{s.skipCount}</span>}
-                        {renderSendToCalendarButton(s)}
-                        <span style={styles.calPjCol} title={pjName}>{pjName}</span>
-                        <span style={styles.calTaskCol} title={taskName}>{taskName}</span>
                       </div>
                     </li>
                   ))}
