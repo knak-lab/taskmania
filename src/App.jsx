@@ -12,9 +12,8 @@ const TOP_TABS = [
 const PERSON_KEYS = ["kkr", "acco"];
 const SUB_TABS = [
   { key: "総合", label: "総合" },
-  { key: "仕事", label: "仕事", color: "#8B6F3E" },
-  { key: "趣味", label: "趣味", color: "#F39800" },
-  { key: "研鑽", label: "研鑽", color: "#12314F" },
+  { key: "趣味", label: "PB", color: "#F39800" },
+  { key: "仕事", label: "work", color: "#8B6F3E" },
 ];
 const REAL_SUBS = SUB_TABS.slice(1);
 
@@ -226,7 +225,7 @@ function seedProjects() {
         sub("サブタスクA", false, 2),
         sub("サブタスクB", false, 1),
       ]),
-    ], "研鑽"),
+    ], "仕事"),
   ];
 }
 
