@@ -2694,6 +2694,8 @@ export default function App() {
         @media (min-width: 768px) {
           .tm-page { padding: 24px 32px 60px !important; }
         }
+        .day-pc-row { display: contents; }
+        .day-mobile-row { display: none; }
         @media (max-width: 767px) {
           .pj-header { flex-wrap: wrap; }
           .pj-header .pj-title-input { order: -1; flex: 1 1 100% !important; width: 100%; }
@@ -2701,6 +2703,8 @@ export default function App() {
           .task-header .task-title-input { order: -1; flex: 1 1 100% !important; width: 100%; }
           .sub-row { flex-wrap: wrap; }
           .sub-row .sub-body { order: -1; flex: 1 1 100% !important; width: 100%; }
+          .day-pc-row { display: none; }
+          .day-mobile-row { display: contents; }
         }
       `}</style>
 
@@ -2877,45 +2881,87 @@ export default function App() {
                 <ul style={styles.todayList}>
                   {visibleDayTasks.map(({ pjId, pjName, taskId, taskName, sub: s }) => (
                     <li key={s.id} style={styles.calendarCard} className="row-in">
-                      <div style={styles.calendarLine1}>
-                        <TimeDropdown value={s.startTime || ""} onChange={(v) => updateSubtaskSchedule(pjId, taskId, s.id, "startTime", v)} style={{ width: 54 }} />
-                        <span style={{ ...styles.calTimeCol, width: 40 }}>{addMinutesToTime(s.startTime, s.estimatedMinutes) || "―"}</span>
-                        <button type="button" onClick={() => setMoveDateModal({ pjId, taskId, subId: s.id, date: s.scheduledDate || dayViewDate, time: s.startTime || "" })} aria-label="予定日を変更" style={{ ...styles.inlineAddBtn, borderWidth: 0.5 }}>📅変更</button>
-                        <button type="button" onClick={() => setCopyDateModal({ pjId, taskId, subId: s.id, date: dayViewDate, text: s.text })} aria-label="サブタスクをコピー" style={{ ...styles.inlineAddBtn, borderWidth: 0.5 }}>📋コピー</button>
-                        <button type="button" onClick={() => skipSubtask(pjId, taskId, s.id)}
-                          title={s.repeatWeekday != null ? "次回発生日へスキップ" : "翌日へスキップ"}
-                          aria-label="スキップ" style={{ ...styles.inlineAddBtn, borderWidth: 0.5 }}>⏭スキップ</button>
-                        {!!s.skipCount && <span style={styles.skipBadge} title={`スキップ${s.skipCount}回`}>⏭×{s.skipCount}</span>}
+                      <div className="day-pc-row">
+                        <div style={styles.calendarLine1}>
+                          <button onClick={() => toggleSubtaskDone(pjId, taskId, s.id)} aria-label={s.done ? "未完了に戻す" : "完了にする"} style={styles.stampWrap}>
+                            {s.done ? <span style={styles.hankoStamp} className={stamping === s.id ? "hanko-pop" : ""}>済</span> : <span style={styles.hankoEmpty} />}
+                          </button>
+                          <TimeDropdown value={s.startTime || ""} onChange={(v) => updateSubtaskSchedule(pjId, taskId, s.id, "startTime", v)} style={{ width: 54 }} />
+                          <span style={{ ...styles.calTimeCol, width: 40 }}>{addMinutesToTime(s.startTime, s.estimatedMinutes) || "―"}</span>
+                          <input
+                            type="text"
+                            value={s.text}
+                            onChange={(e) => updateSubtaskText(pjId, taskId, s.id, e.target.value)}
+                            aria-label="サブタスク名を編集"
+                            style={{ ...styles.calSubCol, border: "none", background: "transparent", fontFamily: "inherit", padding: 0, textDecoration: s.done ? "line-through" : "none", color: s.done ? "#9B9B9B" : "#2C3645" }}
+                          />
+                          {s.repeatWeekday != null && <span title={repeatWeekdayTitle(s.repeatWeekday)} style={styles.calEstTag}>🔁{repeatWeekdayShortLabel(s.repeatWeekday)}</span>}
+                        </div>
+                        <div style={styles.calendarLine2}>
+                          <span style={styles.calendarLine2Label}>想定</span>
+                          <select value={s.estimatedMinutes || ""} onChange={(e) => updateSubtaskSchedule(pjId, taskId, s.id, "estimatedMinutes", e.target.value ? Number(e.target.value) : "")} style={{ ...styles.scheduleEditInput, width: 64 }}>
+                            <option value="">―</option>
+                            {MINUTE_OPTIONS.map((m) => <option key={m} value={m}>{formatDuration(m)}</option>)}
+                          </select>
+                          <span style={styles.calendarLine2Label}>実績</span>
+                          <select value={s.actualMinutes || ""} onChange={(e) => updateSubtaskSchedule(pjId, taskId, s.id, "actualMinutes", e.target.value ? Number(e.target.value) : "")} style={{ ...styles.scheduleEditInput, width: 64 }}>
+                            <option value="">―</option>
+                            {MINUTE_OPTIONS.map((m) => <option key={m} value={m}>{formatDuration(m)}</option>)}
+                          </select>
+                          {renderStopwatchControl(pjId, taskId, s.id)}
+                          <button type="button" onClick={() => openStepsModal(pjId, taskId, s.id)} aria-label="ステップを開く" style={styles.inlineAddBtn}>☑ステップ</button>
+                          <button type="button" onClick={() => setMoveDateModal({ pjId, taskId, subId: s.id, date: s.scheduledDate || dayViewDate, time: s.startTime || "" })} aria-label="予定日を変更" style={styles.inlineAddBtn}>📅変更</button>
+                          <button type="button" onClick={() => setCopyDateModal({ pjId, taskId, subId: s.id, date: dayViewDate, text: s.text })} aria-label="サブタスクをコピー" style={styles.inlineAddBtn}>📋コピー</button>
+                          <button type="button" onClick={() => skipSubtask(pjId, taskId, s.id)}
+                            title={s.repeatWeekday != null ? "次回発生日へスキップ" : "翌日へスキップ"}
+                            aria-label="スキップ" style={styles.inlineAddBtn}>⏭スキップ</button>
+                          {!!s.skipCount && <span style={styles.skipBadge} title={`スキップ${s.skipCount}回`}>⏭×{s.skipCount}</span>}
+                          {renderSendToCalendarButton(s)}
+                          <span style={styles.calPjCol} title={pjName}>{pjName}</span>
+                          <span style={styles.calTaskCol} title={taskName}>{taskName}</span>
+                        </div>
                       </div>
-                      <div style={styles.calendarLine1}>
-                        <button onClick={() => toggleSubtaskDone(pjId, taskId, s.id)} aria-label={s.done ? "未完了に戻す" : "完了にする"} style={styles.stampWrap}>
-                          {s.done ? <span style={styles.hankoStamp} className={stamping === s.id ? "hanko-pop" : ""}>済</span> : <span style={styles.hankoEmpty} />}
-                        </button>
-                        <input
-                          type="text"
-                          value={s.text}
-                          onChange={(e) => updateSubtaskText(pjId, taskId, s.id, e.target.value)}
-                          aria-label="サブタスク名を編集"
-                          style={{ ...styles.calSubCol, border: "none", background: "transparent", fontFamily: "inherit", padding: 0, fontWeight: 700, textDecoration: s.done ? "line-through" : "none", color: s.done ? "#9B9B9B" : "#2C3645" }}
-                        />
-                        {s.repeatWeekday != null && <span title={repeatWeekdayTitle(s.repeatWeekday)} style={styles.calEstTag}>🔁{repeatWeekdayShortLabel(s.repeatWeekday)}</span>}
-                      </div>
-                      <div style={styles.calendarLine2}>
-                        <span style={styles.calendarLine2Label}>想定</span>
-                        <select value={s.estimatedMinutes || ""} onChange={(e) => updateSubtaskSchedule(pjId, taskId, s.id, "estimatedMinutes", e.target.value ? Number(e.target.value) : "")} style={{ ...styles.scheduleEditInput, width: 64 }}>
-                          <option value="">―</option>
-                          {MINUTE_OPTIONS.map((m) => <option key={m} value={m}>{formatDuration(m)}</option>)}
-                        </select>
-                        <span style={styles.calendarLine2Label}>実績</span>
-                        <select value={s.actualMinutes || ""} onChange={(e) => updateSubtaskSchedule(pjId, taskId, s.id, "actualMinutes", e.target.value ? Number(e.target.value) : "")} style={{ ...styles.scheduleEditInput, width: 64 }}>
-                          <option value="">―</option>
-                          {MINUTE_OPTIONS.map((m) => <option key={m} value={m}>{formatDuration(m)}</option>)}
-                        </select>
-                        {renderStopwatchControl(pjId, taskId, s.id)}
-                        <button type="button" onClick={() => openStepsModal(pjId, taskId, s.id)} aria-label="ステップを開く" style={styles.inlineAddBtn}>☑ステップ</button>
-                        {renderSendToCalendarButton(s)}
-                        <span style={styles.calPjCol} title={pjName}>{pjName}</span>
-                        <span style={styles.calTaskCol} title={taskName}>{taskName}</span>
+                      <div className="day-mobile-row">
+                        <div style={styles.calendarLine1}>
+                          <TimeDropdown value={s.startTime || ""} onChange={(v) => updateSubtaskSchedule(pjId, taskId, s.id, "startTime", v)} style={{ width: 54 }} />
+                          <span style={{ ...styles.calTimeCol, width: 40 }}>{addMinutesToTime(s.startTime, s.estimatedMinutes) || "―"}</span>
+                          <button type="button" onClick={() => setMoveDateModal({ pjId, taskId, subId: s.id, date: s.scheduledDate || dayViewDate, time: s.startTime || "" })} aria-label="予定日を変更" style={{ ...styles.inlineAddBtn, borderWidth: 0.5 }}>📅変更</button>
+                          <button type="button" onClick={() => setCopyDateModal({ pjId, taskId, subId: s.id, date: dayViewDate, text: s.text })} aria-label="サブタスクをコピー" style={{ ...styles.inlineAddBtn, borderWidth: 0.5 }}>📋コピー</button>
+                          <button type="button" onClick={() => skipSubtask(pjId, taskId, s.id)}
+                            title={s.repeatWeekday != null ? "次回発生日へスキップ" : "翌日へスキップ"}
+                            aria-label="スキップ" style={{ ...styles.inlineAddBtn, borderWidth: 0.5 }}>⏭スキップ</button>
+                          {!!s.skipCount && <span style={styles.skipBadge} title={`スキップ${s.skipCount}回`}>⏭×{s.skipCount}</span>}
+                        </div>
+                        <div style={styles.calendarLine1}>
+                          <button onClick={() => toggleSubtaskDone(pjId, taskId, s.id)} aria-label={s.done ? "未完了に戻す" : "完了にする"} style={styles.stampWrap}>
+                            {s.done ? <span style={styles.hankoStamp} className={stamping === s.id ? "hanko-pop" : ""}>済</span> : <span style={styles.hankoEmpty} />}
+                          </button>
+                          <input
+                            type="text"
+                            value={s.text}
+                            onChange={(e) => updateSubtaskText(pjId, taskId, s.id, e.target.value)}
+                            aria-label="サブタスク名を編集"
+                            style={{ ...styles.calSubCol, border: "none", background: "transparent", fontFamily: "inherit", padding: 0, fontWeight: 700, textDecoration: s.done ? "line-through" : "none", color: s.done ? "#9B9B9B" : "#2C3645" }}
+                          />
+                          {s.repeatWeekday != null && <span title={repeatWeekdayTitle(s.repeatWeekday)} style={styles.calEstTag}>🔁{repeatWeekdayShortLabel(s.repeatWeekday)}</span>}
+                        </div>
+                        <div style={styles.calendarLine2}>
+                          <span style={styles.calendarLine2Label}>想定</span>
+                          <select value={s.estimatedMinutes || ""} onChange={(e) => updateSubtaskSchedule(pjId, taskId, s.id, "estimatedMinutes", e.target.value ? Number(e.target.value) : "")} style={{ ...styles.scheduleEditInput, width: 64 }}>
+                            <option value="">―</option>
+                            {MINUTE_OPTIONS.map((m) => <option key={m} value={m}>{formatDuration(m)}</option>)}
+                          </select>
+                          <span style={styles.calendarLine2Label}>実績</span>
+                          <select value={s.actualMinutes || ""} onChange={(e) => updateSubtaskSchedule(pjId, taskId, s.id, "actualMinutes", e.target.value ? Number(e.target.value) : "")} style={{ ...styles.scheduleEditInput, width: 64 }}>
+                            <option value="">―</option>
+                            {MINUTE_OPTIONS.map((m) => <option key={m} value={m}>{formatDuration(m)}</option>)}
+                          </select>
+                          {renderStopwatchControl(pjId, taskId, s.id)}
+                          <button type="button" onClick={() => openStepsModal(pjId, taskId, s.id)} aria-label="ステップを開く" style={styles.inlineAddBtn}>☑ステップ</button>
+                          {renderSendToCalendarButton(s)}
+                          <span style={styles.calPjCol} title={pjName}>{pjName}</span>
+                          <span style={styles.calTaskCol} title={taskName}>{taskName}</span>
+                        </div>
                       </div>
                     </li>
                   ))}
