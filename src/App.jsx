@@ -2488,9 +2488,11 @@ export default function App() {
                       aria-label={!hiddenCompletedTasks.has(p.id) ? "完了済みタスクを隠す" : "完了済みタスクを表示"}>
                       {!hiddenCompletedTasks.has(p.id) ? "👁" : "🙈"}
                     </button>
-                    <button type="button" onClick={() => togglePJMoyamoya(p.id)}
-                      style={{ ...styles.moyamoyaToggleBtn, background: p.moyamoya ? MOYAMOYA_COLOR : "transparent", color: p.moyamoya ? "#FFFFFF" : MOYAMOYA_COLOR, borderColor: MOYAMOYA_COLOR }}
-                      aria-label={p.moyamoya ? "もやもやから外す" : "もやもやに入れる"}>もや</button>
+                    {p.owner === "kkr" && p.subcategory === "仕事" && (
+                      <button type="button" onClick={() => togglePJMoyamoya(p.id)}
+                        style={{ ...styles.moyamoyaToggleBtn, background: p.moyamoya ? MOYAMOYA_COLOR : "transparent", color: p.moyamoya ? "#FFFFFF" : MOYAMOYA_COLOR, borderColor: MOYAMOYA_COLOR }}
+                        aria-label={p.moyamoya ? "もやもやから外す" : "もやもやに入れる"}>もや</button>
+                    )}
                     <select value={p.priority || 2} onChange={(e) => updatePJPriority(p.id, Number(e.target.value))} style={styles.moveSelect} aria-label="優先度を変更">
                       {PJ_PRIORITIES.map((pr) => <option key={pr.v} value={pr.v}>{pr.label}</option>)}
                     </select>
