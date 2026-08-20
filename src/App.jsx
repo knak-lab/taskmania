@@ -810,7 +810,7 @@ function PJDetailModal({ project, onUpdateNote, onClose }) {
 
 const DAY_JP = ["日", "月", "火", "水", "木", "金", "土"];
 
-function DateGroupedTaskList({ dates, tasks, openDates, onToggleDate, onToggleDone, onMoveDate, stamping, dayViewDate, emptyMessage, showActual, renderSendButton, onSkip }) {
+function DateGroupedTaskList({ dates, tasks, openDates, onToggleDate, onToggleDone, onMoveDate, stamping, dayViewDate, emptyMessage, showActual, renderSendButton, onSkip, onUpdateSchedule }) {
   const groups = dates
     .map((d) => ({ date: d, items: tasks.filter((t) => t.sub.scheduledDate === d) }))
     .filter((g) => g.items.length > 0);
@@ -840,7 +840,19 @@ function DateGroupedTaskList({ dates, tasks, openDates, onToggleDate, onToggleDo
                         {s.done ? <span style={styles.hankoStamp} className={stamping === s.id ? "hanko-pop" : ""}>済</span> : <span style={styles.hankoEmpty} />}
                       </button>
                       <span style={styles.calEstTag}>想定{s.estimatedMinutes ? formatDuration(s.estimatedMinutes) : "―"}</span>
-                      {showActual && <span style={styles.calEstTag}>実績{s.actualMinutes ? formatDuration(s.actualMinutes) : "―"}</span>}
+                      {showActual && (
+                        onUpdateSchedule ? (
+                          <>
+                            <span style={styles.calendarLine2Label}>実績</span>
+                            <select value={s.actualMinutes || ""} onChange={(e) => onUpdateSchedule(pjId, taskId, s.id, "actualMinutes", e.target.value ? Number(e.target.value) : "")} style={{ ...styles.scheduleEditInput, width: 64 }}>
+                              <option value="">―</option>
+                              {MINUTE_OPTIONS.map((m) => <option key={m} value={m}>{formatDuration(m)}</option>)}
+                            </select>
+                          </>
+                        ) : (
+                          <span style={styles.calEstTag}>実績{s.actualMinutes ? formatDuration(s.actualMinutes) : "―"}</span>
+                        )
+                      )}
                       <span style={{ ...styles.calSubCol, textDecoration: s.done ? "line-through" : "none", color: s.done ? "#9B9B9B" : "#2C3645" }} title={s.text}>{s.text}</span>
                     </div>
                     <div style={styles.calendarLine2}>
@@ -1243,7 +1255,7 @@ function StackedBarChart({ dates, series }) {
   );
 }
 
-function DashboardModal({ projects, onClose, onToggleDone, onMoveDate, stamping, dayViewDate, renderSendButton, workAdj, onAddWorkAdj, onRemoveWorkAdj }) {
+function DashboardModal({ projects, onClose, onToggleDone, onMoveDate, stamping, dayViewDate, renderSendButton, workAdj, onAddWorkAdj, onRemoveWorkAdj, onUpdateSchedule }) {
   const [range, setRange] = useState("thisWeek");
   const { start, end } = useMemo(() => dashboardRangeDates(range), [range]);
   const todayStr = toDateStr(new Date());
@@ -1435,6 +1447,7 @@ function DashboardModal({ projects, onClose, onToggleDone, onMoveDate, stamping,
           dayViewDate={dayViewDate}
           emptyMessage="この期間の予定日が入ってるサブタスクはない。"
           renderSendButton={renderSendButton}
+          onUpdateSchedule={onUpdateSchedule}
           showActual
         />
       </div>
@@ -2787,6 +2800,7 @@ export default function App() {
               workAdj={workAdj}
               onAddWorkAdj={addWorkAdj}
               onRemoveWorkAdj={removeWorkAdj}
+              onUpdateSchedule={updateSubtaskSchedule}
             />
           )}
           {showTaskSections && (
