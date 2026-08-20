@@ -859,10 +859,10 @@ function DateGroupedTaskList({ dates, tasks, openDates, onToggleDate, onToggleDo
                       <button type="button" onClick={() => onMoveDate({ pjId, taskId, subId: s.id, date: s.scheduledDate || dayViewDate, time: s.startTime || "" })} aria-label="予定日を変更" style={styles.inlineAddBtn}>📅変更</button>
                       {onSkip && (
                         <button type="button" onClick={() => onSkip(pjId, taskId, s.id)}
-                          title={s.repeatWeekday != null ? "次回発生日へスキップ" : "翌日へスキップ"}
-                          aria-label="スキップ" style={styles.inlineAddBtn}>⏭スキップ</button>
+                          title={s.repeatWeekday != null ? "次回発生日へ先送り" : "翌日へ先送り"}
+                          aria-label="先送り" style={styles.inlineAddBtn}>⏭先送り</button>
                       )}
-                      {!!s.skipCount && <span style={styles.skipBadge} title={`スキップ${s.skipCount}回`}>⏭×{s.skipCount}</span>}
+                      {!!s.skipCount && <span style={styles.skipBadge} title={`先送り${s.skipCount}回`}>⏭×{s.skipCount}</span>}
                       {renderSendButton && renderSendButton(s)}
                       <span style={styles.calPjCol} title={pjName}>{pjName}</span>
                       <span style={styles.calTaskCol} title={taskName}>{taskName}</span>
@@ -2167,7 +2167,7 @@ export default function App() {
     }));
   }
 
-  // 繰り返しタスクは次回発生日へ、通常タスクは翌日へ予定日をずらしてスキップ回数を+1する
+  // 繰り返しタスクは次回発生日へ、通常タスクは翌日へ予定日をずらして先送り回数を+1する
   function skipSubtask(pjId, taskId, subId) {
     setProjects((prev) => prev.map((p) => {
       if (p.id !== pjId) return p;
@@ -2656,9 +2656,9 @@ export default function App() {
                                         <button type="button" onClick={() => openStepsModal(p.id, t.id, s.id)} aria-label="ステップを開く" style={styles.inlineAddBtn}>☑ステップ</button>
                                         <button type="button" onClick={() => setCopyDateModal({ pjId: p.id, taskId: t.id, subId: s.id, date: s.scheduledDate || todayStr, text: s.text })} aria-label="サブタスクをコピー" style={styles.inlineAddBtn}>📋コピー</button>
                                         <button type="button" onClick={() => skipSubtask(p.id, t.id, s.id)}
-                                          title={s.repeatWeekday != null ? "次回発生日へスキップ" : "翌日へスキップ"}
-                                          aria-label="スキップ" style={styles.inlineAddBtn}>⏭スキップ</button>
-                                        {!!s.skipCount && <span style={styles.skipBadge} title={`スキップ${s.skipCount}回`}>⏭×{s.skipCount}</span>}
+                                          title={s.repeatWeekday != null ? "次回発生日へ先送り" : "翌日へ先送り"}
+                                          aria-label="先送り" style={styles.inlineAddBtn}>⏭先送り</button>
+                                        {!!s.skipCount && <span style={styles.skipBadge} title={`先送り${s.skipCount}回`}>⏭×{s.skipCount}</span>}
                                         {renderSendToCalendarButton(s)}
                                         <button onClick={() => removeSubtask(p.id, t.id, s.id)} aria-label="削除" style={styles.deleteBtn}>×</button>
                                       </div>
@@ -2929,9 +2929,9 @@ export default function App() {
                           <button type="button" onClick={() => setMoveDateModal({ pjId, taskId, subId: s.id, date: s.scheduledDate || dayViewDate, time: s.startTime || "" })} aria-label="予定日を変更" style={styles.inlineAddBtn}>📅変更</button>
                           <button type="button" onClick={() => setCopyDateModal({ pjId, taskId, subId: s.id, date: dayViewDate, text: s.text })} aria-label="サブタスクをコピー" style={styles.inlineAddBtn}>📋コピー</button>
                           <button type="button" onClick={() => skipSubtask(pjId, taskId, s.id)}
-                            title={s.repeatWeekday != null ? "次回発生日へスキップ" : "翌日へスキップ"}
-                            aria-label="スキップ" style={styles.inlineAddBtn}>⏭スキップ</button>
-                          {!!s.skipCount && <span style={styles.skipBadge} title={`スキップ${s.skipCount}回`}>⏭×{s.skipCount}</span>}
+                            title={s.repeatWeekday != null ? "次回発生日へ先送り" : "翌日へ先送り"}
+                            aria-label="先送り" style={styles.inlineAddBtn}>⏭先送り</button>
+                          {!!s.skipCount && <span style={styles.skipBadge} title={`先送り${s.skipCount}回`}>⏭×{s.skipCount}</span>}
                           {renderSendToCalendarButton(s)}
                           <span style={styles.calPjCol} title={pjName}>{pjName}</span>
                           <span style={styles.calTaskCol} title={taskName}>{taskName}</span>
@@ -2944,9 +2944,9 @@ export default function App() {
                           <button type="button" onClick={() => setMoveDateModal({ pjId, taskId, subId: s.id, date: s.scheduledDate || dayViewDate, time: s.startTime || "" })} aria-label="予定日を変更" style={{ ...styles.inlineAddBtn, borderWidth: 0.5 }}>📅変更</button>
                           <button type="button" onClick={() => setCopyDateModal({ pjId, taskId, subId: s.id, date: dayViewDate, text: s.text })} aria-label="サブタスクをコピー" style={{ ...styles.inlineAddBtn, borderWidth: 0.5 }}>📋コピー</button>
                           <button type="button" onClick={() => skipSubtask(pjId, taskId, s.id)}
-                            title={s.repeatWeekday != null ? "次回発生日へスキップ" : "翌日へスキップ"}
-                            aria-label="スキップ" style={{ ...styles.inlineAddBtn, borderWidth: 0.5 }}>⏭スキップ</button>
-                          {!!s.skipCount && <span style={styles.skipBadge} title={`スキップ${s.skipCount}回`}>⏭×{s.skipCount}</span>}
+                            title={s.repeatWeekday != null ? "次回発生日へ先送り" : "翌日へ先送り"}
+                            aria-label="先送り" style={{ ...styles.inlineAddBtn, borderWidth: 0.5 }}>⏭先送り</button>
+                          {!!s.skipCount && <span style={styles.skipBadge} title={`先送り${s.skipCount}回`}>⏭×{s.skipCount}</span>}
                         </div>
                         <div style={styles.calendarLine1}>
                           <button onClick={() => toggleSubtaskDone(pjId, taskId, s.id)} aria-label={s.done ? "未完了に戻す" : "完了にする"} style={styles.stampWrap}>
