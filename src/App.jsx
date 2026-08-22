@@ -1559,7 +1559,7 @@ export default function App() {
   const [dashboardOpen, setDashboardOpen] = useState(false);
   const [moveDateModal, setMoveDateModal] = useState(null);
   const [calSubtaskModal, setCalSubtaskModal] = useState(null);
-  const [calGranularity, setCalGranularity] = useState("month");
+  const [calGranularity, setCalGranularity] = useState("week");
   const [calDate, setCalDate] = useState(() => toDateStr(new Date()));
   const [calCollapsed, setCalCollapsed] = useState(false);
   const [calHiddenOwners, setCalHiddenOwners] = useState(() => new Set());
@@ -2744,7 +2744,7 @@ export default function App() {
               return (
                 <button key={c.key} role="tab" aria-selected={active}
                   onClick={() => { setTopTab(c.key); setMenuOpen(false); }}
-                  style={{ ...styles.menuDrawerBtn, color: active ? "#FFFFFF" : c.color, background: active ? c.color : "transparent", borderColor: c.color }}>
+                  style={{ ...styles.menuDrawerBtn, color: active ? "#FFFFFF" : c.color, background: active ? c.color : "transparent" }}>
                   <span style={{ ...styles.tabDot, background: active ? "#FFFFFF" : c.color }} />
                   {c.label}
                   <span style={{ ...styles.tabCount, color: active ? "#FFFFFF" : c.color, opacity: count ? 1 : 0.35 }}>{count}</span>
@@ -3380,7 +3380,7 @@ const styles = {
   menuDrawerLogo: { width: 32, height: 32, objectFit: "contain", flexShrink: 0 },
   menuDrawerTitle: { flex: 1, fontFamily: "Arial, sans-serif", fontWeight: 700, fontSize: 16, color: "#2C3645" },
   menuCloseBtn: { width: 28, height: 28, fontSize: 18, lineHeight: 1, background: "transparent", border: "none", color: "#7A7A7A", cursor: "pointer" },
-  menuDrawerBtn: { display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", fontSize: 13.5, fontWeight: 700, fontFamily: "inherit", border: "1.5px solid", borderRadius: 8, cursor: "pointer", textAlign: "left", transition: "background 0.15s, color 0.15s" },
+  menuDrawerBtn: { display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", fontSize: 13.5, fontWeight: 700, fontFamily: "inherit", border: "none", borderRadius: 8, cursor: "pointer", textAlign: "left", transition: "background 0.15s, color 0.15s" },
   subTabs: { display: "flex", gap: 5, padding: "8px 8px 8px", background: "#F5F5F5", border: "1.5px solid #D8D8D8", borderBottom: "none", borderRadius: "10px 10px 0 0", position: "relative", zIndex: 1, marginBottom: -1 },
   subTabBtn: { flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "6px 2px", fontSize: 11.5, fontWeight: 700, fontFamily: "inherit", border: "1.5px solid", borderRadius: 6, cursor: "pointer" },
   subTabCount: { fontSize: 9.5, fontWeight: 700 },
