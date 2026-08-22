@@ -1508,6 +1508,7 @@ export default function App() {
   const [projects, setProjects] = useState(null);
   const [topTab, setTopTab] = useState("kkr");
   const [subTab, setSubTab] = useState("仕事");
+  const [menuOpen, setMenuOpen] = useState(false);
   const [openPJ, setOpenPJ] = useState(() => new Set());
   const [openTask, setOpenTask] = useState(() => new Set());
   const [showDoneSubtasks, setShowDoneSubtasks] = useState(() => new Set());
@@ -2729,9 +2730,39 @@ export default function App() {
         </div>
       )}
 
+      {menuOpen && (
+        <div style={styles.menuOverlay} onClick={() => setMenuOpen(false)}>
+          <nav style={styles.menuDrawer} role="tablist" aria-label="メインメニュー" onClick={(e) => e.stopPropagation()}>
+            <div style={styles.menuDrawerHeader}>
+              <img src={`${import.meta.env.BASE_URL}icon-192.png`} alt="" style={styles.menuDrawerLogo} />
+              <span style={styles.menuDrawerTitle}>タスクマニア！</span>
+              <button type="button" onClick={() => setMenuOpen(false)} aria-label="メニューを閉じる" style={styles.menuCloseBtn}>×</button>
+            </div>
+            {TOP_TABS.map((c) => {
+              const active = topTab === c.key;
+              const count = topBadge(c.key);
+              return (
+                <button key={c.key} role="tab" aria-selected={active}
+                  onClick={() => { setTopTab(c.key); setMenuOpen(false); }}
+                  style={{ ...styles.menuDrawerBtn, color: active ? "#FFFFFF" : c.color, background: active ? c.color : "transparent", borderColor: c.color }}>
+                  <span style={{ ...styles.tabDot, background: active ? "#FFFFFF" : c.color }} />
+                  {c.label}
+                  <span style={{ ...styles.tabCount, color: active ? "#FFFFFF" : c.color, opacity: count ? 1 : 0.35 }}>{count}</span>
+                </button>
+              );
+            })}
+          </nav>
+        </div>
+      )}
+
       <div style={styles.shell}>
         <header style={styles.header}>
           <div style={styles.logoRow}>
+            <button type="button" onClick={() => setMenuOpen(true)} aria-label="メニューを開く" aria-expanded={menuOpen} style={styles.hamburgerBtn}>
+              <span style={styles.hamburgerBar} />
+              <span style={styles.hamburgerBar} />
+              <span style={styles.hamburgerBar} />
+            </button>
             <img src={`${import.meta.env.BASE_URL}icon-192.png`} alt="" style={styles.logoMark} />
             <div>
               <h1 style={styles.title}>タスクマニア！</h1>
@@ -2750,21 +2781,6 @@ export default function App() {
           </div>
         </header>
 
-        <nav style={styles.tabs} role="tablist" aria-label="メインタブ">
-          {TOP_TABS.map((c) => {
-            const active = topTab === c.key;
-            const count = topBadge(c.key);
-            return (
-              <button key={c.key} role="tab" aria-selected={active} onClick={() => setTopTab(c.key)}
-                style={{ ...styles.tabBtn, color: active ? "#FFFFFF" : c.color, background: active ? c.color : "transparent", borderColor: c.color }}>
-                <span style={{ ...styles.tabDot, background: active ? "#FFFFFF" : c.color }} />
-                {c.label}
-                <span style={{ ...styles.tabCount, color: active ? "#FFFFFF" : c.color, opacity: count ? 1 : 0.35 }}>{count}</span>
-              </button>
-            );
-          })}
-        </nav>
-
         {PERSON_KEYS.includes(topTab) && (
           <nav style={styles.subTabs} role="tablist" aria-label="サブタブ">
             {SUB_TABS.map((s) => {
@@ -2782,7 +2798,7 @@ export default function App() {
           </nav>
         )}
 
-        <section style={{ ...styles.panel, borderColor: activeTopColor }}>
+        <section style={{ ...styles.panel, borderColor: activeTopColor, borderRadius: PERSON_KEYS.includes(topTab) ? "0 0 10px 10px" : styles.panel.borderRadius }}>
           {showTaskSections && (
             <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
               <button type="button" onClick={() => setDashboardOpen(true)} style={styles.addBtn}>📊ダッシュボード</button>
@@ -3354,14 +3370,21 @@ const styles = {
   title: { fontFamily: "Arial, sans-serif", fontWeight: 700, fontSize: 32, color: "#2C3645", margin: 0, letterSpacing: "0.02em" },
   saveIndicator: { fontSize: 11, color: "#7A7A7A", minWidth: 60, textAlign: "right" },
   reloadBtn: { fontSize: 11, fontWeight: 700, color: "#12314F", background: "transparent", border: "1.5px solid #12314F", borderRadius: 5, padding: "3px 8px", cursor: "pointer", fontFamily: "inherit" },
-  tabs: { display: "flex", gap: 6, marginBottom: -1, position: "relative", zIndex: 2 },
-  tabBtn: { flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 5, padding: "9px 4px", fontSize: 12.5, fontWeight: 700, fontFamily: "inherit", border: "1.5px solid", borderBottom: "none", borderRadius: "8px 8px 0 0", cursor: "pointer", transition: "background 0.15s, color 0.15s" },
   tabDot: { width: 6, height: 6, borderRadius: "50%", flexShrink: 0 },
   tabCount: { fontSize: 10.5, fontWeight: 700 },
-  subTabs: { display: "flex", gap: 5, padding: "8px 8px 8px", background: "#F5F5F5", borderLeft: "1.5px solid #D8D8D8", borderRight: "1.5px solid #D8D8D8", position: "relative", zIndex: 1 },
+  hamburgerBtn: { display: "flex", flexDirection: "column", justifyContent: "center", gap: 4, width: 34, height: 34, padding: 7, background: "transparent", border: "1.5px solid #2C3645", borderRadius: 6, cursor: "pointer", flexShrink: 0 },
+  hamburgerBar: { display: "block", width: "100%", height: 2, background: "#2C3645", borderRadius: 1 },
+  menuOverlay: { position: "fixed", inset: 0, background: "rgba(44,54,69,0.35)", zIndex: 1000, display: "flex" },
+  menuDrawer: { width: 240, maxWidth: "80vw", height: "100%", background: "#FFFFFF", boxShadow: "3px 0 16px rgba(44,54,69,0.2)", display: "flex", flexDirection: "column", padding: 12, gap: 6, overflowY: "auto" },
+  menuDrawerHeader: { display: "flex", alignItems: "center", gap: 8, marginBottom: 10, paddingBottom: 10, borderBottom: "1.5px solid #E5E5E5" },
+  menuDrawerLogo: { width: 32, height: 32, objectFit: "contain", flexShrink: 0 },
+  menuDrawerTitle: { flex: 1, fontFamily: "Arial, sans-serif", fontWeight: 700, fontSize: 16, color: "#2C3645" },
+  menuCloseBtn: { width: 28, height: 28, fontSize: 18, lineHeight: 1, background: "transparent", border: "none", color: "#7A7A7A", cursor: "pointer" },
+  menuDrawerBtn: { display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", fontSize: 13.5, fontWeight: 700, fontFamily: "inherit", border: "1.5px solid", borderRadius: 8, cursor: "pointer", textAlign: "left", transition: "background 0.15s, color 0.15s" },
+  subTabs: { display: "flex", gap: 5, padding: "8px 8px 8px", background: "#F5F5F5", border: "1.5px solid #D8D8D8", borderBottom: "none", borderRadius: "10px 10px 0 0", position: "relative", zIndex: 1, marginBottom: -1 },
   subTabBtn: { flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "6px 2px", fontSize: 11.5, fontWeight: 700, fontFamily: "inherit", border: "1.5px solid", borderRadius: 6, cursor: "pointer" },
   subTabCount: { fontSize: 9.5, fontWeight: 700 },
-  panel: { background: "#FFFFFF", border: "1.5px solid", borderRadius: "0 6px 10px 10px", padding: 16, boxShadow: "0 3px 14px rgba(44,54,69,0.08)" },
+  panel: { background: "#FFFFFF", border: "1.5px solid", borderRadius: 10, padding: 16, boxShadow: "0 3px 14px rgba(44,54,69,0.08)" },
   formRow: { display: "flex", gap: 6, marginBottom: 6, flexWrap: "wrap" },
   modalOverlay: { position: "fixed", inset: 0, background: "rgba(44,54,69,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16, zIndex: 50 },
   modalBox: { width: "100%", maxWidth: 420, maxHeight: "86vh", overflowY: "auto", background: "#FFFFFF", border: "1.5px solid #2C3645", borderRadius: 10, padding: 18, boxShadow: "0 8px 28px rgba(44,54,69,0.3)" },
