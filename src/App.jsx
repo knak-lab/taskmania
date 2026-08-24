@@ -721,7 +721,7 @@ function NoteField({ title, placeholder, value, onChange }) {
   );
 }
 
-function PJDetailModal({ project, onUpdateNote, onClose }) {
+function PJDetailModal({ project, onUpdateNote, onClose, onAddTask, onAddSubtask }) {
   const [exporting, setExporting] = useState(false);
   const [openTasks, setOpenTasks] = useState(() => new Set());
   const [doneVisibleTasks, setDoneVisibleTasks] = useState(() => new Set());
@@ -765,7 +765,10 @@ function PJDetailModal({ project, onUpdateNote, onClose }) {
           onChange={(v) => onUpdateNote(project.id, "nextAction", v)}
         />
 
-        <h4 style={styles.sectionTitle}>タスク・サブタスク一覧</h4>
+        <div style={styles.sectionTitleRow}>
+          <h4 style={styles.sectionTitleFlush}>タスク・サブタスク一覧</h4>
+          <button type="button" onClick={() => onAddTask(project.id, project.name)} style={styles.inlineAddBtn}>＋タスク</button>
+        </div>
         <ul style={styles.detailTaskList}>
           {project.tasks.length === 0 && <li style={styles.emptySmall}>タスクなし</li>}
           {project.tasks.map((t) => {
@@ -785,6 +788,7 @@ function PJDetailModal({ project, onUpdateNote, onClose }) {
                     aria-label={showDone ? "完了済みサブタスクを隠す" : "完了済みサブタスクを表示"}>
                     {showDone ? "👁" : "🙈"}
                   </button>
+                  <button type="button" onClick={() => onAddSubtask(project.id, t.id, project.name, t.name)} style={styles.inlineAddBtn}>＋サブ</button>
                 </div>
                 {open && (
                   <ul style={styles.detailSubList}>
@@ -3089,6 +3093,12 @@ export default function App() {
 
           {showTaskSections && <h3 style={{ ...styles.sectionTitle, fontWeight: 900 }}>タスク一覧</h3>}
 
+          {pjDetailModal && (() => {
+            const p = (projects || []).find((pp) => pp.id === pjDetailModal);
+            if (!p) return null;
+            return <PJDetailModal project={p} onUpdateNote={updatePJNote} onClose={() => setPjDetailModal(null)} onAddTask={openAddTaskModal} onAddSubtask={openAddSubtaskModal} />;
+          })()}
+
           {(() => {
             const modalTargetTask = addLevel === "subtask" ? (projects || []).find((pp) => pp.id === addPJId)?.tasks.find((tt) => tt.id === addTaskId) : null;
             return addModalOpen && (
@@ -3337,12 +3347,6 @@ export default function App() {
                 </div>
               </div>
             );
-          })()}
-
-          {pjDetailModal && (() => {
-            const p = (projects || []).find((pp) => pp.id === pjDetailModal);
-            if (!p) return null;
-            return <PJDetailModal project={p} onUpdateNote={updatePJNote} onClose={() => setPjDetailModal(null)} />;
           })()}
 
           <div style={styles.tree}>
