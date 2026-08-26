@@ -750,15 +750,27 @@ function PJDetailModal({ project, onUpdateNote, onClose, onAddTask, onAddSubtask
         </div>
 
         {(() => {
-          const { done: pd, total: pt } = pjProgress(project);
-          const rate = pt > 0 ? Math.round((pd / pt) * 100) : 0;
+          const rate = Math.max(0, Math.min(100, Number(project.progressRate) || 0));
           return (
             <div style={styles.pjProgressRow}>
               <span style={styles.pjProgressLabel}>進捗率</span>
               <div style={styles.pjProgressBarOuter}>
                 <div style={{ ...styles.pjProgressBarFill, width: `${rate}%` }} />
               </div>
-              <span style={styles.pjProgressPct}>{rate}%（{pd}/{pt}）</span>
+              <input
+                type="number"
+                min={0}
+                max={100}
+                step={5}
+                value={project.progressRate ?? 0}
+                onChange={(e) => {
+                  const v = Math.max(0, Math.min(100, Number(e.target.value) || 0));
+                  onUpdateNote(project.id, "progressRate", v);
+                }}
+                style={styles.pjProgressInput}
+                aria-label="進捗率を入力"
+              />
+              <span style={styles.pjProgressPct}>%</span>
             </div>
           );
         })()}
@@ -3495,6 +3507,7 @@ const styles = {
   pjProgressBarOuter: { flex: 1, height: 10, background: "#E5E5E5", borderRadius: 5, overflow: "hidden" },
   pjProgressBarFill: { height: "100%", borderRadius: 5, background: "#6B7F6E", transition: "width 0.2s" },
   pjProgressPct: { fontSize: 11.5, fontWeight: 700, color: "#6B7F6E", flexShrink: 0 },
+  pjProgressInput: { width: 44, fontSize: 11, padding: "3px 5px", borderRadius: 5, border: "1.5px solid #E5E5E5", background: "#FFFFFF", color: "#2C3645", fontFamily: "inherit", textAlign: "right", flexShrink: 0 },
   taskList: { marginTop: 8, display: "flex", flexDirection: "column", gap: 6, paddingLeft: 18 },
   taskDatesRow: { display: "flex", gap: 8, marginTop: 6, paddingLeft: 24, flexWrap: "wrap" },
   ganttWrap: { marginTop: 8, padding: 10, background: "#FFFFFF", border: "1px dashed #D8D8D8", borderRadius: 8 },
