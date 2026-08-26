@@ -3023,6 +3023,8 @@ export default function App() {
                   dayViewDate={dayViewDate}
                   emptyMessage="予定日が過去で残っているタスクはない。"
                   onSkip={skipSubtask}
+                  onUpdateSchedule={updateSubtaskSchedule}
+                  showActual
                 />
               )}
 
