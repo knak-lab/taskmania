@@ -749,6 +749,20 @@ function PJDetailModal({ project, onUpdateNote, onClose, onAddTask, onAddSubtask
           </div>
         </div>
 
+        {(() => {
+          const { done: pd, total: pt } = pjProgress(project);
+          const rate = pt > 0 ? Math.round((pd / pt) * 100) : 0;
+          return (
+            <div style={styles.pjProgressRow}>
+              <span style={styles.pjProgressLabel}>進捗率</span>
+              <div style={styles.pjProgressBarOuter}>
+                <div style={{ ...styles.pjProgressBarFill, width: `${rate}%` }} />
+              </div>
+              <span style={styles.pjProgressPct}>{rate}%（{pd}/{pt}）</span>
+            </div>
+          );
+        })()}
+
         <GanttChart project={project} />
 
         <NoteField
@@ -3476,6 +3490,11 @@ const styles = {
   doneMark: { flexShrink: 0, fontSize: 12 },
   progressTag: { fontSize: 10.5, fontWeight: 700, color: "#6B7F6E", background: "#F0F0F0", padding: "2px 6px", borderRadius: 8, flexShrink: 0 },
   progressTagSm: { fontSize: 10, fontWeight: 700, color: "#6B7F6E", background: "#F0F0F0", padding: "1px 5px", borderRadius: 8, flexShrink: 0 },
+  pjProgressRow: { display: "flex", alignItems: "center", gap: 8, marginTop: 6, marginBottom: 4 },
+  pjProgressLabel: { fontSize: 11.5, fontWeight: 700, color: "#2C3645", flexShrink: 0 },
+  pjProgressBarOuter: { flex: 1, height: 10, background: "#E5E5E5", borderRadius: 5, overflow: "hidden" },
+  pjProgressBarFill: { height: "100%", borderRadius: 5, background: "#6B7F6E", transition: "width 0.2s" },
+  pjProgressPct: { fontSize: 11.5, fontWeight: 700, color: "#6B7F6E", flexShrink: 0 },
   taskList: { marginTop: 8, display: "flex", flexDirection: "column", gap: 6, paddingLeft: 18 },
   taskDatesRow: { display: "flex", gap: 8, marginTop: 6, paddingLeft: 24, flexWrap: "wrap" },
   ganttWrap: { marginTop: 8, padding: 10, background: "#FFFFFF", border: "1px dashed #D8D8D8", borderRadius: 8 },
