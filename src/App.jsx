@@ -275,12 +275,25 @@ function pjEffectivelyDone(p) {
 }
 
 const GRANULARITIES = [
-  { key: "day", label: "日" },
   { key: "week", label: "週" },
   { key: "month", label: "月" },
   { key: "quarter", label: "四半期" },
-  { key: "year", label: "年" },
 ];
+
+// ガントのバー色は「優先度」ではなく「状態」で塗る(俯瞰時に遅れ・進行中が一目で分かるように)
+const GANTT_STATUS = {
+  upcoming: { key: "upcoming", label: "予定", color: "#9B9B9B" },
+  active: { key: "active", label: "進行中", color: "#12314F" },
+  overdue: { key: "overdue", label: "遅延", color: "#D64550" },
+  done: { key: "done", label: "完了", color: "#8FA893" },
+};
+
+function ganttStatusOf(startDate, endDate, done, total, todayStr) {
+  if (total > 0 && done >= total) return GANTT_STATUS.done;
+  if (endDate && endDate < todayStr) return GANTT_STATUS.overdue;
+  if (startDate && startDate <= todayStr) return GANTT_STATUS.active;
+  return GANTT_STATUS.upcoming;
+}
 
 function startOfWeek(d) {
   const day = d.getDay();
@@ -517,105 +530,184 @@ function generateBuckets(allStart, allEnd, granularity) {
   return buckets;
 }
 
-function GanttChart({ project }) {
-  const [granularity, setGranularity] = useState("day");
-  const rows = [];
-  for (const t of project.tasks) {
-    if (!t.startDate || !t.endDate) continue;
-    const { done, total } = taskProgress(t);
-    const minPriorityVal = t.subtasks.length ? Math.min(...t.subtasks.map((s) => s.priority || 2)) : 2;
-    const pInfo = PRIORITIES.find((pr) => pr.v === minPriorityVal) || PRIORITIES[1];
-    rows.push({ id: t.id, name: t.name, startDate: t.startDate, endDate: t.endDate, done, total, color: pInfo.color });
-  }
-  const today = new Date(); const todayStr = toDateStr(today);
-  const yearLater = new Date(); yearLater.setDate(yearLater.getDate() + 365);
-  const yearLaterStr = toDateStr(yearLater);
-  const taskDates = rows.flatMap((r) => [r.startDate, r.endDate]);
-  const allDates = [todayStr, yearLaterStr, ...taskDates].sort();
-  const buckets = generateBuckets(allDates[0], allDates[allDates.length - 1], granularity);
-  const rowsSorted = [...rows].sort((a, b) => a.startDate.localeCompare(b.startDate));
-  const colWidth = { day: 34, week: 46, month: 52, quarter: 60, year: 56 }[granularity];
+// バケットキー(週なら月曜日付、月なら"YYYY-MM"等)の開始日を返す
+function bucketStartDate(key, granularity) {
+  if (granularity === "month") { const [y, m] = key.split("-").map(Number); return new Date(y, m - 1, 1); }
+  if (granularity === "quarter") { const [y, q] = key.split("-Q").map(Number); return new Date(y, (q - 1) * 3, 1); }
+  if (granularity === "year") return new Date(Number(key), 0, 1);
+  return new Date(key + "T00:00:00"); // day / week
+}
 
+// 今日がバケット列の何列目あたり(小数)に来るか。範囲外ならnull
+function todayColOffset(buckets, granularity, todayStr) {
+  if (buckets.length === 0) return null;
+  const idx = buckets.indexOf(bucketKeyFor(todayStr, granularity));
+  if (idx === -1) return null;
+  const start = bucketStartDate(buckets[idx], granularity).getTime();
+  let end;
+  if (idx + 1 < buckets.length) {
+    end = bucketStartDate(buckets[idx + 1], granularity).getTime();
+  } else {
+    const s = bucketStartDate(buckets[idx], granularity);
+    if (granularity === "month") end = new Date(s.getFullYear(), s.getMonth() + 1, 1).getTime();
+    else if (granularity === "quarter") end = new Date(s.getFullYear(), s.getMonth() + 3, 1).getTime();
+    else if (granularity === "year") end = new Date(s.getFullYear() + 1, 0, 1).getTime();
+    else end = s.getTime() + 7 * 86400000;
+  }
+  const t = new Date(todayStr + "T00:00:00").getTime();
+  return idx + Math.min(1, Math.max(0, (t - start) / (end - start)));
+}
+
+// 実タスクの期間に前後マージンを付け、常に今日を含む表示範囲を返す
+function ganttRange(dateList, todayStr, fallbackDays) {
+  const sorted = [...dateList].sort();
+  const lo = sorted.length && sorted[0] < todayStr ? sorted[0] : todayStr;
+  const hi = sorted.length && sorted[sorted.length - 1] > todayStr ? sorted[sorted.length - 1] : (sorted.length ? todayStr : addDaysStr(todayStr, fallbackDays));
+  return { rangeStart: addDaysStr(lo, -7), rangeEnd: addDaysStr(hi, 14) };
+}
+
+function GanttToolbar({ granularity, setGranularity }) {
   return (
-    <div style={styles.ganttWrap}>
-      <div style={styles.ganttToolbar}>
-        <div style={styles.granularityGroup}>
-          {GRANULARITIES.map((g) => (
-            <button type="button" key={g.key} onClick={() => setGranularity(g.key)}
-              style={{ ...styles.granularityBtn, background: granularity === g.key ? "#2C3645" : "transparent", color: granularity === g.key ? "#FFFFFF" : "#2C3645" }}>
-              {g.label}
-            </button>
-          ))}
-        </div>
-        <div style={styles.ganttLegend}>
-          {PRIORITIES.map((p) => (
-            <span key={p.v} style={styles.ganttLegendItem}>
-              <span style={{ ...styles.ganttLegendDot, background: p.color }} />{p.label}
-            </span>
-          ))}
-        </div>
+    <div style={styles.ganttToolbar}>
+      <div style={styles.granularityGroup}>
+        {GRANULARITIES.map((g) => (
+          <button type="button" key={g.key} onClick={() => setGranularity(g.key)}
+            style={{ ...styles.granularityBtn, background: granularity === g.key ? "#2C3645" : "transparent", color: granularity === g.key ? "#FFFFFF" : "#2C3645" }}>
+            {g.label}
+          </button>
+        ))}
       </div>
-      {rowsSorted.length === 0 && <p style={styles.ganttEmpty}>開始日・終了日が設定されたタスクがまだない。</p>}
-      <div style={styles.ganttSplitWrap}>
-        <div style={styles.ganttLabelCol}>
-          <div style={styles.ganttLabelHeaderCell} />
-          {rowsSorted.map((r) => <div key={r.id} style={styles.ganttLabelCell} title={r.name}>{r.name}</div>)}
-        </div>
-        <div style={styles.ganttScroll}>
-          <div style={{ ...styles.ganttGrid, gridTemplateColumns: `repeat(${buckets.length}, ${colWidth}px)`, gridTemplateRows: `26px repeat(${rowsSorted.length}, 22px)` }}>
-            {buckets.map((b, i) => <div key={b} style={{ ...styles.ganttDateCell, gridRow: 1, gridColumn: i + 1 }}>{bucketLabel(b, granularity)}</div>)}
-            {rowsSorted.map((r, idx) => {
-              const startIdx = buckets.indexOf(bucketKeyFor(r.startDate, granularity));
-              const endIdx = buckets.indexOf(bucketKeyFor(r.endDate, granularity));
-              const pct = r.total ? Math.round((r.done / r.total) * 100) : 0;
-              return (
-                <div key={r.id} style={{ ...styles.ganttBarTrack, gridRow: idx + 2, gridColumn: `${startIdx + 1} / ${endIdx + 2}` }}
-                  title={`${r.name}　${formatDate(r.startDate)}〜${formatDate(r.endDate)}　${r.done}/${r.total}`}>
-                  <div style={{ ...styles.ganttBarFill, width: `${pct}%`, background: r.color }} />
-                </div>
-              );
-            })}
-          </div>
-        </div>
+      <div style={styles.ganttLegend}>
+        {Object.values(GANTT_STATUS).map((st) => (
+          <span key={st.key} style={styles.ganttLegendItem}>
+            <span style={{ ...styles.ganttLegendDot, background: st.color }} />{st.label}
+          </span>
+        ))}
       </div>
     </div>
   );
 }
 
-function OverviewGanttChart({ projects }) {
-  const [granularity, setGranularity] = useState("day");
-  const [openPJ, setOpenPJ] = useState(() => new Set());
+function GanttTodayLine({ offset, colWidth }) {
+  if (offset == null) return null;
+  return (
+    <div style={{ ...styles.ganttTodayLine, left: offset * (colWidth + 2) }}>
+      <span style={styles.ganttTodayFlag}>今日</span>
+    </div>
+  );
+}
 
+function GanttLabelCell({ name, pct }) {
+  return (
+    <div style={styles.ganttLabelCell} title={name}>
+      <span style={styles.ganttLabelName}>{name}</span>
+      <span style={styles.ganttLabelPct}>{pct == null ? "–" : `${pct}%`}</span>
+    </div>
+  );
+}
+
+function GanttChart({ project }) {
+  const [granularity, setGranularity] = useState("week");
   const todayStr = toDateStr(new Date());
-  const monthLater = new Date(); monthLater.setMonth(monthLater.getMonth() + 1);
-  const monthLaterStr = toDateStr(monthLater);
+  const rows = [];
+  for (const t of project.tasks) {
+    if (!t.startDate || !t.endDate) continue;
+    const { done, total } = taskProgress(t);
+    rows.push({ id: t.id, name: t.name, startDate: t.startDate, endDate: t.endDate, done, total });
+  }
+  const rowsSorted = [...rows].sort((a, b) => a.startDate.localeCompare(b.startDate));
+  const { rangeStart, rangeEnd } = ganttRange(rows.flatMap((r) => [r.startDate, r.endDate]), todayStr, 30);
+  const buckets = generateBuckets(rangeStart, rangeEnd, granularity);
+  const colWidth = { week: 46, month: 52, quarter: 60 }[granularity] || 46;
+  const todayOff = todayColOffset(buckets, granularity, todayStr);
+  const clampIdx = (dateStr) => {
+    const d = dateStr < rangeStart ? rangeStart : dateStr > rangeEnd ? rangeEnd : dateStr;
+    const i = buckets.indexOf(bucketKeyFor(d, granularity));
+    return i === -1 ? 0 : i;
+  };
 
-  const pjData = projects.map((p) => {
-    const taskRows = [];
-    for (const t of p.tasks) {
-      if (!t.startDate || !t.endDate) continue;
-      if (t.endDate < todayStr || t.startDate > monthLaterStr) continue;
-      const { done, total } = taskProgress(t);
-      const minPriorityVal = t.subtasks.length ? Math.min(...t.subtasks.map((s) => s.priority || 2)) : 2;
-      const pInfo = PRIORITIES.find((pr) => pr.v === minPriorityVal) || PRIORITIES[1];
-      taskRows.push({ id: t.id, name: t.name, startDate: t.startDate, endDate: t.endDate, done, total, color: pInfo.color });
-    }
-    return { id: p.id, name: p.name, taskRows };
-  }).filter((p) => p.taskRows.length > 0);
+  return (
+    <div style={styles.ganttWrap}>
+      <GanttToolbar granularity={granularity} setGranularity={setGranularity} />
+      {rowsSorted.length === 0 ? (
+        <p style={styles.ganttEmpty}>開始日・終了日が設定されたタスクがまだない。</p>
+      ) : (
+        <div style={styles.ganttSplitWrap}>
+          <div style={{ ...styles.ganttLabelCol, width: 132 }}>
+            <div style={styles.ganttLabelHeaderCell} />
+            {rowsSorted.map((r) => <GanttLabelCell key={r.id} name={r.name} pct={r.total ? Math.round((r.done / r.total) * 100) : null} />)}
+          </div>
+          <div style={styles.ganttScroll}>
+            <div style={{ ...styles.ganttGrid, position: "relative", gridTemplateColumns: `repeat(${buckets.length}, ${colWidth}px)`, gridTemplateRows: `26px repeat(${rowsSorted.length}, 22px)` }}>
+              {buckets.map((b, i) => <div key={b} style={{ ...styles.ganttDateCell, gridRow: 1, gridColumn: i + 1 }}>{bucketLabel(b, granularity)}</div>)}
+              <GanttTodayLine offset={todayOff} colWidth={colWidth} />
+              {rowsSorted.map((r, idx) => {
+                const s = clampIdx(r.startDate);
+                const e = clampIdx(r.endDate);
+                const pct = r.total ? Math.round((r.done / r.total) * 100) : 0;
+                const st = ganttStatusOf(r.startDate, r.endDate, r.done, r.total, todayStr);
+                return (
+                  <div key={r.id} style={{ ...styles.ganttBarTrack, background: st.color + "30", gridRow: idx + 2, gridColumn: `${s + 1} / ${e + 2}` }}
+                    title={`${r.name}　${formatDate(r.startDate)}〜${formatDate(r.endDate)}　${r.done}/${r.total}　${st.label}`}>
+                    <div style={{ ...styles.ganttBarFill, width: r.total ? `${pct}%` : "100%", background: st.color }} />
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function OverviewGanttChart({ projects, onOpenPJ }) {
+  const [granularity, setGranularity] = useState("month");
+  const [openPJ, setOpenPJ] = useState(() => new Set());
+  const todayStr = toDateStr(new Date());
+
+  const pjData = projects
+    .filter((p) => !p.status) // 保留・完了PJは俯瞰から外す
+    .map((p) => {
+      const taskRows = [];
+      for (const t of p.tasks) {
+        if (!t.startDate || !t.endDate) continue;
+        const { done, total } = taskProgress(t);
+        taskRows.push({ id: t.id, name: t.name, startDate: t.startDate, endDate: t.endDate, done, total });
+      }
+      if (taskRows.length === 0) return null;
+      const pjStart = taskRows.map((r) => r.startDate).sort()[0];
+      const pjEnd = taskRows.map((r) => r.endDate).sort().slice(-1)[0];
+      const doneSum = taskRows.reduce((a, r) => a + r.done, 0);
+      const totalSum = taskRows.reduce((a, r) => a + r.total, 0);
+      const anyOverdue = taskRows.some((r) => r.endDate < todayStr && !(r.total > 0 && r.done >= r.total));
+      let status;
+      if (totalSum > 0 && doneSum >= totalSum) status = GANTT_STATUS.done;
+      else if (anyOverdue) status = GANTT_STATUS.overdue;
+      else if (pjStart <= todayStr) status = GANTT_STATUS.active;
+      else status = GANTT_STATUS.upcoming;
+      return { id: p.id, name: p.name, taskRows, pjStart, pjEnd, doneSum, totalSum, status };
+    })
+    .filter(Boolean);
 
   if (pjData.length === 0) {
-    return <p style={styles.ganttEmpty}>本日から1ヶ月以内に開始日・終了日が設定されたタスクがまだない。各タスクに開始日・終了日を入れると、ここに全PJ分がまとまって並ぶ。</p>;
+    return <p style={styles.ganttEmpty}>開始日・終了日が設定されたタスクがまだない。各タスクに開始日・終了日を入れると、ここに全PJが1本ずつ並ぶ。</p>;
   }
 
-  const allTaskDates = pjData.flatMap((p) => p.taskRows.flatMap((r) => [r.startDate, r.endDate]));
-  const allDates = [todayStr, monthLaterStr, ...allTaskDates].sort();
-  const buckets = generateBuckets(allDates[0], allDates[allDates.length - 1], granularity);
-  const colWidth = { day: 44, week: 60, month: 68, quarter: 78, year: 72 }[granularity];
+  const { rangeStart, rangeEnd } = ganttRange(pjData.flatMap((p) => [p.pjStart, p.pjEnd]), todayStr, 30);
+  const buckets = generateBuckets(rangeStart, rangeEnd, granularity);
+  const colWidth = { week: 40, month: 56, quarter: 66 }[granularity] || 56;
+  const todayOff = todayColOffset(buckets, granularity, todayStr);
+  const clampIdx = (dateStr) => {
+    const d = dateStr < rangeStart ? rangeStart : dateStr > rangeEnd ? rangeEnd : dateStr;
+    const i = buckets.indexOf(bucketKeyFor(d, granularity));
+    return i === -1 ? 0 : i;
+  };
 
   const flatRows = [];
   for (const p of pjData) {
-    flatRows.push({ type: "pj", id: p.id, name: p.name, count: p.taskRows.length });
-    if (openPJ.has(p.id)) for (const t of p.taskRows) flatRows.push({ type: "task", ...t });
+    flatRows.push({ type: "pj", ...p });
+    if (openPJ.has(p.id)) for (const t of p.taskRows) flatRows.push({ type: "task", pjId: p.id, ...t });
   }
 
   function togglePJ(id) {
@@ -624,44 +716,47 @@ function OverviewGanttChart({ projects }) {
 
   return (
     <div style={styles.ganttWrap}>
-      <div style={styles.ganttToolbar}>
-        <div style={styles.granularityGroup}>
-          {GRANULARITIES.map((g) => (
-            <button type="button" key={g.key} onClick={() => setGranularity(g.key)}
-              style={{ ...styles.granularityBtn, background: granularity === g.key ? "#2C3645" : "transparent", color: granularity === g.key ? "#FFFFFF" : "#2C3645" }}>
-              {g.label}
-            </button>
-          ))}
-        </div>
-        <div style={styles.ganttLegend}>
-          {PRIORITIES.map((p) => <span key={p.v} style={styles.ganttLegendItem}><span style={{ ...styles.ganttLegendDot, background: p.color }} />{p.label}</span>)}
-        </div>
-      </div>
+      <GanttToolbar granularity={granularity} setGranularity={setGranularity} />
       <div style={styles.ganttSplitWrap}>
-        <div style={{ ...styles.ganttLabelCol, width: 140 }}>
+        <div style={{ ...styles.ganttLabelCol, width: 150 }}>
           <div style={styles.ganttLabelHeaderCell} />
           {flatRows.map((r) => r.type === "pj" ? (
-            <button key={r.id + "-pjlabel"} type="button" onClick={() => togglePJ(r.id)} style={styles.ganttPjRow}>
-              <span>{openPJ.has(r.id) ? "▾" : "▸"}</span>
-              <span style={styles.ganttPjName}>{r.name}</span>
-              <span style={styles.ganttPjCount}>{r.count}</span>
-            </button>
+            <div key={r.id + "-pjlabel"} style={styles.ganttPjRow}>
+              <button type="button" onClick={() => togglePJ(r.id)} style={styles.ganttPjToggle} aria-label={openPJ.has(r.id) ? "折りたたむ" : "展開する"}>
+                {openPJ.has(r.id) ? "▾" : "▸"}
+              </button>
+              <button type="button" onClick={() => onOpenPJ && onOpenPJ(r.id)} style={styles.ganttPjNameBtn} title={r.name}>{r.name}</button>
+              <span style={styles.ganttPjCount}>{r.totalSum ? `${Math.round((r.doneSum / r.totalSum) * 100)}%` : `${r.taskRows.length}件`}</span>
+            </div>
           ) : (
-            <div key={r.id + "-label"} style={styles.ganttLabelCell} title={r.name}>{r.name}</div>
+            <GanttLabelCell key={r.id + "-label"} name={r.name} pct={r.total ? Math.round((r.done / r.total) * 100) : null} />
           ))}
         </div>
         <div style={styles.ganttScroll}>
-          <div style={{ ...styles.ganttGrid, gridTemplateColumns: `repeat(${buckets.length}, ${colWidth}px)`, gridTemplateRows: `26px repeat(${flatRows.length}, 22px)` }}>
+          <div style={{ ...styles.ganttGrid, position: "relative", gridTemplateColumns: `repeat(${buckets.length}, ${colWidth}px)`, gridTemplateRows: `26px repeat(${flatRows.length}, 22px)` }}>
             {buckets.map((b, i) => <div key={b} style={{ ...styles.ganttDateCell, gridRow: 1, gridColumn: i + 1 }}>{bucketLabel(b, granularity)}</div>)}
+            <GanttTodayLine offset={todayOff} colWidth={colWidth} />
             {flatRows.map((r, idx) => {
-              if (r.type === "pj") return <div key={r.id + "-pjband"} style={{ gridRow: idx + 2, gridColumn: `1 / ${buckets.length + 1}`, background: "#E5E5E5", borderRadius: 5 }} />;
-              const startIdx = buckets.indexOf(bucketKeyFor(r.startDate, granularity));
-              const endIdx = buckets.indexOf(bucketKeyFor(r.endDate, granularity));
+              if (r.type === "pj") {
+                const s = clampIdx(r.pjStart);
+                const e = clampIdx(r.pjEnd);
+                const pct = r.totalSum ? Math.round((r.doneSum / r.totalSum) * 100) : 0;
+                return (
+                  <button type="button" key={r.id + "-pjbar"} onClick={() => onOpenPJ && onOpenPJ(r.id)}
+                    style={{ ...styles.ganttBarTrack, ...styles.ganttPjBarTrack, background: r.status.color + "30", gridRow: idx + 2, gridColumn: `${s + 1} / ${e + 2}` }}
+                    title={`${r.name}　${formatDate(r.pjStart)}〜${formatDate(r.pjEnd)}　${r.doneSum}/${r.totalSum}　${r.status.label}`}>
+                    <div style={{ ...styles.ganttBarFill, width: r.totalSum ? `${pct}%` : "100%", background: r.status.color }} />
+                  </button>
+                );
+              }
+              const s = clampIdx(r.startDate);
+              const e = clampIdx(r.endDate);
               const pct = r.total ? Math.round((r.done / r.total) * 100) : 0;
+              const st = ganttStatusOf(r.startDate, r.endDate, r.done, r.total, todayStr);
               return (
-                <div key={r.id + "-bar"} style={{ ...styles.ganttBarTrack, gridRow: idx + 2, gridColumn: `${startIdx + 1} / ${endIdx + 2}` }}
-                  title={`${r.name}　${formatDate(r.startDate)}〜${formatDate(r.endDate)}　${r.done}/${r.total}`}>
-                  <div style={{ ...styles.ganttBarFill, width: `${pct}%`, background: r.color }} />
+                <div key={r.id + "-bar"} style={{ ...styles.ganttBarTrack, background: st.color + "30", gridRow: idx + 2, gridColumn: `${s + 1} / ${e + 2}` }}
+                  title={`${r.name}　${formatDate(r.startDate)}〜${formatDate(r.endDate)}　${r.done}/${r.total}　${st.label}`}>
+                  <div style={{ ...styles.ganttBarFill, width: r.total ? `${pct}%` : "100%", background: st.color }} />
                 </div>
               );
             })}
@@ -1534,6 +1629,140 @@ function BrainBadge({ label, ratio, moyaCount }) {
   );
 }
 
+const TODAY_PICK_LIMIT = 5;
+
+// 「今日」ビュー: インボックス / 今日やる(上限5) / 期限切れ / 今日期限 だけを平らに見せる
+function TodayView({
+  projects, todayStr, todayPicks, onTogglePick, pickError,
+  inbox, inboxText, onInboxTextChange, onAddInbox, onUpdateInbox, onRemoveInbox,
+  onToggleDone, onUpdateSchedule, onMoveDate, onOpenSteps, onSkip,
+  renderStopwatchControl, renderSendButton, stamping,
+  showMoyamoya, moyamoyaNotes, moyamoyaNewText, onMoyamoyaTextChange, onAddMoyamoya, onUpdateMoyamoya, onRemoveMoyamoya,
+}) {
+  const flat = [];
+  for (const p of projects) {
+    if (p.status) continue; // 保留・完了PJは除外
+    for (const t of p.tasks) {
+      for (const s of t.subtasks) {
+        if (s.done) continue;
+        flat.push({ pjId: p.id, pjName: p.name, taskId: t.id, taskName: t.name, sub: s });
+      }
+    }
+  }
+  const isPicked = (s) => todayPicks[s.id] === todayStr;
+  const pickedList = flat.filter((r) => isPicked(r.sub));
+  const overdue = flat
+    .filter((r) => r.sub.scheduledDate && r.sub.scheduledDate < todayStr && !isPicked(r.sub))
+    .sort((a, b) => a.sub.scheduledDate.localeCompare(b.sub.scheduledDate));
+  const dueToday = flat.filter((r) => r.sub.scheduledDate === todayStr && !isPicked(r.sub));
+  const pickCount = pickedList.length;
+
+  const row = (r) => {
+    const s = r.sub;
+    const picked = isPicked(s);
+    const isOverdue = s.scheduledDate && s.scheduledDate < todayStr;
+    return (
+      <li key={s.id} style={styles.todayRow} className="row-in">
+        <button onClick={() => onToggleDone(r.pjId, r.taskId, s.id)} aria-label={s.done ? "未完了に戻す" : "完了にする"} style={styles.stampWrap}>
+          {s.done ? <span style={styles.hankoStamp} className={stamping === s.id ? "hanko-pop" : ""}>済</span> : <span style={styles.hankoEmpty} />}
+        </button>
+        <div style={styles.todayRowBody}>
+          <div style={styles.todayRowLine1}>
+            <span style={styles.todayRowText}>{s.text}</span>
+            {isOverdue && <span style={styles.todayOverdueTag}>{formatDate(s.scheduledDate)}</span>}
+            <span style={styles.todayPjTag} title={`${r.pjName} ／ ${r.taskName}`}>{r.pjName}</span>
+          </div>
+          <div style={styles.todayRowLine2}>
+            <span style={styles.calendarLine2Label}>想定</span>
+            <select value={s.estimatedMinutes || ""} onChange={(e) => onUpdateSchedule(r.pjId, r.taskId, s.id, "estimatedMinutes", e.target.value ? Number(e.target.value) : "")} style={{ ...styles.scheduleEditInput, width: 62 }}>
+              <option value="">―</option>
+              {MINUTE_OPTIONS.map((m) => <option key={m} value={m}>{formatDuration(m)}</option>)}
+            </select>
+            <span style={styles.calendarLine2Label}>実績</span>
+            <select value={s.actualMinutes || ""} onChange={(e) => onUpdateSchedule(r.pjId, r.taskId, s.id, "actualMinutes", e.target.value ? Number(e.target.value) : "")} style={{ ...styles.scheduleEditInput, width: 62 }}>
+              <option value="">―</option>
+              {MINUTE_OPTIONS.map((m) => <option key={m} value={m}>{formatDuration(m)}</option>)}
+            </select>
+            {renderStopwatchControl(r.pjId, r.taskId, s.id)}
+            <button type="button" onClick={() => onOpenSteps(r.pjId, r.taskId, s.id)} style={styles.inlineAddBtn}>☑ステップ</button>
+            <button type="button" onClick={() => onMoveDate({ pjId: r.pjId, taskId: r.taskId, subId: s.id, date: s.scheduledDate || todayStr, time: s.startTime || "" })} style={styles.inlineAddBtn}>📅変更</button>
+            <button type="button" onClick={() => onSkip(r.pjId, r.taskId, s.id)} style={styles.inlineAddBtn}>⏭先送り</button>
+            {renderSendButton && renderSendButton(s)}
+          </div>
+        </div>
+        <button type="button" onClick={() => onTogglePick(s.id)} aria-label={picked ? "今日やるから外す" : "今日やるに入れる"}
+          style={{ ...styles.todayPickBtn, background: picked ? "#F39800" : "transparent", color: picked ? "#FFFFFF" : "#F39800" }}>★</button>
+      </li>
+    );
+  };
+
+  const captureList = (items, onUpdate, onRemove, label) => (
+    items.length > 0 && (
+      <ul style={styles.todayList}>
+        {items.map((n) => (
+          <li key={n.id} style={styles.moyamoyaNoteRow}>
+            <input type="text" value={n.text} onChange={(e) => onUpdate(n.id, e.target.value)} style={styles.moyamoyaInput} aria-label={`${label}を編集`} />
+            <button type="button" onClick={() => onRemove(n.id)} aria-label="削除" style={styles.deleteBtn}>×</button>
+          </li>
+        ))}
+      </ul>
+    )
+  );
+
+  return (
+    <div style={styles.todayView}>
+      <div style={styles.sectionTitleRow}>
+        <h3 style={{ ...styles.sectionTitleFlush, fontWeight: 900 }}>インボックス</h3>
+        <span style={styles.todayCountTag}>{inbox.length}</span>
+      </div>
+      <form onSubmit={onAddInbox} style={styles.inboxForm}>
+        <input type="text" value={inboxText} onChange={(e) => onInboxTextChange(e.target.value)} placeholder="思いついたことを1行で…（あとで仕分け）" style={styles.moyamoyaInput} aria-label="インボックスに追加" />
+        <button type="submit" style={styles.moyamoyaAddBtn}>＋</button>
+      </form>
+      {captureList(inbox, onUpdateInbox, onRemoveInbox, "インボックス")}
+
+      {showMoyamoya && (
+        <>
+          <div style={styles.sectionTitleRow}>
+            <h3 style={{ ...styles.sectionTitleFlush, fontWeight: 900, color: MOYAMOYA_COLOR }}>もやもや</h3>
+            <span style={styles.todayCountTag}>{moyamoyaNotes.length}</span>
+          </div>
+          <form onSubmit={onAddMoyamoya} style={styles.inboxForm}>
+            <input type="text" value={moyamoyaNewText} onChange={(e) => onMoyamoyaTextChange(e.target.value)} placeholder="もやもやしていることを書く…" style={styles.moyamoyaInput} aria-label="もやもやを追加" />
+            <button type="submit" style={styles.moyamoyaAddBtn}>＋</button>
+          </form>
+          {captureList(moyamoyaNotes, onUpdateMoyamoya, onRemoveMoyamoya, "もやもや")}
+        </>
+      )}
+
+      <div style={styles.sectionTitleRow}>
+        <h3 style={{ ...styles.sectionTitleFlush, fontWeight: 900 }}>今日やる</h3>
+        <span style={{ ...styles.todayCountTag, color: pickCount >= TODAY_PICK_LIMIT ? "#D64550" : "#7A7A7A" }}>{pickCount} / {TODAY_PICK_LIMIT}</span>
+      </div>
+      {pickError && <p style={styles.todayPickError}>「今日やる」は{TODAY_PICK_LIMIT}件まで。何か外してから追加する。</p>}
+      {pickedList.length === 0
+        ? <p style={styles.emptySmall}>下の「期限切れ」「今日期限」から ★ で今日やるものを選ぶ。</p>
+        : <ul style={styles.todayList}>{pickedList.map(row)}</ul>}
+
+      <div style={styles.sectionTitleRow}>
+        <h3 style={{ ...styles.sectionTitleFlush, fontWeight: 900, color: "#D64550" }}>期限切れ</h3>
+        <span style={styles.todayCountTag}>{overdue.length}</span>
+      </div>
+      {overdue.length === 0
+        ? <p style={styles.emptySmall}>期限切れはない。</p>
+        : <ul style={styles.todayList}>{overdue.map(row)}</ul>}
+
+      <div style={styles.sectionTitleRow}>
+        <h3 style={{ ...styles.sectionTitleFlush, fontWeight: 900 }}>今日期限</h3>
+        <span style={styles.todayCountTag}>{dueToday.length}</span>
+      </div>
+      {dueToday.length === 0
+        ? <p style={styles.emptySmall}>今日期限のタスクはない。</p>
+        : <ul style={styles.todayList}>{dueToday.map(row)}</ul>}
+    </div>
+  );
+}
+
 export default function App() {
   const [projects, setProjects] = useState(null);
   const [topTab, setTopTab] = useState("kkr");
@@ -1544,8 +1773,55 @@ export default function App() {
   const [showDoneSubtasks, setShowDoneSubtasks] = useState(() => new Set());
   const [hiddenCompletedTasks, setHiddenCompletedTasks] = useState(() => new Set());
   const [hiddenCompletedPJSections, setHiddenCompletedPJSections] = useState(() => new Set());
-  const [ganttCollapsed, setGanttCollapsed] = useState(true);
   const [pjDetailModal, setPjDetailModal] = useState(null);
+
+  // 入口の3ビュー切替(今日/俯瞰/PJ)。デフォルトは「今日」。端末ローカルに保持
+  const [mainView, setMainView] = useState(() => {
+    try { return localStorage.getItem("tm_main_view") || "today"; } catch { return "today"; }
+  });
+  useEffect(() => { try { localStorage.setItem("tm_main_view", mainView); } catch { /* ignore */ } }, [mainView]);
+
+  // インボックス(クイックキャプチャ)。試作中は端末ローカルのみ(GAS同期は後日)
+  const [inbox, setInbox] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("tm_inbox") || "[]"); } catch { return []; }
+  });
+  const [inboxText, setInboxText] = useState("");
+  useEffect(() => { try { localStorage.setItem("tm_inbox", JSON.stringify(inbox)); } catch { /* ignore */ } }, [inbox]);
+  function addInboxItem(e) {
+    if (e && e.preventDefault) e.preventDefault();
+    const t = inboxText.trim();
+    if (!t) return;
+    setInbox((prev) => [...prev, { id: uid(), text: t }]);
+    setInboxText("");
+  }
+  function updateInboxItem(id, text) { setInbox((prev) => prev.map((n) => (n.id === id ? { ...n, text } : n))); }
+  function removeInboxItem(id) { setInbox((prev) => prev.filter((n) => n.id !== id)); }
+
+  // 「今日やる」印。{subId: "YYYY-MM-DD"}。当日分以外は読み込み時に破棄=毎日自動リセット
+  const [todayPicks, setTodayPicks] = useState(() => {
+    try {
+      const raw = JSON.parse(localStorage.getItem("tm_today_picks") || "{}");
+      const t = toDateStr(new Date());
+      const pruned = {};
+      for (const k of Object.keys(raw)) if (raw[k] === t) pruned[k] = t;
+      return pruned;
+    } catch { return {}; }
+  });
+  useEffect(() => { try { localStorage.setItem("tm_today_picks", JSON.stringify(todayPicks)); } catch { /* ignore */ } }, [todayPicks]);
+  const [pickError, setPickError] = useState(false);
+  function toggleTodayPick(subId) {
+    setTodayPicks((prev) => {
+      const t = toDateStr(new Date());
+      if (prev[subId] === t) { const n = { ...prev }; delete n[subId]; return n; }
+      const count = Object.values(prev).filter((d) => d === t).length;
+      if (count >= TODAY_PICK_LIMIT) {
+        setPickError(true);
+        setTimeout(() => setPickError(false), 2600);
+        return prev;
+      }
+      return { ...prev, [subId]: t };
+    });
+  }
   const [runningTarget, setRunningTarget] = useState(() => {
     try { return JSON.parse(localStorage.getItem("tm_running_target") || "null"); } catch { return null; }
   });
@@ -2830,6 +3106,16 @@ export default function App() {
 
         <section style={{ ...styles.panel, borderColor: activeTopColor, borderRadius: PERSON_KEYS.includes(topTab) ? "0 0 10px 10px" : styles.panel.borderRadius }}>
           {showTaskSections && (
+            <nav style={styles.viewSwitcher} role="tablist" aria-label="表示切替">
+              {[{ k: "today", label: "今日" }, { k: "overview", label: "俯瞰" }, { k: "pj", label: "PJ" }].map((v) => (
+                <button key={v.k} type="button" role="tab" aria-selected={mainView === v.k} onClick={() => setMainView(v.k)}
+                  style={{ ...styles.viewSwitcherBtn, background: mainView === v.k ? activeTopColor : "transparent", color: mainView === v.k ? "#FFFFFF" : activeTopColor, borderColor: activeTopColor }}>
+                  {v.label}
+                </button>
+              ))}
+            </nav>
+          )}
+          {showTaskSections && (
             <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
               <button type="button" onClick={() => setDashboardOpen(true)} style={styles.addBtn}>📊ダッシュボード</button>
             </div>
@@ -2849,7 +3135,7 @@ export default function App() {
               onUpdateSchedule={updateSubtaskSchedule}
             />
           )}
-          {showTaskSections && (
+          {showTaskSections && mainView === "pj" && (
             <>
               {showWorkSummary && (
                 <div style={styles.brainRow}>
@@ -3107,19 +3393,56 @@ export default function App() {
             </>
           )}
 
-          {showTaskSections && (
+          {showTaskSections && mainView === "today" && (
+            <TodayView
+              projects={visibleProjects}
+              todayStr={todayStr}
+              todayPicks={todayPicks}
+              onTogglePick={toggleTodayPick}
+              pickError={pickError}
+              inbox={inbox}
+              inboxText={inboxText}
+              onInboxTextChange={setInboxText}
+              onAddInbox={addInboxItem}
+              onUpdateInbox={updateInboxItem}
+              onRemoveInbox={removeInboxItem}
+              onToggleDone={toggleSubtaskDone}
+              onUpdateSchedule={updateSubtaskSchedule}
+              onMoveDate={setMoveDateModal}
+              onOpenSteps={openStepsModal}
+              onSkip={skipSubtask}
+              renderStopwatchControl={renderStopwatchControl}
+              renderSendButton={renderSendToCalendarButton}
+              stamping={stamping}
+              showMoyamoya={showWorkSummary}
+              moyamoyaNotes={moyamoyaNotes}
+              moyamoyaNewText={moyamoyaNewText}
+              onMoyamoyaTextChange={setMoyamoyaNewText}
+              onAddMoyamoya={addMoyamoyaNote}
+              onUpdateMoyamoya={updateMoyamoyaNote}
+              onRemoveMoyamoya={removeMoyamoyaNote}
+            />
+          )}
+
+          {showTaskSections && mainView === "overview" && (
             <>
+              {showWorkSummary && (
+                <div style={styles.brainRow}>
+                  <BrainBadge label="1日" ratio={dayBrainRatio} moyaCount={totalMoyamoyaCount} />
+                  <BrainBadge label="今週" ratio={weekSummary.brainRatio} />
+                  <BrainBadge label="来週" ratio={nextWeekSummary.ratio} />
+                  <BrainBadge label="先週" ratio={lastWeekSummary.ratio} />
+                </div>
+              )}
               <div style={styles.sectionTitleRow}>
-                <h3 style={{ ...styles.sectionTitleFlush, fontWeight: 900 }}>総合ガントチャート</h3>
-                <button type="button" onClick={() => setGanttCollapsed((v) => !v)} style={styles.collapseBtnSm} aria-label={ganttCollapsed ? "総合ガントチャートを展開する" : "総合ガントチャートを折りたたむ"}>
-                  {ganttCollapsed ? "▸" : "▾"}
-                </button>
+                <h3 style={{ ...styles.sectionTitleFlush, fontWeight: 900 }}>ガントチャート（全PJ）</h3>
               </div>
-              {!ganttCollapsed && <OverviewGanttChart projects={visibleProjects} />}
+              <p style={styles.ganttHint}>PJ名またはバーを押すとPJ詳細。▸で配下タスクを展開。</p>
+              <OverviewGanttChart projects={visibleProjects} onOpenPJ={setPjDetailModal} />
             </>
           )}
 
-          {showTaskSections && <h3 style={{ ...styles.sectionTitle, fontWeight: 900 }}>タスク一覧</h3>}
+          {showTaskSections && mainView === "pj" && <h3 style={{ ...styles.sectionTitle, fontWeight: 900 }}>タスク一覧</h3>}
 
           {pjDetailModal && (() => {
             const p = (projects || []).find((pp) => pp.id === pjDetailModal);
@@ -3377,14 +3700,16 @@ export default function App() {
             );
           })()}
 
-          <div style={styles.tree}>
-            {projects === null && <p style={styles.empty}>読み込み中…</p>}
-            {projects !== null && visibleProjects.length === 0 && <p style={styles.empty}>まだPJがない。上のフォームから作成できる。</p>}
-            {projects !== null && visibleProjects.length > 0 && [
-              ...PJ_PRIORITIES.map((pri) => ({ key: pri.v, label: pri.label, color: pri.color, small: false, group: visibleProjects.filter((pp) => !pp.status && (pp.priority || 2) === pri.v) })),
-              ...PJ_STATUSES.map((st) => ({ key: st.v, label: st.label, color: st.color, small: true, group: visibleProjects.filter((pp) => pp.status === st.v) })),
-            ].map(renderPrioritySection)}
-          </div>
+          {mainView === "pj" && (
+            <div style={styles.tree}>
+              {projects === null && <p style={styles.empty}>読み込み中…</p>}
+              {projects !== null && visibleProjects.length === 0 && <p style={styles.empty}>まだPJがない。上のフォームから作成できる。</p>}
+              {projects !== null && visibleProjects.length > 0 && [
+                ...PJ_PRIORITIES.map((pri) => ({ key: pri.v, label: pri.label, color: pri.color, small: false, group: visibleProjects.filter((pp) => !pp.status && (pp.priority || 2) === pri.v) })),
+                ...PJ_STATUSES.map((st) => ({ key: st.v, label: st.label, color: st.color, small: true, group: visibleProjects.filter((pp) => pp.status === st.v) })),
+              ].map(renderPrioritySection)}
+            </div>
+          )}
         </section>
       </div>
     </div>
@@ -3599,4 +3924,32 @@ const styles = {
   calGridDayCol: { flex: "1 0 90px", minWidth: 90, position: "relative", borderLeft: "1px solid #E0E0E0" },
   calGridHourLine: { position: "absolute", left: 0, right: 0, borderTop: "1px solid #F0F0F0" },
   calGridBlock: { position: "absolute", left: 2, right: 2, border: "none", borderRadius: 4, color: "#FFFFFF", fontSize: 9.5, fontWeight: 700, padding: "1px 4px", cursor: "pointer", fontFamily: "inherit", textAlign: "left", overflow: "hidden", whiteSpace: "nowrap" },
+
+  // 入口の3ビュー切替
+  viewSwitcher: { display: "flex", gap: 5, marginBottom: 12 },
+  viewSwitcherBtn: { flex: 1, padding: "9px 4px", fontSize: 13.5, fontWeight: 700, fontFamily: "inherit", border: "1.5px solid", borderRadius: 7, cursor: "pointer" },
+
+  // ガント: 今日ライン・ラベル・PJ集約行
+  ganttHint: { fontSize: 10.5, color: "#9B9B9B", margin: "0 0 6px" },
+  ganttTodayLine: { position: "absolute", top: 0, bottom: 0, width: 2, background: "#D64550", opacity: 0.55, pointerEvents: "none", zIndex: 2 },
+  ganttTodayFlag: { position: "absolute", top: -1, left: -9, fontSize: 8, fontWeight: 700, color: "#D64550", background: "#FFFFFF", padding: "0 2px", borderRadius: 2, whiteSpace: "nowrap", lineHeight: 1.4 },
+  ganttLabelName: { flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+  ganttLabelPct: { flexShrink: 0, fontSize: 9, fontWeight: 700, color: "#7A7A7A", marginLeft: 4 },
+  ganttPjToggle: { background: "none", border: "none", cursor: "pointer", fontSize: 10, color: "#2C3645", padding: 0, width: 12, flexShrink: 0, fontFamily: "inherit", lineHeight: 1 },
+  ganttPjNameBtn: { flex: 1, minWidth: 0, background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", fontSize: 11, fontWeight: 700, color: "#12314F", textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", padding: 0, textDecoration: "underline" },
+  ganttPjBarTrack: { border: "none", padding: 0, cursor: "pointer" },
+
+  // 「今日」ビュー
+  todayView: { display: "flex", flexDirection: "column" },
+  todayCountTag: { fontSize: 10.5, fontWeight: 700, color: "#7A7A7A" },
+  inboxForm: { display: "flex", gap: 6, marginBottom: 6 },
+  todayRow: { display: "flex", alignItems: "flex-start", gap: 6, padding: "7px 2px", borderBottom: "1px dashed #E0E0E0" },
+  todayRowBody: { flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 },
+  todayRowLine1: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" },
+  todayRowText: { fontSize: 13, fontWeight: 700, color: "#2C3645" },
+  todayRowLine2: { display: "flex", alignItems: "center", gap: 5, flexWrap: "wrap" },
+  todayPjTag: { fontSize: 9.5, fontWeight: 700, color: "#12314F", background: "#F0F0F0", padding: "1px 6px", borderRadius: 8, whiteSpace: "nowrap", maxWidth: 130, overflow: "hidden", textOverflow: "ellipsis" },
+  todayOverdueTag: { fontSize: 9.5, fontWeight: 700, color: "#FFFFFF", background: "#D64550", padding: "1px 6px", borderRadius: 8, whiteSpace: "nowrap" },
+  todayPickBtn: { flexShrink: 0, width: 26, height: 26, border: "1.5px solid #F39800", borderRadius: 6, cursor: "pointer", fontFamily: "inherit", fontSize: 13, lineHeight: 1, padding: 0 },
+  todayPickError: { fontSize: 11, fontWeight: 700, color: "#D64550", margin: "0 0 6px" },
 };
