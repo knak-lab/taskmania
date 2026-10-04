@@ -76,3 +76,24 @@
   .mm-canvas-wrap { height: 60vh; }
   .mm-panel { width: auto; max-height: 50vh; }
 }
+
+/* 点検 */
+.mm-ck { display: flex; flex-direction: column; gap: 14px; }
+.mm-ck section { display: flex; flex-direction: column; gap: 6px; padding-bottom: 12px; border-bottom: 1px dashed var(--mm-line); }
+.mm-ck h5, .mm-h5 { margin: 0; font-size: 12.5px; font-weight: 700; display: flex; gap: 8px; align-items: baseline; }
+.mm-ck h5 .mm-muted { font-weight: 400; font-size: 11px; }
+.mm-ck-note { margin: 0; font-size: 12px; line-height: 1.6; color: var(--mm-muted); }
+.mm-ck-note b { color: var(--mm-ink); font-size: 13px; }
+.mm-ck-sub { margin: 4px 0 0; font-size: 11.5px; font-weight: 700; }
+.mm-ck-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; font-size: 12px; }
+.mm-ck-list li { display: flex; flex-direction: column; line-height: 1.45; }
+.mm-ck-list .mm-muted { font-size: 10.5px; }
+.mm-link { border: 0; background: none; padding: 0; text-align: left; color: var(--mm-ink); font-size: 12px; text-decoration: underline; text-decoration-color: var(--mm-line); text-underline-offset: 3px; }
+.mm-link:hover { text-decoration-color: var(--mm-ink); }
+.mm-cap i { background: var(--mm-ink); }
+.mm-ck-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.mm-ck-table td { padding: 4px 2px; border-bottom: 1px solid var(--mm-soft); }
+.mm-ck-table td:first-child { display: flex; align-items: center; gap: 6px; }
+.mm-ck-table td.mm-num { text-align: right; white-space: nowrap; }
+.mm-ck-table tr { cursor: pointer; }
+.mm-ck-table tr:hover td { background: var(--mm-soft); }

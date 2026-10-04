@@ -33,6 +33,53 @@ function stateOf(p) {
   return { k: "idle", t: "未着手" };
 }
 
+// ---- 点検(求められていること/足しすぎ/リソース/できた・できていない) ----
+const DAY = 864e5;
+const CAP_DAYS = 20; // 今後4週間の平日
+const CAP_MIN_PER_DAY = 8 * 60;
+function isRepeat(r) {
+  return r !== null && r !== undefined && r !== "";
+}
+function timesPerWeek(r) {
+  if (!isRepeat(r)) return 0;
+  if (r === "weekday" || r === "daily") return 5;
+  if (r === "satsun") return 0;
+  return 1;
+}
+function checkup(pjs, todayStr) {
+  const now = Date.now();
+  const horizon = toDateStr(new Date(now + 28 * DAY));
+  const rows = pjs.flatMap((p) => (p.tasks || []).flatMap((t) => (t.subtasks || []).map((s) => ({ p, t, s }))));
+  const open = rows.filter((r) => !r.s.done);
+  const oneOff = open.filter((r) => !isRepeat(r.s.repeatWeekday));
+  const recurring = open.filter((r) => isRepeat(r.s.repeatWeekday));
+  const inWindow = oneOff.filter((r) => !r.s.scheduledDate || r.s.scheduledDate <= horizon);
+  const oneOffMin = inWindow.reduce((a, r) => a + (r.s.estimatedMinutes || 0), 0);
+  const recurMin = recurring.reduce((a, r) => a + (r.s.estimatedMinutes || 0) * timesPerWeek(r.s.repeatWeekday) * 4, 0);
+  const capacity = CAP_DAYS * CAP_MIN_PER_DAY;
+  const load = oneOffMin + recurMin;
+  const recent = (ts) => ts && ts > now - 14 * DAY;
+  const hasPurpose = (p) => !!(p.purpose || "").trim();
+  const stale = pjs.filter((p) => {
+    const ss = (p.tasks || []).flatMap((t) => t.subtasks || []);
+    return ss.some((x) => !x.done) && !ss.some((x) => recent(x.createdAt) || recent(x.doneUpdatedAt));
+  });
+  return {
+    capacity, oneOffMin, recurMin, ratio: load / capacity, openCount: open.length,
+    noEst: inWindow.filter((r) => !r.s.estimatedMinutes),
+    added: rows.filter((r) => recent(r.s.createdAt)),
+    done: rows.filter((r) => r.s.done && recent(r.s.doneUpdatedAt)).sort((a, b) => b.s.doneUpdatedAt - a.s.doneUpdatedAt),
+    noPurpose: pjs.filter((p) => !hasPurpose(p)),
+    holdCands: oneOff.filter((r) => recent(r.s.createdAt) && (!hasPurpose(r.p) || (!r.s.estimatedMinutes && !r.s.scheduledDate))),
+    late: open.filter((r) => r.s.scheduledDate && r.s.scheduledDate < todayStr),
+    stale,
+    letGo: oneOff
+      .filter((r) => (r.p.priority || 2) >= 3 || !hasPurpose(r.p))
+      .sort((a, b) => (b.p.priority || 2) - (a.p.priority || 2) || (b.s.estimatedMinutes || 0) - (a.s.estimatedMinutes || 0)),
+  };
+}
+const hours = (m) => `${Math.round((m / 60) * 10) / 10}h`;
+
 function buildTree(rootLabel, themes, projects) {
   const pjNode = (p) => ({
     id: p.id, type: "pj", text: p.name, pj: p,
@@ -401,9 +448,106 @@ export default function MindMapView({ rootLabel, projects, themes, allProjects, 
     );
   }
 
+  function revealSub(r) {
+    const th = index.get(r.p.id)?.parent;
+    setOpen((o) => ({ ...o, ...(th ? { [th.id]: true } : {}), [r.p.id]: true, [r.t.id]: true }));
+    selectAndReveal(r.s.id);
+  }
+  function renderCheckup(pjNodes, withThemes) {
+    const c = checkup(pjNodes.map((pn) => pn.pj), todayStr);
+    const pct = Math.round(c.ratio * 100);
+    const lv = c.ratio >= 0.8 ? { k: "warn", t: "余裕なし" } : c.ratio >= 0.6 ? { k: "run", t: "ほどよい" } : { k: "ok", t: "余裕あり" };
+    const list = (rs, extra, max = 5) => (
+      <ul className="mm-ck-list">
+        {rs.slice(0, max).map((r) => (
+          <li key={r.s.id}>
+            <button type="button" className="mm-link" onClick={() => revealSub(r)}>{r.s.text}</button>
+            <span className="mm-muted">{r.p.name}{extra ? `・${extra(r)}` : ""}</span>
+          </li>
+        ))}
+        {rs.length > max && <li className="mm-muted">ほか {rs.length - max}件</li>}
+      </ul>
+    );
+    const pjList = (ps, max = 6) => (
+      <ul className="mm-ck-list">
+        {ps.slice(0, max).map((p) => <li key={p.id}><button type="button" className="mm-link" onClick={() => onOpenPJ(p.id)}>{p.name}</button></li>)}
+        {ps.length > max && <li className="mm-muted">ほか {ps.length - max}件</li>}
+      </ul>
+    );
+    return (
+      <div className="mm-ck">
+        <section>
+          <h5>リソース <span className="mm-muted">今後4週間・平日8時間</span></h5>
+          <div className="mm-sum">
+            <span className={`mm-pill mm-p-${lv.k}`}>{lv.t}</span>
+            <span className="mm-bar mm-cap"><i style={{ width: `${Math.min(100, pct)}%` }} /></span>
+            <span className="mm-num">{pct}%</span>
+          </div>
+          <p className="mm-ck-note">作業 {hours(c.oneOffMin)} ＋ 定例 {hours(c.recurMin)} ／ 労働時間 {hours(c.capacity)}。登録外の会議や突発に備え、8割を超えたら「余裕なし」。</p>
+          {c.noEst.length > 0 && <p className="mm-ck-note">見積なし {c.noEst.length}件はこの数字に入っていません。見積を入れると正確になります。</p>}
+          {c.ratio >= 0.8 && c.letGo.length > 0 && (
+            <>
+              <p className="mm-ck-sub">手放す・後ろに回す候補（優先度が低い／目的が空）</p>
+              {list(c.letGo, (r) => (r.s.estimatedMinutes ? hours(r.s.estimatedMinutes) : "見積なし"))}
+            </>
+          )}
+        </section>
+        <section>
+          <h5>求められていること</h5>
+          {c.noPurpose.length ? (
+            <>
+              <p className="mm-ck-note">「依頼元・ねらい」が空のPJが {c.noPurpose.length}件。PJ詳細で書くと、本質かどうか判断できます。</p>
+              {pjList(c.noPurpose)}
+            </>
+          ) : <p className="mm-ck-note">すべてのPJに依頼元・ねらいが入っています。</p>}
+        </section>
+        <section>
+          <h5>足しすぎていないか <span className="mm-muted">直近2週間</span></h5>
+          <p className="mm-ck-note">増えた <b className="mm-num">{c.added.length}</b> 件 ／ 終えた <b className="mm-num">{c.done.length}</b> 件</p>
+          {c.holdCands.length > 0 && (
+            <>
+              <p className="mm-ck-sub">保留にしてよいかもしれないもの（目的が空、または見積も期限もない新規）</p>
+              {list(c.holdCands)}
+            </>
+          )}
+        </section>
+        <section>
+          <h5>できたこと・できていないこと</h5>
+          {c.done.length ? (<><p className="mm-ck-sub">直近2週間に終えたもの</p>{list(c.done)}</>) : <p className="mm-ck-note">直近2週間に終えたものはまだありません。</p>}
+          {c.late.length > 0 && (<><p className="mm-ck-sub">持ち越し（予定日を過ぎた未完了）</p>{list(c.late, (r) => r.s.scheduledDate.slice(5).replace("-", "/"))}</>)}
+          {c.stale.length > 0 && (<><p className="mm-ck-sub">2週間動いていないPJ</p>{pjList(c.stale)}</>)}
+        </section>
+        {withThemes && (
+          <section>
+            <h5>テーマ別</h5>
+            <table className="mm-ck-table"><tbody>
+              {tree.children.filter((t) => t.type === "theme").map((t) => {
+                const tc = checkup(t.children.map((pn) => pn.pj), todayStr);
+                return (
+                  <tr key={t.id} onClick={() => selectAndReveal(t.id)}>
+                    <td><span className="mm-dot" style={{ "--bc": BRANCH[index.get(t.id)?.branch ?? 0] }} />{t.text}</td>
+                    <td className="mm-num">{tc.openCount}件</td>
+                    <td className="mm-num">{hours(tc.oneOffMin + tc.recurMin)}</td>
+                  </tr>
+                );
+              })}
+            </tbody></table>
+          </section>
+        )}
+      </div>
+    );
+  }
+
   function renderPanel() {
     if (!selNode) {
-      return <p className="mm-empty">箱を選ぶとここに中身が出ます。PJはダブルクリックで詳細を開きます。</p>;
+      const all = tree.children.flatMap((c) => (c.type === "pj" ? [c] : c.children));
+      return (
+        <>
+          <h4 className="mm-title">点検：{tree.text}</h4>
+          {renderCheckup(all, true)}
+          <p className="mm-empty">箱を選ぶとその中身が出ます。PJはダブルクリックで詳細を開きます。</p>
+        </>
+      );
     }
     const n = selNode;
     const pjRow = (pn) => {
@@ -459,7 +603,8 @@ export default function MindMapView({ rootLabel, projects, themes, allProjects, 
     const late = pjs.filter((pn) => stateOf(progressOf(pn, todayStr)).k === "warn").length;
     return (
       <>
-        <p className="mm-empty">PJ {pjs.length}件{late ? `・持ち越しあり ${late}件` : ""}</p>
+        {renderCheckup(pjs, n.type === "root")}
+        <h5 className="mm-h5">PJ {pjs.length}件{late ? `・持ち越しあり ${late}件` : ""}</h5>
         <div className="mm-pjlist">{pjs.length ? pjs.map(pjRow) : <p className="mm-empty">まだPJがありません。選んでTabで足せます。</p>}</div>
       </>
     );

@@ -845,6 +845,13 @@ function PJDetailModal({ project, onUpdateNote, onClose, onAddTask, onAddSubtask
           </div>
         </div>
 
+        <NoteField
+          title="依頼元・ねらい"
+          placeholder="誰に求められ、何のためにやるか（例：松岡COO／経営と現場をつなぐ）"
+          value={project.purpose || ""}
+          onChange={(v) => onUpdateNote(project.id, "purpose", v)}
+        />
+
         {(() => {
           const rate = Math.max(0, Math.min(100, Number(project.progressRate) || 0));
           return (
