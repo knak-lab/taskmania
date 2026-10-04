@@ -29,3 +29,6 @@ dist-ssr
 
 # Icon generation working files (source assets, not tracked)
 icon/
+
+# 実データのバックアップ・整理用スクリプト(コミットしない)
+data-cleanup/

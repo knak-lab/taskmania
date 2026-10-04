@@ -91,8 +91,9 @@ const SHEET_SUBTASKS = "Subtasks";
 const SHEET_STEPS = "Steps";
 const SHEET_MOYAMOYA = "MoyamoyaNotes";
 const SHEET_WORKADJ = "WorkAdjustments";
+const SHEET_THEMES = "Themes";
 
-const PROJECTS_HEADERS = ["id", "owner", "name", "subcategory", "priority", "status", "completedNote", "nextAction", "moyamoya"];
+const PROJECTS_HEADERS = ["id", "owner", "name", "subcategory", "priority", "status", "completedNote", "nextAction", "moyamoya", "progressRate", "themeId"];
 const TASKS_HEADERS = ["id", "projectId", "name", "startDate", "endDate", "estimatedMinutes", "sourceTodoId", "done"];
 const SUBTASKS_HEADERS = [
   "id",
@@ -113,6 +114,8 @@ const SUBTASKS_HEADERS = [
 const STEPS_HEADERS = ["id", "subtaskId", "text", "done"];
 const MOYAMOYA_HEADERS = ["id", "text"];
 const WORKADJ_HEADERS = ["date", "hours"];
+// マップ画面のテーマ(PJの上の見出し)。並び順はシートの行順
+const THEMES_HEADERS = ["id", "owner", "subcategory", "name"];
 
 /**
  * Googleカレンダー送信機能の初回権限付与用。エディタの関数選択でこれを選び、
@@ -132,6 +135,7 @@ function setup() {
   getOrCreateSheet_(SHEET_STEPS, STEPS_HEADERS);
   getOrCreateSheet_(SHEET_MOYAMOYA, MOYAMOYA_HEADERS);
   getOrCreateSheet_(SHEET_WORKADJ, WORKADJ_HEADERS);
+  getOrCreateSheet_(SHEET_THEMES, THEMES_HEADERS);
   Logger.log("セットアップ完了: Projects / Tasks / Subtasks / Steps / MoyamoyaNotes / WorkAdjustments シートを用意しました");
 }
 
@@ -139,7 +143,8 @@ function doGet(e) {
   const projects = readProjects_();
   const moyamoyaNotes = readMoyamoyaNotes_();
   const workAdj = readWorkAdj_();
-  return jsonResponse_({ projects: projects, moyamoyaNotes: moyamoyaNotes, workAdj: workAdj });
+  const themes = readThemes_();
+  return jsonResponse_({ projects: projects, moyamoyaNotes: moyamoyaNotes, workAdj: workAdj, themes: themes });
 }
 
 function doPost(e) {
@@ -149,6 +154,7 @@ function doPost(e) {
     let moyamoyaCount = null;
     let workAdjCount = null;
     let calendarEventId = null;
+    let themeCount = null;
     if (body.projects !== undefined) {
       writeProjects_(body.projects || []);
       projectCount = (body.projects || []).length;
@@ -161,10 +167,14 @@ function doPost(e) {
       writeWorkAdj_(body.workAdj || []);
       workAdjCount = (body.workAdj || []).length;
     }
+    if (body.themes !== undefined) {
+      writeThemes_(body.themes || []);
+      themeCount = (body.themes || []).length;
+    }
     if (body.calendarEvent !== undefined) {
       calendarEventId = createCalendarEvent_(body.calendarEvent);
     }
-    return jsonResponse_({ ok: true, projectCount: projectCount, moyamoyaCount: moyamoyaCount, workAdjCount: workAdjCount, calendarEventId: calendarEventId });
+    return jsonResponse_({ ok: true, projectCount: projectCount, moyamoyaCount: moyamoyaCount, workAdjCount: workAdjCount, themeCount: themeCount, calendarEventId: calendarEventId });
   } catch (err) {
     return jsonResponse_({ ok: false, error: String(err) });
   }
@@ -294,7 +304,9 @@ function readProjects_() {
         status = r[5],
         completedNote = r[6],
         nextAction = r[7],
-        moyamoya = r[8];
+        moyamoya = r[8],
+        progressRate = r[9],
+        themeId = r[10];
       return {
         id: String(id),
         owner: owner || "",
@@ -305,6 +317,8 @@ function readProjects_() {
         completedNote: completedNote || "",
         nextAction: nextAction || "",
         moyamoya: moyamoya === true || moyamoya === "TRUE" || moyamoya === "true",
+        progressRate: progressRate === "" || progressRate == null ? null : Number(progressRate),
+        themeId: themeId ? String(themeId) : null,
         tasks: tasksByProject[id] || [],
       };
     });
@@ -366,7 +380,7 @@ function writeProjects_(projects) {
   const stepRows = [];
 
   (projects || []).forEach(function (p) {
-    projRows.push([p.id, p.owner || "", p.name || "", p.subcategory || "", p.priority || 2, p.status || "", p.completedNote || "", p.nextAction || "", !!p.moyamoya]);
+    projRows.push([p.id, p.owner || "", p.name || "", p.subcategory || "", p.priority || 2, p.status || "", p.completedNote || "", p.nextAction || "", !!p.moyamoya, p.progressRate != null ? p.progressRate : "", p.themeId || ""]);
     (p.tasks || []).forEach(function (t) {
       taskRows.push([t.id, p.id, t.name || "", t.startDate || "", t.endDate || "", t.estimatedMinutes || "", t.sourceTodoId || "", !!t.done]);
       (t.subtasks || []).forEach(function (s) {
@@ -399,6 +413,25 @@ function writeProjects_(projects) {
   writeRowsReplacing_(stepSheet, stepRows, STEPS_HEADERS.length);
 }
 
+function readThemes_() {
+  const sheet = getOrCreateSheet_(SHEET_THEMES, THEMES_HEADERS);
+  return getDataRows_(sheet)
+    .filter(function (r) {
+      return r[0];
+    })
+    .map(function (r) {
+      return { id: String(r[0]), owner: r[1] || "", subcategory: r[2] || null, name: r[3] || "" };
+    });
+}
+
+function writeThemes_(themes) {
+  const sheet = getOrCreateSheet_(SHEET_THEMES, THEMES_HEADERS);
+  const rows = (themes || []).map(function (t) {
+    return [t.id, t.owner || "", t.subcategory || "", t.name || ""];
+  });
+  writeRowsReplacing_(sheet, rows, THEMES_HEADERS.length);
+}
+
 // ---- ユーティリティ ----
 
 function getOrCreateSheet_(name, headers) {
@@ -408,6 +441,9 @@ function getOrCreateSheet_(name, headers) {
     sheet = ss.insertSheet(name);
     sheet.appendRow(headers);
     sheet.setFrozenRows(1);
+  } else if (sheet.getLastColumn() < headers.length) {
+    // 列を後から足した既存シートは、見出し行だけ新しい列名で埋める(データ行はそのまま)
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
   }
   // scheduledDate / startTime 列(Subtasksの6,7列目)をテキスト形式に固定し、
   // "2026-07-20" などが日付型に自動変換されてズレるのを防ぐ

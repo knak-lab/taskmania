@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import * as XLSX from "xlsx";
-import { loadAppData, loadKamoTodos, saveProjects as gasSave, saveMoyamoyaNotes as gasSaveMoyamoyaNotes, saveWorkAdj as gasSaveWorkAdj, sendToCalendar as gasSendToCalendar } from "./api/gas";
+import { loadAppData, loadKamoTodos, saveProjects as gasSave, saveMoyamoyaNotes as gasSaveMoyamoyaNotes, saveWorkAdj as gasSaveWorkAdj, saveThemes as gasSaveThemes, sendToCalendar as gasSendToCalendar } from "./api/gas";
+import MindMapView from "./MindMapView";
 
 const TOP_TABS = [
   { key: "総合", label: "総合", color: "#2C3645" },
@@ -1897,6 +1898,8 @@ export default function App() {
   const skipNextMoyamoyaSaveRef = useRef(false);
   const workAdjSaveTimer = useRef(null);
   const skipNextWorkAdjSaveRef = useRef(false);
+  const themesSaveTimer = useRef(null);
+  const skipNextThemesSaveRef = useRef(false);
 
   // 初回ロード
   const handleLoad = async () => {
@@ -1911,6 +1914,8 @@ export default function App() {
       setMoyamoyaNotes(data.moyamoyaNotes);
       skipNextWorkAdjSaveRef.current = true;
       setWorkAdj(data.workAdj);
+      skipNextThemesSaveRef.current = true;
+      setThemes(data.themes);
       hasLoadedRef.current = true;
       setSaveState("idle");
       try {
@@ -2111,6 +2116,23 @@ export default function App() {
   const estWarnLevel = estRatio >= 0.8 ? "red" : estRatio >= 0.6 ? "amber" : null;
   // 脳バッジ用: 未来(表示中の日付が今日以降)は想定時間、過去は実績時間で集計する
   const dayBrainRatio = (dayViewDate >= todayStr ? totalEstMin : totalActualMin) / WORK_MINUTES;
+
+  // マップ画面のテーマ(PJの上の見出し。PJ側のthemeIdで所属を持つ)。スプレッドシート経由で端末間同期
+  const [themes, setThemes] = useState([]);
+  useEffect(() => {
+    if (!hasLoadedRef.current) return;
+    if (skipNextThemesSaveRef.current) { skipNextThemesSaveRef.current = false; return; }
+    clearTimeout(themesSaveTimer.current);
+    themesSaveTimer.current = setTimeout(() => {
+      gasSaveThemes(themes).catch(() => setSaveState("error"));
+    }, 800);
+    return () => clearTimeout(themesSaveTimer.current);
+  }, [themes]);
+  const visibleThemes = useMemo(() => {
+    if (topTab === "総合") return themes;
+    if (topTab === "家族") return themes.filter((t) => t.owner === "家族");
+    return themes.filter((t) => t.owner === topTab && (subTab === "総合" || t.subcategory === subTab));
+  }, [themes, topTab, subTab]);
 
   // もやもや(フリーテキストのメモ。スプレッドシート経由で端末間同期)
   const [moyamoyaNotes, setMoyamoyaNotes] = useState([]);
@@ -3107,7 +3129,7 @@ export default function App() {
         <section style={{ ...styles.panel, borderColor: activeTopColor, borderRadius: PERSON_KEYS.includes(topTab) ? "0 0 10px 10px" : styles.panel.borderRadius }}>
           {showTaskSections && (
             <nav style={styles.viewSwitcher} role="tablist" aria-label="表示切替">
-              {[{ k: "today", label: "今日" }, { k: "overview", label: "俯瞰" }, { k: "pj", label: "PJ" }].map((v) => (
+              {[{ k: "today", label: "今日" }, { k: "overview", label: "俯瞰" }, { k: "pj", label: "PJ" }, { k: "map", label: "マップ" }].map((v) => (
                 <button key={v.k} type="button" role="tab" aria-selected={mainView === v.k} onClick={() => setMainView(v.k)}
                   style={{ ...styles.viewSwitcherBtn, background: mainView === v.k ? activeTopColor : "transparent", color: mainView === v.k ? "#FFFFFF" : activeTopColor, borderColor: activeTopColor }}>
                   {v.label}
@@ -3440,6 +3462,21 @@ export default function App() {
               <p style={styles.ganttHint}>PJ名またはバーを押すとPJ詳細。▸で配下タスクを展開。</p>
               <OverviewGanttChart projects={visibleProjects} onOpenPJ={setPjDetailModal} />
             </>
+          )}
+
+          {showTaskSections && mainView === "map" && (
+            <MindMapView
+              rootLabel={topTab === "総合" ? "総合" : topTab === "家族" ? "家族" : subTab === "総合" ? topTab : `${topTab}・${SUB_TABS.find((s) => s.key === subTab)?.label || subTab}`}
+              projects={visibleProjects.filter((p) => !p.status)}
+              themes={visibleThemes}
+              allProjects={projects || []}
+              allThemes={themes}
+              scope={{ owner: effectiveOwner, subcategory: ownerHasSub ? addSub : null }}
+              setProjects={setProjects}
+              setThemes={setThemes}
+              onOpenPJ={setPjDetailModal}
+              onToggleSub={toggleSubtaskDone}
+            />
           )}
 
           {showTaskSections && mainView === "pj" && <h3 style={{ ...styles.sectionTitle, fontWeight: 900 }}>タスク一覧</h3>}

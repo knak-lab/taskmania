@@ -24,7 +24,7 @@ export async function loadKamoTodos() {
 
 export async function loadAppData() {
   const data = await fetchGasJson(GAS_URL, undefined);
-  return { projects: data.projects || [], moyamoyaNotes: data.moyamoyaNotes || [], workAdj: data.workAdj || [] };
+  return { projects: data.projects || [], moyamoyaNotes: data.moyamoyaNotes || [], workAdj: data.workAdj || [], themes: data.themes || [] };
 }
 
 export async function saveProjects(projects) {
@@ -56,5 +56,13 @@ export async function saveWorkAdj(workAdj) {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
     body: JSON.stringify({ workAdj }),
+  });
+}
+
+export async function saveThemes(themes) {
+  return fetchGasJson(GAS_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({ themes }),
   });
 }
