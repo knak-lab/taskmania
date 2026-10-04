@@ -1,0 +1,24 @@
+{
+  "name": "タスクマニア",
+  "short_name": "タスクマニア",
+  "description": "タスク管理アプリ",
+  "start_url": "/taskmania/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#e8630c",
+  "background_color": "#f7f7fb",
+  "icons": [
+    {
+      "src": "/taskmania/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/taskmania/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
