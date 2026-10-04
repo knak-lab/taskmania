@@ -25,10 +25,10 @@ const PRIORITIES = [
 ];
 
 const PJ_PRIORITIES = [
-  { v: 1, label: "重要・緊急", color: "#F39800" },
-  { v: 2, label: "重要・不急", color: "#8B6F3E" },
-  { v: 3, label: "軽微・緊急", color: "#12314F" },
-  { v: 4, label: "軽微・不急", color: "#7A7A7A" },
+  { v: 1, label: "重要×緊急", color: "#F39800" },
+  { v: 2, label: "重要×不急", color: "#8B6F3E" },
+  { v: 3, label: "低優先×緊急", color: "#12314F" },
+  { v: 4, label: "低優先×不急", color: "#7A7A7A" },
 ];
 
 const PJ_STATUSES = [
@@ -598,13 +598,17 @@ function GanttTodayLine({ offset, colWidth }) {
   );
 }
 
-function GanttLabelCell({ name, pct }) {
-  return (
-    <div style={styles.ganttLabelCell} title={name}>
+function GanttLabelCell({ name, pct, onClick }) {
+  const body = (
+    <>
       <span style={styles.ganttLabelName}>{name}</span>
       <span style={styles.ganttLabelPct}>{pct == null ? "–" : `${pct}%`}</span>
-    </div>
+    </>
   );
+  if (onClick) {
+    return <button type="button" onClick={onClick} style={{ ...styles.ganttLabelCell, ...styles.ganttLabelBtn }} title={name}>{body}</button>;
+  }
+  return <div style={styles.ganttLabelCell} title={name}>{body}</div>;
 }
 
 function GanttChart({ project }) {
@@ -662,7 +666,7 @@ function GanttChart({ project }) {
   );
 }
 
-function OverviewGanttChart({ projects, onOpenPJ }) {
+function OverviewGanttChart({ projects, onOpenPJ, onOpenTask }) {
   const [granularity, setGranularity] = useState("month");
   const [openPJ, setOpenPJ] = useState(() => new Set());
   const todayStr = toDateStr(new Date());
@@ -730,7 +734,7 @@ function OverviewGanttChart({ projects, onOpenPJ }) {
               <span style={styles.ganttPjCount}>{r.totalSum ? `${Math.round((r.doneSum / r.totalSum) * 100)}%` : `${r.taskRows.length}件`}</span>
             </div>
           ) : (
-            <GanttLabelCell key={r.id + "-label"} name={r.name} pct={r.total ? Math.round((r.done / r.total) * 100) : null} />
+            <GanttLabelCell key={r.id + "-label"} name={r.name} pct={r.total ? Math.round((r.done / r.total) * 100) : null} onClick={onOpenTask ? () => onOpenTask(r.pjId, r.id) : undefined} />
           ))}
         </div>
         <div style={styles.ganttScroll}>
@@ -755,10 +759,11 @@ function OverviewGanttChart({ projects, onOpenPJ }) {
               const pct = r.total ? Math.round((r.done / r.total) * 100) : 0;
               const st = ganttStatusOf(r.startDate, r.endDate, r.done, r.total, todayStr);
               return (
-                <div key={r.id + "-bar"} style={{ ...styles.ganttBarTrack, background: st.color + "30", gridRow: idx + 2, gridColumn: `${s + 1} / ${e + 2}` }}
+                <button type="button" key={r.id + "-bar"} onClick={() => onOpenTask && onOpenTask(r.pjId, r.id)}
+                  style={{ ...styles.ganttBarTrack, ...styles.ganttPjBarTrack, background: st.color + "30", gridRow: idx + 2, gridColumn: `${s + 1} / ${e + 2}` }}
                   title={`${r.name}　${formatDate(r.startDate)}〜${formatDate(r.endDate)}　${r.done}/${r.total}　${st.label}`}>
                   <div style={{ ...styles.ganttBarFill, width: r.total ? `${pct}%` : "100%", background: st.color }} />
-                </div>
+                </button>
               );
             })}
           </div>
@@ -1873,6 +1878,8 @@ export default function App() {
   const [dashboardOpen, setDashboardOpen] = useState(false);
   const [moveDateModal, setMoveDateModal] = useState(null);
   const [calSubtaskModal, setCalSubtaskModal] = useState(null);
+  // 俯瞰ガントからタスクを押したときの編集モーダル({ pjId, taskId })
+  const [taskEditModal, setTaskEditModal] = useState(null);
   const [calGranularity, setCalGranularity] = useState("week");
   const [calDate, setCalDate] = useState(() => toDateStr(new Date()));
   const [calCollapsed, setCalCollapsed] = useState(false);
@@ -3467,7 +3474,7 @@ export default function App() {
                 <h3 style={{ ...styles.sectionTitleFlush, fontWeight: 900 }}>ガントチャート（全PJ）</h3>
               </div>
               <p style={styles.ganttHint}>PJ名またはバーを押すとPJ詳細。▸で配下タスクを展開。</p>
-              <OverviewGanttChart projects={visibleProjects} onOpenPJ={setPjDetailModal} />
+              <OverviewGanttChart projects={visibleProjects} onOpenPJ={setPjDetailModal} onOpenTask={(pjId, taskId) => setTaskEditModal({ pjId, taskId })} />
             </>
           )}
 
@@ -3492,6 +3499,82 @@ export default function App() {
             const p = (projects || []).find((pp) => pp.id === pjDetailModal);
             if (!p) return null;
             return <PJDetailModal project={p} onUpdateNote={updatePJNote} onClose={() => setPjDetailModal(null)} onAddTask={openAddTaskModal} onAddSubtask={openAddSubtaskModal} />;
+          })()}
+
+          {taskEditModal && (() => {
+            // PJ変更でpjIdが変わっても追従できるよう、taskIdで全PJから引き直す
+            const p = (projects || []).find((pp) => pp.tasks.some((tt) => tt.id === taskEditModal.taskId));
+            const t = p?.tasks.find((tt) => tt.id === taskEditModal.taskId);
+            if (!t) return null;
+            const pjId = p.id;
+            const { done: td, total: tt } = taskProgress(t);
+            const close = () => setTaskEditModal(null);
+            return (
+              <div style={styles.modalOverlay} onClick={close}>
+                <div style={styles.modalBox} onClick={(e) => e.stopPropagation()}>
+                  <div style={styles.modalHeader}>
+                    <h3 style={styles.modalTitle}>タスクを編集</h3>
+                    <button type="button" onClick={close} aria-label="閉じる" style={styles.modalCloseBtn}>×</button>
+                  </div>
+                  <p style={styles.modalContext}>{p.name}</p>
+                  <div style={{ ...styles.calendarLine1, marginBottom: 10 }}>
+                    <button onClick={() => toggleTaskDone(pjId, t.id)} aria-label={t.done ? "未完了に戻す" : "完了にする"} style={styles.stampWrap}>
+                      {t.done ? <span style={styles.hankoStamp} className={stamping === t.id ? "hanko-pop" : ""}>済</span> : <span style={styles.hankoEmpty} />}
+                    </button>
+                    <input
+                      type="text"
+                      value={t.name}
+                      onChange={(e) => updateTaskName(pjId, t.id, e.target.value)}
+                      aria-label="タスク名を編集"
+                      style={{ ...styles.calSubCol, border: "1.5px solid #E5E5E5", borderRadius: 5, padding: "3px 6px", fontFamily: "inherit", textDecoration: t.done ? "line-through" : "none", color: t.done ? "#9B9B9B" : "#2C3645" }}
+                    />
+                    <span style={styles.progressTagSm}>{td}/{tt}</span>
+                  </div>
+                  <div style={styles.scheduleEditRow}>
+                    <label style={styles.scheduleEditField}>
+                      <span style={styles.scheduleEditLabel}>開始日</span>
+                      <input type="date" value={t.startDate || ""} onChange={(e) => updateTaskDate(pjId, t.id, "startDate", e.target.value)} max={t.endDate || undefined} style={styles.scheduleEditInput} />
+                    </label>
+                    <label style={styles.scheduleEditField}>
+                      <span style={styles.scheduleEditLabel}>終了日</span>
+                      <input type="date" value={t.endDate || ""} onChange={(e) => updateTaskDate(pjId, t.id, "endDate", e.target.value)} min={t.startDate || undefined} style={styles.scheduleEditInput} />
+                    </label>
+                    <label style={styles.scheduleEditField}>
+                      <span style={styles.scheduleEditLabel}>想定(分)</span>
+                      <input type="number" min="0" step="15" value={t.estimatedMinutes ?? ""} onChange={(e) => updateTaskEstimatedMinutes(pjId, t.id, e.target.value)}
+                        placeholder={taskEstimatedSubtotal(t) ? String(taskEstimatedSubtotal(t)) : "―"} style={{ ...styles.scheduleEditInput, width: 64 }} />
+                    </label>
+                    <label style={styles.scheduleEditField}>
+                      <span style={styles.scheduleEditLabel}>PJ</span>
+                      <select value={pjId} onChange={(e) => moveTask(pjId, t.id, e.target.value)} style={styles.moveSelect}>
+                        {projects.map((pp) => <option key={pp.id} value={pp.id}>{pp.name}</option>)}
+                      </select>
+                    </label>
+                  </div>
+                  <div style={{ ...styles.sectionTitleRow, marginTop: 12 }}>
+                    <h4 style={styles.sectionTitleFlush}>サブタスク</h4>
+                    <button type="button" onClick={() => openAddSubtaskModal(pjId, t.id, p.name, t.name)} style={styles.inlineAddBtn}>＋サブ</button>
+                  </div>
+                  <ul style={styles.detailTaskList}>
+                    {t.subtasks.length === 0 && <li style={styles.emptySmall}>サブタスクなし</li>}
+                    {t.subtasks.map((s) => (
+                      <li key={s.id} style={{ ...styles.calendarLine1, marginBottom: 4 }}>
+                        <button onClick={() => toggleSubtaskDone(pjId, t.id, s.id)} aria-label={s.done ? "未完了に戻す" : "完了にする"} style={styles.stampWrap}>
+                          {s.done ? <span style={styles.hankoStamp} className={stamping === s.id ? "hanko-pop" : ""}>済</span> : <span style={styles.hankoEmpty} />}
+                        </button>
+                        <button type="button" onClick={() => setCalSubtaskModal({ pjId, taskId: t.id, subId: s.id })} style={{ ...styles.taskEditSubBtn, textDecoration: s.done ? "line-through" : "none", color: s.done ? "#9B9B9B" : "#2C3645" }} title="サブタスクを編集">
+                          {s.text}{s.scheduledDate ? `　${formatDate(s.scheduledDate)}` : ""}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                  <div style={{ ...styles.modalActions, justifyContent: "space-between" }}>
+                    <button type="button" onClick={() => removeTask(pjId, t.id)} style={styles.inlineAddBtn}>タスクを削除</button>
+                    <button type="button" onClick={close} style={styles.addBtn}>閉じる</button>
+                  </div>
+                </div>
+              </div>
+            );
           })()}
 
           {(() => {
@@ -3982,6 +4065,8 @@ const styles = {
   ganttPjToggle: { background: "none", border: "none", cursor: "pointer", fontSize: 10, color: "#2C3645", padding: 0, width: 12, flexShrink: 0, fontFamily: "inherit", lineHeight: 1 },
   ganttPjNameBtn: { flex: 1, minWidth: 0, background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", fontSize: 11, fontWeight: 700, color: "#12314F", textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", padding: 0, textDecoration: "underline" },
   ganttPjBarTrack: { border: "none", padding: 0, cursor: "pointer" },
+  ganttLabelBtn: { width: "100%", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", textAlign: "left", padding: "0 6px 0 0", textDecoration: "underline", textDecorationColor: "#C8C8C8" },
+  taskEditSubBtn: { flex: 1, minWidth: 0, background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", fontSize: 12.5, textAlign: "left", padding: "2px 0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
 
   // 「今日」ビュー
   todayView: { display: "flex", flexDirection: "column" },
