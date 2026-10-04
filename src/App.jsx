@@ -3490,6 +3490,7 @@ export default function App() {
               setThemes={setThemes}
               onOpenPJ={setPjDetailModal}
               onToggleSub={toggleSubtaskDone}
+              onOpenSub={(pjId, taskId, subId) => setCalSubtaskModal({ pjId, taskId, subId })}
             />
           )}
 

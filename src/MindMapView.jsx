@@ -102,7 +102,7 @@ function loadOpen() {
   try { return JSON.parse(localStorage.getItem("tm_map_open") || "{}"); } catch { return {}; }
 }
 
-export default function MindMapView({ rootLabel, projects, themes, allProjects, allThemes, scope, setProjects, setThemes, onOpenPJ, onToggleSub }) {
+export default function MindMapView({ rootLabel, projects, themes, allProjects, allThemes, scope, setProjects, setThemes, onOpenPJ, onToggleSub, onOpenSub }) {
   const todayStr = toDateStr(new Date());
   const [open, setOpen] = useState(loadOpen);
   const [sel, setSel] = useState(null);
@@ -348,8 +348,10 @@ export default function MindMapView({ rootLabel, projects, themes, allProjects, 
   function onNodeClick(e, n) {
     if (e.target.closest(".mm-tog") || e.target.tagName === "INPUT") return;
     focusMap();
-    if (n.type === "sub" && sel === n.id) { onToggleSub(n.pjId, n.taskId, n.id); return; }
+    // サブタスクは左端の□で完了切替、それ以外の部分を押すと編集モーダル
+    if (n.type === "sub" && e.target.closest(".mm-check")) { setSel(n.id); onToggleSub(n.pjId, n.taskId, n.id); return; }
     setSel(n.id);
+    if (n.type === "sub" && onOpenSub) onOpenSub(n.pjId, n.taskId, n.id);
   }
   function onKeyDown(e) {
     if (editing || draft || e.target !== wrapRef.current) return;
@@ -570,7 +572,7 @@ export default function MindMapView({ rootLabel, projects, themes, allProjects, 
           {openSubs.map((s) => (
             <li key={s.id}>
               <input type="checkbox" checked={false} onChange={() => onToggleSub(s.pjId, s.taskId, s.id)} aria-label="完了にする" />
-              <span>{s.text}</span>
+              <button type="button" className="mm-sublink" onClick={() => onOpenSub && onOpenSub(s.pjId, s.taskId, s.id)} title="サブタスクを編集">{s.text}</button>
               {s.date && <span className={`mm-d${s.date < todayStr ? " mm-late" : ""}`}>{s.date.slice(5).replace("-", "/")}</span>}
             </li>
           ))}
@@ -597,7 +599,12 @@ export default function MindMapView({ rootLabel, projects, themes, allProjects, 
     }
     if (n.type === "task") return subList(n);
     if (n.type === "sub") {
-      return <label className="mm-sum"><input type="checkbox" checked={n.done} onChange={() => onToggleSub(n.pjId, n.taskId, n.id)} />完了にする{n.date && <span className="mm-muted">（予定 {n.date}）</span>}</label>;
+      return (
+        <>
+          <label className="mm-sum"><input type="checkbox" checked={n.done} onChange={() => onToggleSub(n.pjId, n.taskId, n.id)} />完了にする{n.date && <span className="mm-muted">（予定 {n.date}）</span>}</label>
+          {onOpenSub && <button type="button" className="mm-primary" onClick={() => onOpenSub(n.pjId, n.taskId, n.id)}>編集する</button>}
+        </>
+      );
     }
     const pjs = n.type === "theme" ? n.children : n.children.flatMap((c) => (c.type === "pj" ? [c] : c.children));
     const late = pjs.filter((pn) => stateOf(progressOf(pn, todayStr)).k === "warn").length;

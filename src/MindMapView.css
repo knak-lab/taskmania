@@ -58,6 +58,9 @@
 .mm-subs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; }
 .mm-subs li { display: flex; align-items: flex-start; gap: 6px; line-height: 1.5; }
 .mm-subs input { margin-top: 3px; }
+.mm-sublink { flex: 1; min-width: 0; background: none; border: none; padding: 0; font: inherit; color: inherit; text-align: left; line-height: 1.5; cursor: pointer; }
+.mm-sublink:hover { text-decoration: underline; }
+.mm-node .mm-check { cursor: pointer; }
 .mm-d { margin-left: auto; font-size: 11px; color: var(--mm-muted); font-family: ui-monospace, Consolas, monospace; white-space: nowrap; }
 .mm-late { color: var(--mm-warn); font-weight: 700; }
 .mm-pjlist { display: flex; flex-direction: column; gap: 8px; }
