@@ -330,11 +330,12 @@ export default function MindMapView({ rootLabel, projects, themes, allProjects, 
     setOpen((o) => ({ ...o, [target.id]: true }));
     flash(`「${drag.text}」を「${target.text}」の下へ移しました`, true);
   }
-  function setAll(n, value) {
-    const next = {};
-    const walk = (x) => { if (x.children.length && x.type !== "task") next[x.id] = value; x.children.forEach((c) => c.type !== "sub" && walk(c)); };
-    walk(n);
-    setOpen((o) => ({ ...o, ...next }));
+  // すべて開く: PJまで見せる(テーマは開き、PJはたたむ) / 全てたたむ: テーマもたたむ。PJ配下は常にたたむ
+  function setAll(themesOpen) {
+    const next = { [tree.id]: true };
+    const walk = (x) => { x.children.forEach((c) => { if (c.type === "sub") return; next[c.id] = c.type === "theme" ? themesOpen : false; walk(c); }); };
+    walk(tree);
+    setOpen(next);
   }
   function selectAndReveal(id) {
     setSel(id);
@@ -634,8 +635,8 @@ export default function MindMapView({ rootLabel, projects, themes, allProjects, 
         <button type="button" onClick={remove} disabled={!selNode || selNode.type === "root"}>削除 <kbd>Del</kbd></button>
         <button type="button" onClick={undo} disabled={!undoStack.length}>戻す</button>
         <span className="mm-sp" />
-        <button type="button" onClick={() => setAll(selNode || tree, true)}>全部開く</button>
-        <button type="button" onClick={() => setOpen({})}>たたむ</button>
+        <button type="button" onClick={() => setAll(true)}>すべて開く</button>
+        <button type="button" onClick={() => setAll(false)}>全てたたむ</button>
         <button type="button" onClick={() => setZoom((z) => Math.max(0.5, +(z - 0.1).toFixed(1)))} aria-label="縮小">−</button>
         <button type="button" onClick={() => setZoom((z) => Math.min(1.4, +(z + 0.1).toFixed(1)))} aria-label="拡大">＋</button>
       </div>
