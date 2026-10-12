@@ -325,7 +325,33 @@ function addDaysStr(dateStr, days) {
 const WEEKDAY_LABELS = ["日", "月", "火", "水", "木", "金", "土"];
 const MON_FIRST_LABELS = ["月", "火", "水", "木", "金", "土", "日"];
 
+// 毎月第N◯曜は "m{N}-{曜日}" で持つ(N=1〜4、5は最終)。例: "m2-3" = 毎月第2水曜
+function parseMonthlyRepeat(v) {
+  const m = typeof v === "string" && v.match(/^m([1-5])-([0-6])$/);
+  return m ? { n: Number(m[1]), w: Number(m[2]) } : null;
+}
+function monthlyRepeatValue(n, w) {
+  return `m${n}-${w}`;
+}
+function monthlyRepeatLabel(n, w) {
+  return `${n === 5 ? "最終" : `第${n}`}${WEEKDAY_LABELS[w]}曜`;
+}
+// 日付から「第何◯曜」を求める(29日以降=5回目は最終扱い)
+function monthlyRepeatFromDate(dateStr) {
+  const d = new Date(dateStr + "T00:00:00");
+  return monthlyRepeatValue(Math.min(5, Math.ceil(d.getDate() / 7)), d.getDay());
+}
+// y年m月(1始まり)の毎月繰り返し日。n=5は最終◯曜
+function monthlyRepeatDateIn(y, m, n, w) {
+  if (n !== 5) return nthWeekdayOfMonth(y, m, w, n);
+  const last = new Date(y, m, 0);
+  last.setDate(last.getDate() - ((last.getDay() - w + 7) % 7));
+  return toDateStr(last);
+}
+
 function repeatWeekdayShortLabel(v) {
+  const mr = parseMonthlyRepeat(v);
+  if (mr) return monthlyRepeatLabel(mr.n, mr.w);
   if (v === "daily") return "毎日";
   if (v === "weekday") return "平日";
   if (v === "satsun") return "土日";
@@ -336,6 +362,8 @@ function repeatWeekdayShortLabel(v) {
 }
 
 function repeatWeekdayTitle(v) {
+  const mr = parseMonthlyRepeat(v);
+  if (mr) return `毎月${monthlyRepeatLabel(mr.n, mr.w)}`;
   if (v === "daily") return "毎日";
   if (v === "weekday") return "平日(月〜金・祝日除く)";
   if (v === "satsun") return "毎週土曜・日曜";
@@ -472,6 +500,16 @@ function computeNextRecurrenceDate(currentDateStr, weekday, shiftHoliday) {
     let d = addDaysStr(currentDateStr, 1);
     while (![0, 6].includes(new Date(d + "T00:00:00").getDay())) d = addDaysStr(d, 1);
     return d;
+  }
+  const mr = parseMonthlyRepeat(weekday);
+  if (mr) {
+    const [y, m] = currentDateStr.split("-").map(Number);
+    let next = monthlyRepeatDateIn(y, m, mr.n, mr.w);
+    if (next <= currentDateStr) next = monthlyRepeatDateIn(m === 12 ? y + 1 : y, m === 12 ? 1 : m + 1, mr.n, mr.w);
+    if (shiftHoliday) {
+      while (isWeekendOrHoliday(next)) next = addDaysStr(next, 1);
+    }
+    return next;
   }
   if (weekday === "3m") return addMonthsPreserveDay(currentDateStr, 3);
   if (weekday === "6m") return addMonthsPreserveDay(currentDateStr, 6);
@@ -2942,17 +2980,34 @@ export default function App() {
                                             </label>
                                             <label style={styles.scheduleEditField}>
                                               <span style={styles.scheduleEditLabel}>繰り返し{p.owner === "kkr" && p.subcategory === "仕事" ? "(休日は翌日へ)" : ""}</span>
-                                              <select value={s.repeatWeekday ?? ""} onChange={(e) => updateSubtaskSchedule(p.id, t.id, s.id, "repeatWeekday", e.target.value === "" ? "" : (["weekday", "satsun", "daily", "3m", "6m", "1y"].includes(e.target.value) ? e.target.value : Number(e.target.value)))} style={styles.scheduleEditInput}>
+                                              <select value={parseMonthlyRepeat(s.repeatWeekday) ? "monthly" : (s.repeatWeekday ?? "")} onChange={(e) => { const v = e.target.value; updateSubtaskSchedule(p.id, t.id, s.id, "repeatWeekday", v === "" ? "" : v === "monthly" ? monthlyRepeatFromDate(s.scheduledDate || toDateStr(new Date())) : /^\d$/.test(v) ? Number(v) : v); }} style={styles.scheduleEditInput}>
                                                 <option value="">なし</option>
                                                 <option value="daily">毎日</option>
                                                 <option value="weekday">平日(月〜金・祝日除く)</option>
                                                 <option value="satsun">毎週土曜・日曜</option>
                                                 {WEEKDAY_LABELS.map((label, idx) => <option key={idx} value={idx}>毎週{label}曜</option>)}
+                                                <option value="monthly">毎月第N◯曜</option>
                                                 <option value="3m">3ヶ月毎</option>
                                                 <option value="6m">半年毎</option>
                                                 <option value="1y">1年毎</option>
                                               </select>
                                             </label>
+                                            {parseMonthlyRepeat(s.repeatWeekday) && (() => {
+                                              const mr = parseMonthlyRepeat(s.repeatWeekday);
+                                              return (
+                                                <label style={styles.scheduleEditField}>
+                                                  <span style={styles.scheduleEditLabel}>毎月</span>
+                                                  <span style={{ display: "flex", gap: 4 }}>
+                                                    <select value={mr.n} onChange={(e) => updateSubtaskSchedule(p.id, t.id, s.id, "repeatWeekday", monthlyRepeatValue(Number(e.target.value), mr.w))} style={styles.scheduleEditInput}>
+                                                      {[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n === 5 ? "最終" : `第${n}`}</option>)}
+                                                    </select>
+                                                    <select value={mr.w} onChange={(e) => updateSubtaskSchedule(p.id, t.id, s.id, "repeatWeekday", monthlyRepeatValue(mr.n, Number(e.target.value)))} style={styles.scheduleEditInput}>
+                                                      {WEEKDAY_LABELS.map((label, idx) => <option key={idx} value={idx}>{label}曜</option>)}
+                                                    </select>
+                                                  </span>
+                                                </label>
+                                              );
+                                            })()}
                                             {s.repeatWeekday != null && (
                                               <label style={styles.scheduleEditField}>
                                                 <span style={styles.scheduleEditLabel}>繰り返し終了日</span>

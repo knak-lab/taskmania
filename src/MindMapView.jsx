@@ -44,6 +44,10 @@ function timesPerWeek(r) {
   if (!isRepeat(r)) return 0;
   if (r === "weekday" || r === "daily") return 5;
   if (r === "satsun") return 0;
+  if (typeof r === "string" && /^m[1-5]-[0-6]$/.test(r)) return 1 / 4;
+  if (r === "3m") return 1 / 13;
+  if (r === "6m") return 1 / 26;
+  if (r === "1y") return 1 / 52;
   return 1;
 }
 function checkup(pjs, todayStr) {

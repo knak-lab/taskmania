@@ -257,9 +257,9 @@ function readProjects_() {
       repeatWeekday:
         repeatWeekday === "" || repeatWeekday == null
           ? null
-          : repeatWeekday === "weekday" || repeatWeekday === "satsun" || repeatWeekday === "daily"
-            ? repeatWeekday
-            : Number(repeatWeekday),
+          : /^\d+$/.test(String(repeatWeekday))
+            ? Number(repeatWeekday)
+            : String(repeatWeekday),
       steps: stepsBySubtask[id] || [],
       sourceSubtaskId: sourceSubtaskId ? String(sourceSubtaskId) : null,
       doneUpdatedAt: doneUpdatedAt ? Number(doneUpdatedAt) : 0,
