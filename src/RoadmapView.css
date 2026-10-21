@@ -1,0 +1,62 @@
+/* 俯瞰(月×PJの矢羽根マトリクス)。色味はマップ(MindMapView.css)に揃える */
+.rm { --ink: #12314F; --muted: #66727F; --line: #D3DAE1; --soft: #EEF2F5; color: var(--ink); width: 100%; }
+.rm button { font-family: inherit; cursor: pointer; }
+.rm-tools { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 8px; }
+.rm-tools > button, .rm-seg button { border: 1px solid var(--line); background: #fff; color: var(--ink); padding: 4px 10px; border-radius: 6px; font-size: 12.5px; }
+.rm-seg { display: inline-flex; }
+.rm-seg button { border-radius: 0; margin-left: -1px; }
+.rm-seg button:first-child { border-radius: 6px 0 0 6px; margin-left: 0; }
+.rm-seg button:last-child { border-radius: 0 6px 6px 0; }
+.rm-seg button.on { background: var(--ink); border-color: var(--ink); color: #fff; }
+.rm-sp { flex: 1; }
+.rm-legend { display: inline-flex; gap: 10px; font-size: 11px; color: var(--muted); }
+.rm-legend span { display: inline-flex; align-items: center; gap: 4px; }
+.rm-legend i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+.rm-rotate { display: none; margin: 0 0 6px; font-size: 11.5px; color: var(--muted); }
+.rm-empty { font-size: 12px; color: var(--muted); }
+
+.rm-scroll { overflow: auto; max-height: 72vh; border: 1px solid var(--line); border-radius: 8px; background: #fff; overscroll-behavior: contain; }
+.rm-inner { position: relative; }
+.rm-head { display: flex; position: sticky; top: 0; z-index: 3; background: #fff; border-bottom: 1px solid var(--line); }
+.rm-corner { position: sticky; left: 0; z-index: 4; width: var(--lw); flex: none; background: #fff; border-right: 1px solid var(--line); font-size: 11px; color: var(--muted); padding: 6px 8px; box-sizing: border-box; }
+.rm-month { flex: none; box-sizing: border-box; border-left: 1px solid var(--line); font-size: 12px; font-weight: 700; text-align: center; padding: 6px 0; white-space: nowrap; overflow: hidden; }
+.rm-month small { font-weight: 400; color: var(--muted); margin-right: 3px; font-size: 10px; }
+.rm-month.now { background: #FDECEE; color: #B83240; }
+
+.rm-theme { display: flex; background: var(--soft); border-bottom: 1px solid var(--line); }
+.rm-theme-label { position: sticky; left: 0; z-index: 2; width: var(--lw); flex: none; box-sizing: border-box; padding: 4px 8px; font-size: 12px; font-weight: 700; color: #fff; background: var(--bc); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rm-theme-track { flex: none; }
+
+.rm-row { display: flex; border-bottom: 1px solid #EEF1F4; }
+.rm-pj { position: sticky; left: 0; z-index: 2; width: var(--lw); flex: none; box-sizing: border-box; border: 0; border-right: 1px solid var(--line); border-left: 4px solid var(--bc); background: #fff; text-align: left; padding: 4px 6px; display: flex; flex-direction: column; justify-content: center; gap: 2px; color: var(--ink); min-width: 0; }
+.rm-pj:hover { background: var(--soft); }
+.rm-pj-name { font-size: 12.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rm-pj-meta { display: flex; gap: 6px; font-size: 10.5px; color: var(--muted); white-space: nowrap; overflow: hidden; }
+.rm-undated { color: #A8670F; }
+.rm-track { position: relative; flex: none; background-image: linear-gradient(to right, #E6EAEE 1px, transparent 1px); background-size: var(--cw) 100%; }
+.rm-today { position: absolute; top: 0; bottom: 0; width: 0; border-left: 1.5px solid #D64550; z-index: 1; pointer-events: none; }
+
+/* 矢羽根: 左が凹・右が凸の山形。進捗%までを濃く塗る */
+.rm-arrow { position: absolute; height: 20px; border: 0; padding: 0 14px 0 12px; box-sizing: border-box; z-index: 1;
+  clip-path: polygon(0 0, calc(100% - 9px) 0, 100% 50%, calc(100% - 9px) 100%, 0 100%, 9px 50%);
+  background: linear-gradient(to right, var(--sc) var(--pct), color-mix(in srgb, var(--sc) 62%, #fff) var(--pct));
+  color: #fff; font-size: 11px; font-weight: 700; text-align: left; overflow: hidden; text-shadow: 0 0 2px rgba(0,0,0,.35); }
+.rm-arrow span { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 20px; }
+.rm-arrow:hover { filter: brightness(1.12); }
+
+/* 全画面(Android等は横向きに固定) */
+.rm-full { background: #fff; padding: 8px 10px; box-sizing: border-box; height: 100vh; display: flex; flex-direction: column; }
+.rm-full .rm-scroll { max-height: none; flex: 1; }
+
+/* スマホ縦持ちは横向きを促す */
+@media (max-width: 600px) and (orientation: portrait) {
+  .rm-rotate { display: block; }
+  .rm-legend { display: none; }
+}
+/* スマホ横向き: 縦が狭いので画面いっぱいまで使い、文字を少し詰める */
+@media (orientation: landscape) and (max-height: 520px) {
+  .rm-scroll { max-height: calc(100vh - 56px); }
+  .rm-tools { margin-bottom: 4px; }
+  .rm-pj-name { font-size: 11.5px; }
+  .rm-month { padding: 3px 0; }
+}

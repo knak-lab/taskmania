@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import * as XLSX from "xlsx";
 import { loadAppData, loadKamoTodos, saveProjects as gasSave, saveMoyamoyaNotes as gasSaveMoyamoyaNotes, saveWorkAdj as gasSaveWorkAdj, saveThemes as gasSaveThemes, sendToCalendar as gasSendToCalendar } from "./api/gas";
 import MindMapView from "./MindMapView";
+import RoadmapView from "./RoadmapView";
 
 const TOP_TABS = [
   { key: "総合", label: "総合", color: "#2C3645" },
@@ -700,113 +701,6 @@ function GanttChart({ project }) {
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-function OverviewGanttChart({ projects, onOpenPJ, onOpenTask }) {
-  const [granularity, setGranularity] = useState("month");
-  const [openPJ, setOpenPJ] = useState(() => new Set());
-  const todayStr = toDateStr(new Date());
-
-  const pjData = projects
-    .filter((p) => !p.status) // 保留・完了PJは俯瞰から外す
-    .map((p) => {
-      const taskRows = [];
-      for (const t of p.tasks) {
-        if (!t.startDate || !t.endDate) continue;
-        const { done, total } = taskProgress(t);
-        taskRows.push({ id: t.id, name: t.name, startDate: t.startDate, endDate: t.endDate, done, total });
-      }
-      if (taskRows.length === 0) return null;
-      const pjStart = taskRows.map((r) => r.startDate).sort()[0];
-      const pjEnd = taskRows.map((r) => r.endDate).sort().slice(-1)[0];
-      const doneSum = taskRows.reduce((a, r) => a + r.done, 0);
-      const totalSum = taskRows.reduce((a, r) => a + r.total, 0);
-      const anyOverdue = taskRows.some((r) => r.endDate < todayStr && !(r.total > 0 && r.done >= r.total));
-      let status;
-      if (totalSum > 0 && doneSum >= totalSum) status = GANTT_STATUS.done;
-      else if (anyOverdue) status = GANTT_STATUS.overdue;
-      else if (pjStart <= todayStr) status = GANTT_STATUS.active;
-      else status = GANTT_STATUS.upcoming;
-      return { id: p.id, name: p.name, taskRows, pjStart, pjEnd, doneSum, totalSum, status };
-    })
-    .filter(Boolean);
-
-  if (pjData.length === 0) {
-    return <p style={styles.ganttEmpty}>開始日・終了日が設定されたタスクがまだない。各タスクに開始日・終了日を入れると、ここに全PJが1本ずつ並ぶ。</p>;
-  }
-
-  const { rangeStart, rangeEnd } = ganttRange(pjData.flatMap((p) => [p.pjStart, p.pjEnd]), todayStr, 30);
-  const buckets = generateBuckets(rangeStart, rangeEnd, granularity);
-  const colWidth = { week: 40, month: 56, quarter: 66 }[granularity] || 56;
-  const todayOff = todayColOffset(buckets, granularity, todayStr);
-  const clampIdx = (dateStr) => {
-    const d = dateStr < rangeStart ? rangeStart : dateStr > rangeEnd ? rangeEnd : dateStr;
-    const i = buckets.indexOf(bucketKeyFor(d, granularity));
-    return i === -1 ? 0 : i;
-  };
-
-  const flatRows = [];
-  for (const p of pjData) {
-    flatRows.push({ type: "pj", ...p });
-    if (openPJ.has(p.id)) for (const t of p.taskRows) flatRows.push({ type: "task", pjId: p.id, ...t });
-  }
-
-  function togglePJ(id) {
-    setOpenPJ((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
-  }
-
-  return (
-    <div style={styles.ganttWrap}>
-      <GanttToolbar granularity={granularity} setGranularity={setGranularity} />
-      <div style={styles.ganttSplitWrap}>
-        <div style={{ ...styles.ganttLabelCol, width: 150 }}>
-          <div style={styles.ganttLabelHeaderCell} />
-          {flatRows.map((r) => r.type === "pj" ? (
-            <div key={r.id + "-pjlabel"} style={styles.ganttPjRow}>
-              <button type="button" onClick={() => togglePJ(r.id)} style={styles.ganttPjToggle} aria-label={openPJ.has(r.id) ? "折りたたむ" : "展開する"}>
-                {openPJ.has(r.id) ? "▾" : "▸"}
-              </button>
-              <button type="button" onClick={() => onOpenPJ && onOpenPJ(r.id)} style={styles.ganttPjNameBtn} title={r.name}>{r.name}</button>
-              <span style={styles.ganttPjCount}>{r.totalSum ? `${Math.round((r.doneSum / r.totalSum) * 100)}%` : `${r.taskRows.length}件`}</span>
-            </div>
-          ) : (
-            <GanttLabelCell key={r.id + "-label"} name={r.name} pct={r.total ? Math.round((r.done / r.total) * 100) : null} onClick={onOpenTask ? () => onOpenTask(r.pjId, r.id) : undefined} />
-          ))}
-        </div>
-        <div style={styles.ganttScroll}>
-          <div style={{ ...styles.ganttGrid, position: "relative", gridTemplateColumns: `repeat(${buckets.length}, ${colWidth}px)`, gridTemplateRows: `26px repeat(${flatRows.length}, 22px)` }}>
-            {buckets.map((b, i) => <div key={b} style={{ ...styles.ganttDateCell, gridRow: 1, gridColumn: i + 1 }}>{bucketLabel(b, granularity)}</div>)}
-            <GanttTodayLine offset={todayOff} colWidth={colWidth} />
-            {flatRows.map((r, idx) => {
-              if (r.type === "pj") {
-                const s = clampIdx(r.pjStart);
-                const e = clampIdx(r.pjEnd);
-                const pct = r.totalSum ? Math.round((r.doneSum / r.totalSum) * 100) : 0;
-                return (
-                  <button type="button" key={r.id + "-pjbar"} onClick={() => onOpenPJ && onOpenPJ(r.id)}
-                    style={{ ...styles.ganttBarTrack, ...styles.ganttPjBarTrack, background: r.status.color + "30", gridRow: idx + 2, gridColumn: `${s + 1} / ${e + 2}` }}
-                    title={`${r.name}　${formatDate(r.pjStart)}〜${formatDate(r.pjEnd)}　${r.doneSum}/${r.totalSum}　${r.status.label}`}>
-                    <div style={{ ...styles.ganttBarFill, width: r.totalSum ? `${pct}%` : "100%", background: r.status.color }} />
-                  </button>
-                );
-              }
-              const s = clampIdx(r.startDate);
-              const e = clampIdx(r.endDate);
-              const pct = r.total ? Math.round((r.done / r.total) * 100) : 0;
-              const st = ganttStatusOf(r.startDate, r.endDate, r.done, r.total, todayStr);
-              return (
-                <button type="button" key={r.id + "-bar"} onClick={() => onOpenTask && onOpenTask(r.pjId, r.id)}
-                  style={{ ...styles.ganttBarTrack, ...styles.ganttPjBarTrack, background: st.color + "30", gridRow: idx + 2, gridColumn: `${s + 1} / ${e + 2}` }}
-                  title={`${r.name}　${formatDate(r.startDate)}〜${formatDate(r.endDate)}　${r.done}/${r.total}　${st.label}`}>
-                  <div style={{ ...styles.ganttBarFill, width: r.total ? `${pct}%` : "100%", background: st.color }} />
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </div>
     </div>
   );
 }
@@ -3526,10 +3420,10 @@ export default function App() {
                 </div>
               )}
               <div style={styles.sectionTitleRow}>
-                <h3 style={{ ...styles.sectionTitleFlush, fontWeight: 900 }}>ガントチャート（全PJ）</h3>
+                <h3 style={{ ...styles.sectionTitleFlush, fontWeight: 900 }}>ロードマップ（月×PJ）</h3>
               </div>
-              <p style={styles.ganttHint}>PJ名またはバーを押すとPJ詳細。▸で配下タスクを展開。</p>
-              <OverviewGanttChart projects={visibleProjects} onOpenPJ={setPjDetailModal} onOpenTask={(pjId, taskId) => setTaskEditModal({ pjId, taskId })} />
+              <p style={styles.ganttHint}>矢羽根＝タスク(開始日〜終了日)。矢羽根を押すとタスク編集、PJ名を押すとPJ詳細。</p>
+              <RoadmapView projects={visibleProjects.filter((p) => !p.status)} themes={visibleThemes} onOpenPJ={setPjDetailModal} onOpenTask={(pjId, taskId) => setTaskEditModal({ pjId, taskId })} />
             </>
           )}
 
