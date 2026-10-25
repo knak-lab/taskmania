@@ -754,7 +754,7 @@ function NoteField({ title, placeholder, value, onChange }) {
   );
 }
 
-function PJDetailModal({ project, onUpdateNote, onUpdateStatus, onClose, onAddTask, onAddSubtask }) {
+function PJDetailModal({ project, onUpdateNote, onUpdateName, onUpdateStatus, onClose, onAddTask, onAddSubtask }) {
   const [exporting, setExporting] = useState(false);
   const [openTasks, setOpenTasks] = useState(() => new Set());
   const [doneVisibleTasks, setDoneVisibleTasks] = useState(() => new Set());
@@ -775,7 +775,9 @@ function PJDetailModal({ project, onUpdateNote, onUpdateStatus, onClose, onAddTa
     <div style={styles.modalOverlay} onClick={onClose}>
       <div style={styles.modalBoxLarge} onClick={(e) => e.stopPropagation()}>
         <div style={styles.modalHeader}>
-          <h3 style={styles.modalTitle}>{project.name}</h3>
+          <input type="text" value={project.name} onChange={(e) => onUpdateName(project.id, e.target.value)}
+            style={{ ...styles.modalTitle, flex: 1, minWidth: 0, border: "none", borderBottom: "1.5px dashed #D8D8D8", background: "transparent", padding: "2px 4px", marginRight: 8 }}
+            aria-label="PJ名を編集" />
           <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
             <select value={project.status || ""} onChange={(e) => onUpdateStatus(project.id, e.target.value)} style={{ ...styles.moveSelect, fontSize: 12, padding: "4px 6px" }} aria-label="状態を変更">
               <option value="">進行中</option>
@@ -3452,7 +3454,7 @@ export default function App() {
           {pjDetailModal && (() => {
             const p = (projects || []).find((pp) => pp.id === pjDetailModal);
             if (!p) return null;
-            return <PJDetailModal project={p} onUpdateNote={updatePJNote} onUpdateStatus={updatePJStatus} onClose={() => setPjDetailModal(null)} onAddTask={openAddTaskModal} onAddSubtask={openAddSubtaskModal} />;
+            return <PJDetailModal project={p} onUpdateNote={updatePJNote} onUpdateName={updatePJName} onUpdateStatus={updatePJStatus} onClose={() => setPjDetailModal(null)} onAddTask={openAddTaskModal} onAddSubtask={openAddSubtaskModal} />;
           })()}
 
           {taskEditModal && (() => {
