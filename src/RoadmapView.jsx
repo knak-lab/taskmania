@@ -49,6 +49,7 @@ export default function RoadmapView({ projects, themes, onOpenPJ, onOpenTask }) 
   const [span, setSpan] = useState(loadSpan);
   const [wrapW, setWrapW] = useState(0);
   const [isFull, setIsFull] = useState(false);
+  const [hover, setHover] = useState(null); // PJ名にマウスを乗せたときのネクストアクション表示 { p, x, y }
   const rootRef = useRef(null);
   const scrollRef = useRef(null);
 
@@ -107,7 +108,7 @@ export default function RoadmapView({ projects, themes, onOpenPJ, onOpenTask }) 
     return { groups, months };
   }, [projects, themes, todayStr, todayMonth]);
 
-  const labelW = wrapW && wrapW < 560 ? 104 : 150;
+  const labelW = wrapW && wrapW < 560 ? 120 : 200;
   const colW = Math.max(36, Math.floor((wrapW - labelW) / span) || 80);
   const trackW = months.length * colW;
   const xOf = (dateStr, endOfDay) => {
@@ -183,7 +184,9 @@ export default function RoadmapView({ projects, themes, onOpenPJ, onOpenTask }) 
                 )}
                 {g.rows.map(({ p, bars, lanes, undated, pct }) => (
                   <div key={p.id} className="rm-row">
-                    <button type="button" className="rm-pj" onClick={() => onOpenPJ(p.id)} title={p.name}>
+                    <button type="button" className="rm-pj" onClick={() => { setHover(null); onOpenPJ(p.id); }}
+                      onMouseEnter={(e) => { const r = e.currentTarget.getBoundingClientRect(); setHover({ p, x: r.right + 6, y: r.top }); }}
+                      onMouseLeave={() => setHover(null)}>
                       <span className="rm-pj-name">{p.name}</span>
                       <span className="rm-pj-meta">
                         {pct !== null && <span>{pct}%</span>}
@@ -191,7 +194,7 @@ export default function RoadmapView({ projects, themes, onOpenPJ, onOpenTask }) 
                         {bars.length === 0 && undated === 0 && <span>タスクなし</span>}
                       </span>
                     </button>
-                    <div className="rm-track" style={{ width: trackW, height: lanes * LANE_H + 8 }}>
+                    <div className="rm-track" style={{ width: trackW, minHeight: lanes * LANE_H + 8 }}>
                       <div className="rm-today" style={{ left: todayX }} />
                       {bars.map(({ t, lane, st, pct: tp }) => {
                         const left = xOf(t.startDate, false);
@@ -211,6 +214,15 @@ export default function RoadmapView({ projects, themes, onOpenPJ, onOpenTask }) 
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {hover && (
+        <div className="rm-pop" style={{ left: Math.min(hover.x, window.innerWidth - 300), top: Math.min(hover.y, window.innerHeight - 160) }}>
+          <div className="rm-pop-title">ネクストアクション</div>
+          {hover.p.nextAction?.trim()
+            ? <div className="rm-pop-body">{hover.p.nextAction}</div>
+            : <div className="rm-pop-empty">未入力(PJ名を押すと入力できる)</div>}
         </div>
       )}
     </div>

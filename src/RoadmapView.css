@@ -30,7 +30,13 @@
 .rm-row { display: flex; border-bottom: 1px solid #EEF1F4; }
 .rm-pj { position: sticky; left: 0; z-index: 2; width: var(--lw); flex: none; box-sizing: border-box; border: 0; border-right: 1px solid var(--line); border-left: 4px solid var(--bc); background: #fff; text-align: left; padding: 4px 6px; display: flex; flex-direction: column; justify-content: center; gap: 2px; color: var(--ink); min-width: 0; }
 .rm-pj:hover { background: var(--soft); }
-.rm-pj-name { font-size: 12.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rm-pj-name { font-size: 12.5px; font-weight: 700; white-space: normal; overflow-wrap: anywhere; line-height: 1.3; }
+
+/* PJ名ホバー時のネクストアクション */
+.rm-pop { position: fixed; z-index: 60; width: 280px; max-height: 150px; overflow: hidden; background: #fff; border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 4px 14px rgba(18,49,79,.18); padding: 8px 10px; pointer-events: none; }
+.rm-pop-title { font-size: 10.5px; font-weight: 700; color: var(--muted); margin-bottom: 4px; }
+.rm-pop-body { font-size: 12px; white-space: pre-wrap; line-height: 1.45; }
+.rm-pop-empty { font-size: 12px; color: var(--muted); }
 .rm-pj-meta { display: flex; gap: 6px; font-size: 10.5px; color: var(--muted); white-space: nowrap; overflow: hidden; }
 .rm-undated { color: #A8670F; }
 .rm-track { position: relative; flex: none; background-image: linear-gradient(to right, #E6EAEE 1px, transparent 1px); background-size: var(--cw) 100%; }

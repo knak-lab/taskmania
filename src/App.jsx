@@ -754,7 +754,7 @@ function NoteField({ title, placeholder, value, onChange }) {
   );
 }
 
-function PJDetailModal({ project, onUpdateNote, onClose, onAddTask, onAddSubtask }) {
+function PJDetailModal({ project, onUpdateNote, onUpdateStatus, onClose, onAddTask, onAddSubtask }) {
   const [exporting, setExporting] = useState(false);
   const [openTasks, setOpenTasks] = useState(() => new Set());
   const [doneVisibleTasks, setDoneVisibleTasks] = useState(() => new Set());
@@ -777,6 +777,10 @@ function PJDetailModal({ project, onUpdateNote, onClose, onAddTask, onAddSubtask
         <div style={styles.modalHeader}>
           <h3 style={styles.modalTitle}>{project.name}</h3>
           <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            <select value={project.status || ""} onChange={(e) => onUpdateStatus(project.id, e.target.value)} style={{ ...styles.moveSelect, fontSize: 12, padding: "4px 6px" }} aria-label="状態を変更">
+              <option value="">進行中</option>
+              {PJ_STATUSES.map((st) => <option key={st.v} value={st.v}>{st.label}</option>)}
+            </select>
             <button type="button" onClick={handleExport} disabled={exporting} style={styles.addBtn}>{exporting ? "出力中…" : "Excelで出力"}</button>
             <button type="button" onClick={onClose} aria-label="閉じる" style={styles.modalCloseBtn}>×</button>
           </div>
@@ -3448,7 +3452,7 @@ export default function App() {
           {pjDetailModal && (() => {
             const p = (projects || []).find((pp) => pp.id === pjDetailModal);
             if (!p) return null;
-            return <PJDetailModal project={p} onUpdateNote={updatePJNote} onClose={() => setPjDetailModal(null)} onAddTask={openAddTaskModal} onAddSubtask={openAddSubtaskModal} />;
+            return <PJDetailModal project={p} onUpdateNote={updatePJNote} onUpdateStatus={updatePJStatus} onClose={() => setPjDetailModal(null)} onAddTask={openAddTaskModal} onAddSubtask={openAddSubtaskModal} />;
           })()}
 
           {taskEditModal && (() => {
