@@ -1720,7 +1720,7 @@ export default function App() {
   const [hiddenCompletedPJSections, setHiddenCompletedPJSections] = useState(() => new Set());
   const [pjDetailModal, setPjDetailModal] = useState(null);
 
-  // 入口の3ビュー切替(今日/俯瞰/PJ)。デフォルトは「今日」。端末ローカルに保持
+  // 入口の4ビュー切替(マップ/ロードマップ/今日/PJ)。デフォルトは「今日」。端末ローカルに保持
   const [mainView, setMainView] = useState(() => {
     try { return localStorage.getItem("tm_main_view") || "today"; } catch { return "today"; }
   });
@@ -3092,7 +3092,7 @@ export default function App() {
         <section style={{ ...styles.panel, borderColor: activeTopColor, borderRadius: PERSON_KEYS.includes(topTab) ? "0 0 10px 10px" : styles.panel.borderRadius }}>
           {showTaskSections && (
             <nav style={styles.viewSwitcher} role="tablist" aria-label="表示切替">
-              {[{ k: "today", label: "今日" }, { k: "overview", label: "俯瞰" }, { k: "pj", label: "PJ" }, { k: "map", label: "マップ" }].map((v) => (
+              {[{ k: "map", label: "マップ" }, { k: "overview", label: "ロードマップ" }, { k: "today", label: "今日" }, { k: "pj", label: "PJ" }].map((v) => (
                 <button key={v.k} type="button" role="tab" aria-selected={mainView === v.k} onClick={() => setMainView(v.k)}
                   style={{ ...styles.viewSwitcherBtn, background: mainView === v.k ? activeTopColor : "transparent", color: mainView === v.k ? "#FFFFFF" : activeTopColor, borderColor: activeTopColor }}>
                   {v.label}
