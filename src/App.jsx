@@ -756,6 +756,8 @@ function NoteField({ title, placeholder, value, onChange }) {
 
 function PJDetailModal({ project, onUpdateNote, onUpdateName, onUpdateStatus, onClose, onAddTask, onAddSubtask }) {
   const [exporting, setExporting] = useState(false);
+  // PJ名の入力中の値。空欄は保存せず、フォーカスが外れたら直前の名前に戻す
+  const [nameDraft, setNameDraft] = useState(project.name);
   const [openTasks, setOpenTasks] = useState(() => new Set());
   const [doneVisibleTasks, setDoneVisibleTasks] = useState(() => new Set());
 
@@ -775,7 +777,9 @@ function PJDetailModal({ project, onUpdateNote, onUpdateName, onUpdateStatus, on
     <div style={styles.modalOverlay} onClick={onClose}>
       <div style={styles.modalBoxLarge} onClick={(e) => e.stopPropagation()}>
         <div style={styles.modalHeader}>
-          <input type="text" value={project.name} onChange={(e) => onUpdateName(project.id, e.target.value)}
+          <input type="text" value={nameDraft}
+            onChange={(e) => { setNameDraft(e.target.value); if (e.target.value.trim()) onUpdateName(project.id, e.target.value); }}
+            onBlur={() => { if (!nameDraft.trim()) setNameDraft(project.name); }}
             style={{ ...styles.modalTitle, flex: 1, minWidth: 0, border: "none", borderBottom: "1.5px dashed #D8D8D8", background: "transparent", padding: "2px 4px", marginRight: 8 }}
             aria-label="PJ名を編集" />
           <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
@@ -2332,6 +2336,20 @@ export default function App() {
     setProjects((prev) => prev.map((p) => (p.id === pjId ? { ...p, name } : p)));
   }
 
+  // ロードマップのドラッグ並び替え: dragIdのPJをtargetIdの前(after=trueなら後)へ移す。PJの並びは配列順そのもの
+  function movePJTo(dragId, targetId, after) {
+    if (dragId === targetId) return;
+    setProjects((prev) => {
+      const moving = prev.find((p) => p.id === dragId);
+      if (!moving) return prev;
+      const rest = prev.filter((p) => p.id !== dragId);
+      const i = rest.findIndex((p) => p.id === targetId);
+      if (i === -1) return prev;
+      rest.splice(after ? i + 1 : i, 0, moving);
+      return rest;
+    });
+  }
+
   function updatePJNote(pjId, field, value) {
     setProjects((prev) => prev.map((p) => (p.id === pjId ? { ...p, [field]: value } : p)));
   }
@@ -3429,7 +3447,7 @@ export default function App() {
                 <h3 style={{ ...styles.sectionTitleFlush, fontWeight: 900 }}>ロードマップ（月×PJ）</h3>
               </div>
               <p style={styles.ganttHint}>矢羽根＝タスク(開始日〜終了日)。矢羽根を押すとタスク編集、PJ名を押すとPJ詳細。</p>
-              <RoadmapView projects={visibleProjects.filter((p) => !p.status)} themes={visibleThemes} onOpenPJ={setPjDetailModal} onOpenTask={(pjId, taskId) => setTaskEditModal({ pjId, taskId })} />
+              <RoadmapView projects={visibleProjects.filter((p) => !p.status)} themes={visibleThemes} onOpenPJ={setPjDetailModal} onMovePJ={movePJTo} onOpenTask={(pjId, taskId) => setTaskEditModal({ pjId, taskId })} />
             </>
           )}
 
@@ -3454,7 +3472,7 @@ export default function App() {
           {pjDetailModal && (() => {
             const p = (projects || []).find((pp) => pp.id === pjDetailModal);
             if (!p) return null;
-            return <PJDetailModal project={p} onUpdateNote={updatePJNote} onUpdateName={updatePJName} onUpdateStatus={updatePJStatus} onClose={() => setPjDetailModal(null)} onAddTask={openAddTaskModal} onAddSubtask={openAddSubtaskModal} />;
+            return <PJDetailModal key={p.id} project={p} onUpdateNote={updatePJNote} onUpdateName={updatePJName} onUpdateStatus={updatePJStatus} onClose={() => setPjDetailModal(null)} onAddTask={openAddTaskModal} onAddSubtask={openAddSubtaskModal} />;
           })()}
 
           {taskEditModal && (() => {

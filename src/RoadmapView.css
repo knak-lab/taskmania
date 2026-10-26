@@ -66,3 +66,14 @@
   .rm-pj-name { font-size: 11.5px; }
   .rm-month { padding: 3px 0; }
 }
+
+/* PJのドラッグ並び替え(⋮⋮をつまむ) */
+.rm-pj { padding-left: 18px; }
+.rm-grip { position: absolute; left: 1px; top: 50%; transform: translateY(-50%); width: 15px; text-align: center; font-size: 12px; letter-spacing: -3px; color: #A3ADB7; cursor: grab; touch-action: none; user-select: none; padding: 6px 0; }
+.rm-grip:hover { color: var(--ink); }
+.rm-row.dragging { opacity: .45; }
+.rm-row.dragging .rm-grip { cursor: grabbing; }
+.rm-row.drop-before, .rm-row.drop-after { position: relative; }
+.rm-row.drop-before::after, .rm-row.drop-after::after { content: ""; position: absolute; left: 0; right: 0; height: 3px; background: var(--ink); z-index: 5; pointer-events: none; }
+.rm-row.drop-before::after { top: -1px; }
+.rm-row.drop-after::after { bottom: -1px; }
