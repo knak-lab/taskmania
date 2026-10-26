@@ -93,7 +93,7 @@ const SHEET_MOYAMOYA = "MoyamoyaNotes";
 const SHEET_WORKADJ = "WorkAdjustments";
 const SHEET_THEMES = "Themes";
 
-const PROJECTS_HEADERS = ["id", "owner", "name", "subcategory", "priority", "status", "completedNote", "nextAction", "moyamoya", "progressRate", "themeId", "purpose"];
+const PROJECTS_HEADERS = ["id", "owner", "name", "subcategory", "priority", "status", "completedNote", "nextAction", "moyamoya", "progressRate", "themeId", "purpose", "relatedLink"];
 const TASKS_HEADERS = ["id", "projectId", "name", "startDate", "endDate", "estimatedMinutes", "sourceTodoId", "done"];
 const SUBTASKS_HEADERS = [
   "id",
@@ -307,7 +307,8 @@ function readProjects_() {
         moyamoya = r[8],
         progressRate = r[9],
         themeId = r[10],
-        purpose = r[11];
+        purpose = r[11],
+        relatedLink = r[12];
       return {
         id: String(id),
         owner: owner || "",
@@ -321,6 +322,7 @@ function readProjects_() {
         progressRate: progressRate === "" || progressRate == null ? null : Number(progressRate),
         themeId: themeId ? String(themeId) : null,
         purpose: purpose || "",
+        relatedLink: relatedLink || "",
         tasks: tasksByProject[id] || [],
       };
     });
@@ -382,7 +384,7 @@ function writeProjects_(projects) {
   const stepRows = [];
 
   (projects || []).forEach(function (p) {
-    projRows.push([p.id, p.owner || "", p.name || "", p.subcategory || "", p.priority || 2, p.status || "", p.completedNote || "", p.nextAction || "", !!p.moyamoya, p.progressRate != null ? p.progressRate : "", p.themeId || "", p.purpose || ""]);
+    projRows.push([p.id, p.owner || "", p.name || "", p.subcategory || "", p.priority || 2, p.status || "", p.completedNote || "", p.nextAction || "", !!p.moyamoya, p.progressRate != null ? p.progressRate : "", p.themeId || "", p.purpose || "", p.relatedLink || ""]);
     (p.tasks || []).forEach(function (t) {
       taskRows.push([t.id, p.id, t.name || "", t.startDate || "", t.endDate || "", t.estimatedMinutes || "", t.sourceTodoId || "", !!t.done]);
       (t.subtasks || []).forEach(function (s) {

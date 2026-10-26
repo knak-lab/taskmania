@@ -754,8 +754,20 @@ function NoteField({ title, placeholder, value, onChange }) {
   );
 }
 
-function PJDetailModal({ project, onUpdateNote, onUpdateName, onUpdateStatus, onClose, onAddTask, onAddSubtask }) {
+// 関連リンク: スキーム無しで入力されたURLはhttps://を補う
+function normalizeLink(v) {
+  const s = (v || "").trim();
+  if (!s) return "";
+  return /^[a-z][a-z0-9+.-]*:/i.test(s) ? s : `https://${s}`;
+}
+
+function PJDetailModal({ project, onUpdateNote, onUpdateName, onUpdateStatus, onClose, onAddTask, onAddSubtask, onGoToPJ }) {
   const [exporting, setExporting] = useState(false);
+  const [linkDraft, setLinkDraft] = useState(null); // null=表示中、文字列=編集中
+  function saveLink() {
+    onUpdateNote(project.id, "relatedLink", normalizeLink(linkDraft));
+    setLinkDraft(null);
+  }
   // PJ名の入力中の値。空欄は保存せず、フォーカスが外れたら直前の名前に戻す
   const [nameDraft, setNameDraft] = useState(project.name);
   const [openTasks, setOpenTasks] = useState(() => new Set());
@@ -790,6 +802,27 @@ function PJDetailModal({ project, onUpdateNote, onUpdateName, onUpdateStatus, on
             <button type="button" onClick={handleExport} disabled={exporting} style={styles.addBtn}>{exporting ? "出力中…" : "Excelで出力"}</button>
             <button type="button" onClick={onClose} aria-label="閉じる" style={styles.modalCloseBtn}>×</button>
           </div>
+        </div>
+
+        <div style={styles.pjLinkRow}>
+          {onGoToPJ && <button type="button" onClick={() => onGoToPJ(project.id)} style={styles.pjOpenBtn}>PJを開く</button>}
+          <span style={styles.pjLinkLabel}>関連リンク</span>
+          {linkDraft === null ? (
+            <>
+              {project.relatedLink
+                ? <a href={project.relatedLink} target="_blank" rel="noopener noreferrer" style={styles.pjLinkUrl} title={project.relatedLink}>{project.relatedLink}</a>
+                : <span style={{ ...styles.pjLinkUrl, color: "#9B9B9B" }}>未設定</span>}
+              {project.relatedLink && <a href={project.relatedLink} target="_blank" rel="noopener noreferrer" style={{ ...styles.inlineAddBtn, textDecoration: "none" }}>開く</a>}
+              <button type="button" onClick={() => setLinkDraft(project.relatedLink || "")} style={styles.inlineAddBtn}>編集</button>
+            </>
+          ) : (
+            <form onSubmit={(e) => { e.preventDefault(); saveLink(); }} style={{ display: "flex", gap: 6, flex: 1, minWidth: 0, alignItems: "center" }}>
+              <input type="text" value={linkDraft} onChange={(e) => setLinkDraft(e.target.value)} autoFocus placeholder="https://… (空にして保存で削除)"
+                style={{ ...styles.scheduleEditInput, flex: 1, minWidth: 0 }} aria-label="関連リンクのURL" />
+              <button type="submit" style={styles.inlineAddBtn}>保存</button>
+              <button type="button" onClick={() => setLinkDraft(null)} style={{ ...styles.inlineAddBtn, color: "#7A7A7A", borderColor: "#B5B5B5" }}>キャンセル</button>
+            </form>
+          )}
         </div>
 
         <NoteField
@@ -2336,6 +2369,24 @@ export default function App() {
     setProjects((prev) => prev.map((p) => (p.id === pjId ? { ...p, name } : p)));
   }
 
+  // PJ詳細の「PJを開く」: PJタブに切り替え、そのPJのセクションとカードを開いてスクロールし、一瞬ハイライトする
+  const [flashPJ, setFlashPJ] = useState(null);
+  function goToPJ(pjId) {
+    const p = (projects || []).find((pp) => pp.id === pjId);
+    if (!p) return;
+    const secKey = p.status || (p.priority || 2);
+    setPjDetailModal(null);
+    setMainView("pj");
+    setCollapsedPrioritySection((prev) => { const next = new Set(prev); next.delete(secKey); return next; });
+    if (!p.status && pjEffectivelyDone(p)) setHiddenCompletedPJSections((prev) => { const next = new Set(prev); next.delete(secKey); return next; });
+    setOpenPJ((prev) => new Set(prev).add(pjId));
+    setFlashPJ(pjId);
+    setTimeout(() => {
+      document.querySelector(`[data-pj-card="${secKey}:${pjId}"]`)?.scrollIntoView({ block: "start", behavior: "smooth" });
+    }, 80);
+    setTimeout(() => setFlashPJ((cur) => (cur === pjId ? null : cur)), 2200);
+  }
+
   // ロードマップのドラッグ並び替え: dragIdのPJをtargetIdの前(after=trueなら後)へ移す。PJの並びは配列順そのもの
   function movePJTo(dragId, targetId, after) {
     if (dragId === targetId) return;
@@ -2785,7 +2836,7 @@ export default function App() {
               const { done: pd, total: pt } = pjProgress(p);
               const oColor = ownerColorOf(p.owner);
               return (
-                <div key={p.id} style={{ ...styles.pjCard, borderLeftColor: oColor }} className="row-in">
+                <div key={p.id} data-pj-card={`${sec.key}:${p.id}`} style={{ ...styles.pjCard, borderLeftColor: oColor, scrollMarginTop: 12 }} className={flashPJ === p.id ? "row-in pj-flash" : "row-in"}>
                   <div style={styles.pjHeader} className="pj-header">
                     <div style={styles.reorderBtns}>
                       <button type="button" onClick={() => movePJInSection(groupIds, p.id, "up")} disabled={pIdx === 0} style={{ ...styles.reorderBtn, opacity: pIdx === 0 ? 0.3 : 1, cursor: pIdx === 0 ? "default" : "pointer" }} aria-label="上へ移動">▲</button>
@@ -3005,6 +3056,8 @@ export default function App() {
         * { box-sizing: border-box; }
         body { margin: 0; }
         .row-in { animation: fadeIn 0.2s ease; }
+        @keyframes pjFlash { 0%, 60% { box-shadow: 0 0 0 3px #F2B33D; } 100% { box-shadow: 0 0 0 3px transparent; } }
+        .pj-flash { animation: pjFlash 2s ease-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(4px);} to { opacity:1; transform: translateY(0);} }
         @keyframes stampIn {
           0% { transform: scale(2.4) rotate(-14deg); opacity: 0; }
@@ -3472,7 +3525,7 @@ export default function App() {
           {pjDetailModal && (() => {
             const p = (projects || []).find((pp) => pp.id === pjDetailModal);
             if (!p) return null;
-            return <PJDetailModal key={p.id} project={p} onUpdateNote={updatePJNote} onUpdateName={updatePJName} onUpdateStatus={updatePJStatus} onClose={() => setPjDetailModal(null)} onAddTask={openAddTaskModal} onAddSubtask={openAddSubtaskModal} />;
+            return <PJDetailModal key={p.id} project={p} onUpdateNote={updatePJNote} onUpdateName={updatePJName} onUpdateStatus={updatePJStatus} onClose={() => setPjDetailModal(null)} onAddTask={openAddTaskModal} onAddSubtask={openAddSubtaskModal} onGoToPJ={goToPJ} />;
           })()}
 
           {taskEditModal && (() => {
@@ -3872,6 +3925,10 @@ const styles = {
   noteTextarea: { minHeight: 64, padding: "8px 10px", fontSize: 13, border: "1.5px solid #D8D8D8", borderRadius: 6, background: "#FFFFFF", color: "#2C3645", fontFamily: "inherit", resize: "vertical" },
   detailSubList: { listStyle: "none", margin: 0, padding: 0, paddingLeft: 20, display: "flex", flexDirection: "column", gap: 4, maxHeight: 220, overflowY: "auto" },
   detailSubRow: { display: "flex", alignItems: "center", gap: 8, padding: "4px 4px", borderBottom: "1px dashed #E5E5E5" },
+  pjLinkRow: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "6px 8px", background: "#F6F8FA", border: "1px solid #E3E7EB", borderRadius: 6 },
+  pjOpenBtn: { fontSize: 11.5, fontWeight: 700, color: "#FFFFFF", background: "#12314F", border: "none", borderRadius: 5, padding: "4px 10px", cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap", marginRight: 6 },
+  pjLinkLabel: { fontSize: 11, fontWeight: 700, color: "#66727F", whiteSpace: "nowrap" },
+  pjLinkUrl: { flex: 1, minWidth: 0, fontSize: 12, color: "#3A62A8", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
   inlineAddBtn: { fontSize: 10.5, fontWeight: 700, color: "#12314F", background: "transparent", border: "1.5px solid #12314F", borderRadius: 5, padding: "2px 7px", cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap", flexShrink: 0 },
   select: { flex: 1, minWidth: 100, fontSize: 12.5, padding: "7px 6px", borderRadius: 6, border: "1.5px solid #D8D8D8", background: "#FFFFFF", color: "#2C3645", fontFamily: "inherit" },
   hint: { fontSize: 11.5, color: "#F39800", margin: "0 0 6px" },
