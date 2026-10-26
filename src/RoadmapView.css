@@ -43,11 +43,11 @@
 .rm-today { position: absolute; top: 0; bottom: 0; width: 0; border-left: 1.5px solid #D64550; z-index: 1; pointer-events: none; }
 
 /* 矢羽根: 左が凹・右が凸の山形。進捗%までを濃く塗る */
-.rm-arrow { position: absolute; height: 20px; border: 0; padding: 0 14px 0 12px; box-sizing: border-box; z-index: 1;
+.rm-arrow { position: absolute; display: flex; align-items: center; border: 0; padding: 0 14px 0 12px; box-sizing: border-box; z-index: 1;
   clip-path: polygon(0 0, calc(100% - 9px) 0, 100% 50%, calc(100% - 9px) 100%, 0 100%, 9px 50%);
   background: linear-gradient(to right, var(--sc) var(--pct), color-mix(in srgb, var(--sc) 62%, #fff) var(--pct));
   color: #fff; font-size: 11px; font-weight: 700; text-align: left; overflow: hidden; text-shadow: 0 0 2px rgba(0,0,0,.35); }
-.rm-arrow span { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 20px; }
+.rm-arrow span { display: block; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.3; font-size: 12px; }
 .rm-arrow:hover { filter: brightness(1.12); }
 
 /* 全画面(Android等は横向きに固定) */

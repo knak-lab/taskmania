@@ -3865,7 +3865,7 @@ const styles = {
   dashboardLegendLabel: { flex: 1, color: "#2C3645", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
   dashboardLegendValue: { color: "#7A7A7A", fontWeight: 700, whiteSpace: "nowrap" },
   dashboardBarWrap: { display: "flex", flexDirection: "column" },
-  detailTaskList: { listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 4, maxHeight: 420, overflowY: "auto" },
+  detailTaskList: { listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 4, flexShrink: 0 },
   detailTaskGroup: { display: "flex", flexDirection: "column" },
   detailTaskRow: { display: "flex", alignItems: "center", gap: 8, padding: "5px 4px", borderBottom: "1px dashed #E5E5E5" },
   detailTaskName: { flex: 1, fontSize: 12.5, fontWeight: 600, color: "#2C3645", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },

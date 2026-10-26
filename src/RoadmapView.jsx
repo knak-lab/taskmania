@@ -12,7 +12,7 @@ const STATUS = {
   done: { label: "完了", color: "#7E9C83" },
 };
 const SPANS = [3, 6, 12];
-const LANE_H = 24;
+const LANE_H = 30; // 1レーンの最低高さ。行がPJ名の折り返しで高くなったら矢羽根も行いっぱいに伸ばす
 
 function toDateStr(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -247,7 +247,7 @@ export default function RoadmapView({ projects, themes, onOpenPJ, onOpenTask, on
                         const w = Math.max(22, xOf(t.endDate, true) - left);
                         return (
                           <button key={t.id} type="button" className="rm-arrow"
-                            style={{ left, width: w, top: 4 + lane * LANE_H, "--sc": st.color, "--pct": `${tp}%` }}
+                            style={{ left, width: w, top: `calc(4px + (100% - 8px) * ${lane / lanes})`, height: `calc((100% - 8px) / ${lanes} - ${lanes > 1 ? 3 : 0}px)`, "--sc": st.color, "--pct": `${tp}%` }}
                             onClick={() => onOpenTask(p.id, t.id)}
                             title={`${t.name}　${t.startDate.slice(5).replace("-", "/")}〜${t.endDate.slice(5).replace("-", "/")}　${st.label} ${tp}%`}>
                             <span>{t.name}</span>
