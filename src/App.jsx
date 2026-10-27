@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import * as XLSX from "xlsx";
-import { loadAppData, loadKamoTodos, saveProjects as gasSave, saveMoyamoyaNotes as gasSaveMoyamoyaNotes, saveWorkAdj as gasSaveWorkAdj, saveThemes as gasSaveThemes, sendToCalendar as gasSendToCalendar } from "./api/gas";
+import { loadAppData, loadKamoTodos, saveProjects as gasSave, saveMoyamoyaNotes as gasSaveMoyamoyaNotes, saveWorkAdj as gasSaveWorkAdj, saveThemes as gasSaveThemes, saveAssignees as gasSaveAssignees, sendToCalendar as gasSendToCalendar } from "./api/gas";
 import MindMapView from "./MindMapView";
 import RoadmapView from "./RoadmapView";
 
@@ -762,6 +762,86 @@ function pjLabel(p) {
   return p ? `${p.goalTarget ? "☆" : ""}${p.name}` : "";
 }
 
+// kkr>workのPJ・タスク・サブタスクには担当を付けられる。選択肢はスプレッドシート(Assigneesシート)で端末間同期
+const DEFAULT_ASSIGNEES = ["永井", "田之上"];
+const EDIT_ASSIGNEES = "__edit_assignees__";
+function isWorkPJ(p) {
+  return !!p && p.owner === "kkr" && p.subcategory === "仕事";
+}
+
+// 担当プルダウン。末尾の「リストを編集…」で担当者リストの編集画面を開く
+function AssigneeSelect({ value, assignees, onChange, onEditList, style }) {
+  const missing = value && !assignees.includes(value);
+  return (
+    <select value={value || ""} onChange={(e) => (e.target.value === EDIT_ASSIGNEES ? onEditList() : onChange(e.target.value))}
+      style={{ ...styles.moveSelect, ...(value ? styles.assigneeSet : null), ...style }} aria-label="担当を変更" title="担当">
+      <option value="">担当なし</option>
+      {assignees.map((n) => <option key={n} value={n}>{n}</option>)}
+      {missing && <option value={value}>{value}(リスト外)</option>}
+      <option value={EDIT_ASSIGNEES}>✎ リストを編集…</option>
+    </select>
+  );
+}
+
+// 担当者リストの編集(追加・名前変更・並び替え・削除)。保存時に名前変更をPJ/タスク/サブタスクへ反映する
+function AssigneeListModal({ assignees, onSave, onClose }) {
+  const [rows, setRows] = useState(() => assignees.map((n) => ({ key: uid(), orig: n, name: n })));
+  const [newName, setNewName] = useState("");
+  const names = rows.map((r) => r.name.trim());
+  const dup = names.find((n, i) => n && names.indexOf(n) !== i);
+  const empty = names.some((n) => !n);
+  function addRow(e) {
+    e.preventDefault();
+    const n = newName.trim();
+    if (!n || names.includes(n)) return;
+    setRows((prev) => [...prev, { key: uid(), orig: null, name: n }]);
+    setNewName("");
+  }
+  function move(i, d) {
+    setRows((prev) => { const next = prev.slice(); const j = i + d; if (j < 0 || j >= next.length) return prev; [next[i], next[j]] = [next[j], next[i]]; return next; });
+  }
+  function save() {
+    if (dup || empty) return;
+    const renames = {};
+    rows.forEach((r) => { if (r.orig && r.orig !== r.name.trim()) renames[r.orig] = r.name.trim(); });
+    onSave(names, renames);
+  }
+  return (
+    <div style={styles.modalOverlay} onClick={onClose}>
+      <div style={styles.modalBox} onClick={(e) => e.stopPropagation()}>
+        <div style={styles.modalHeader}>
+          <h3 style={styles.modalTitle}>担当者リストを編集</h3>
+          <button type="button" onClick={onClose} aria-label="閉じる" style={styles.modalCloseBtn}>×</button>
+        </div>
+        <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
+          {rows.length === 0 && <li style={styles.emptySmall}>担当者なし</li>}
+          {rows.map((r, i) => (
+            <li key={r.key} style={{ ...styles.calendarLine1, marginBottom: 6 }}>
+              <div style={styles.reorderBtns}>
+                <button type="button" onClick={() => move(i, -1)} disabled={i === 0} style={{ ...styles.reorderBtn, opacity: i === 0 ? 0.3 : 1 }} aria-label="上へ移動">▲</button>
+                <button type="button" onClick={() => move(i, 1)} disabled={i === rows.length - 1} style={{ ...styles.reorderBtn, opacity: i === rows.length - 1 ? 0.3 : 1 }} aria-label="下へ移動">▼</button>
+              </div>
+              <input type="text" value={r.name} onChange={(e) => setRows((prev) => prev.map((x) => (x.key === r.key ? { ...x, name: e.target.value } : x)))}
+                style={{ ...styles.scheduleEditInput, flex: 1, minWidth: 0 }} aria-label="担当者名" />
+              <button type="button" onClick={() => setRows((prev) => prev.filter((x) => x.key !== r.key))} aria-label="担当者を削除" style={styles.deleteBtn}>×</button>
+            </li>
+          ))}
+        </ul>
+        <form onSubmit={addRow} style={{ ...styles.calendarLine1, marginTop: 8 }}>
+          <input type="text" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="担当者を追加…" style={{ ...styles.scheduleEditInput, flex: 1, minWidth: 0 }} />
+          <button type="submit" style={styles.inlineAddBtn}>＋追加</button>
+        </form>
+        <p style={{ ...styles.emptySmall, marginTop: 8 }}>名前を変えると、その担当が付いたPJ・タスク・サブタスクも新しい名前に変わる。削除しても付いている担当はそのまま残る。</p>
+        {(dup || empty) && <p style={{ fontSize: 12, color: "#C0392B", margin: "4px 0" }}>{empty ? "空欄の名前がある" : `「${dup}」が重複している`}</p>}
+        <div style={styles.modalActions}>
+          <button type="button" onClick={onClose} style={styles.inlineAddBtn}>キャンセル</button>
+          <button type="button" onClick={save} disabled={!!dup || empty} style={styles.addBtn}>保存</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // 関連リンク: スキーム無しで入力されたURLはhttps://を補う
 function normalizeLink(v) {
   const s = (v || "").trim();
@@ -769,7 +849,7 @@ function normalizeLink(v) {
   return /^[a-z][a-z0-9+.-]*:/i.test(s) ? s : `https://${s}`;
 }
 
-function PJDetailModal({ project, onUpdateNote, onUpdateName, onUpdateStatus, onClose, onAddTask, onAddSubtask, onGoToPJ }) {
+function PJDetailModal({ project, onUpdateNote, onUpdateName, onUpdateStatus, onClose, onAddTask, onAddSubtask, onGoToPJ, assignees, onEditAssignees }) {
   const [exporting, setExporting] = useState(false);
   const [linkDraft, setLinkDraft] = useState(null); // null=表示中、文字列=編集中
   function saveLink() {
@@ -819,6 +899,7 @@ function PJDetailModal({ project, onUpdateNote, onUpdateName, onUpdateStatus, on
             <input type="checkbox" checked={!!project.goalTarget} onChange={(e) => onUpdateNote(project.id, "goalTarget", e.target.checked)} />
             目標管理対象
           </label>
+          {isWorkPJ(project) && <AssigneeSelect value={project.assignee} assignees={assignees} onChange={(v) => onUpdateNote(project.id, "assignee", v)} onEditList={onEditAssignees} style={{ fontSize: 12, maxWidth: 120 }} />}
           <span style={styles.pjLinkLabel}>関連リンク</span>
           {linkDraft === null ? (
             <>
@@ -1924,6 +2005,8 @@ export default function App() {
   const skipNextWorkAdjSaveRef = useRef(false);
   const themesSaveTimer = useRef(null);
   const skipNextThemesSaveRef = useRef(false);
+  const assigneesSaveTimer = useRef(null);
+  const skipNextAssigneesSaveRef = useRef(false);
 
   // 初回ロード
   const handleLoad = async () => {
@@ -1940,6 +2023,13 @@ export default function App() {
       setWorkAdj(data.workAdj);
       skipNextThemesSaveRef.current = true;
       setThemes(data.themes);
+      // 担当者リストが未登録(初回)なら初期値を入れてそのまま保存させる
+      if (data.assignees.length > 0) {
+        skipNextAssigneesSaveRef.current = true;
+        setAssignees(data.assignees);
+      } else {
+        setAssignees((prev) => (prev === DEFAULT_ASSIGNEES ? [...DEFAULT_ASSIGNEES] : prev));
+      }
       hasLoadedRef.current = true;
       setSaveState("idle");
       try {
@@ -2152,6 +2242,28 @@ export default function App() {
     }, 800);
     return () => clearTimeout(themesSaveTimer.current);
   }, [themes]);
+  // kkr>workの担当者リスト。スプレッドシート経由で端末間同期
+  const [assignees, setAssignees] = useState(DEFAULT_ASSIGNEES);
+  const [assigneeListOpen, setAssigneeListOpen] = useState(false);
+  useEffect(() => {
+    if (!hasLoadedRef.current) return;
+    if (skipNextAssigneesSaveRef.current) { skipNextAssigneesSaveRef.current = false; return; }
+    clearTimeout(assigneesSaveTimer.current);
+    assigneesSaveTimer.current = setTimeout(() => {
+      gasSaveAssignees(assignees).catch(() => setSaveState("error"));
+    }, 800);
+    return () => clearTimeout(assigneesSaveTimer.current);
+  }, [assignees]);
+  function saveAssigneeList(names, renames) {
+    setAssignees(names);
+    if (Object.keys(renames).length > 0) {
+      const rn = (o) => (o.assignee && renames[o.assignee] ? { ...o, assignee: renames[o.assignee] } : o);
+      setProjects((prev) => prev.map((p) => rn({ ...p, tasks: p.tasks.map((t) => rn({ ...t, subtasks: t.subtasks.map(rn) })) })));
+    }
+    setAssigneeListOpen(false);
+  }
+  const editAssignees = () => setAssigneeListOpen(true);
+
   const visibleThemes = useMemo(() => {
     if (topTab === "総合") return themes;
     if (topTab === "家族") return themes.filter((t) => t.owner === "家族");
@@ -2444,6 +2556,10 @@ export default function App() {
     setProjects((prev) => prev.map((p) => p.id !== pjId ? p : { ...p, tasks: p.tasks.map((t) => (t.id === taskId ? { ...t, name } : t)) }));
   }
 
+  function updateTaskAssignee(pjId, taskId, assignee) {
+    setProjects((prev) => prev.map((p) => p.id !== pjId ? p : { ...p, tasks: p.tasks.map((t) => (t.id === taskId ? { ...t, assignee } : t)) }));
+  }
+
   function toggleTaskDone(pjId, taskId) {
     const p = projects.find((p) => p.id === pjId);
     const t = p?.tasks.find((t) => t.id === taskId);
@@ -2466,7 +2582,8 @@ export default function App() {
       setProjects((prev) => [...prev, project(effectiveOwner, trimmed, [], ownerHasSub ? addSub : null, addPJPriority)]);
     } else if (addLevel === "task") {
       if (!addPJId) return;
-      setProjects((prev) => prev.map((p) => (p.id === addPJId ? { ...p, tasks: [...p.tasks, task(trimmed, [], addTaskStartDate, addTaskEndDate)] } : p)));
+      // 担当は親(PJ)から引き継ぐ
+      setProjects((prev) => prev.map((p) => (p.id === addPJId ? { ...p, tasks: [...p.tasks, { ...task(trimmed, [], addTaskStartDate, addTaskEndDate), assignee: p.assignee || "" }] } : p)));
     } else {
       if (!addPJId || !addTaskId) return;
       const parentTask = projects.find((p) => p.id === addPJId)?.tasks.find((t) => t.id === addTaskId);
@@ -2477,7 +2594,7 @@ export default function App() {
       }
       setProjects((prev) => prev.map((p) => {
         if (p.id !== addPJId) return p;
-        return { ...p, tasks: p.tasks.map((t) => t.id === addTaskId ? { ...t, subtasks: [...t.subtasks, sub(trimmed, false, addPriority, clampedDate, addStartTime, addEstMinutes ? Number(addEstMinutes) : null)] } : t) };
+        return { ...p, tasks: p.tasks.map((t) => t.id === addTaskId ? { ...t, subtasks: [...t.subtasks, { ...sub(trimmed, false, addPriority, clampedDate, addStartTime, addEstMinutes ? Number(addEstMinutes) : null), assignee: t.assignee || p.assignee || "" }] } : t) };
       }));
     }
     setAddText(""); setAddDate(""); setAddStartTime(""); setAddEstMinutes(""); setAddTaskStartDate(""); setAddTaskEndDate("");
@@ -2892,6 +3009,7 @@ export default function App() {
                         style={{ ...styles.moyamoyaToggleBtn, background: p.moyamoya ? MOYAMOYA_COLOR : "transparent", color: p.moyamoya ? "#FFFFFF" : MOYAMOYA_COLOR, borderColor: MOYAMOYA_COLOR }}
                         aria-label={p.moyamoya ? "もやもやから外す" : "もやもやに入れる"}>もや</button>
                     )}
+                    {isWorkPJ(p) && <AssigneeSelect value={p.assignee} assignees={assignees} onChange={(v) => updatePJNote(p.id, "assignee", v)} onEditList={editAssignees} />}
                     <select value={p.priority || 2} onChange={(e) => updatePJPriority(p.id, Number(e.target.value))} style={styles.moveSelect} aria-label="優先度を変更">
                       {PJ_PRIORITIES.map((pr) => <option key={pr.v} value={pr.v}>{pr.label}</option>)}
                     </select>
@@ -2938,6 +3056,7 @@ export default function App() {
                                 aria-label={showDoneSubtasks.has(t.id) ? "完了済みサブタスクを隠す" : "完了済みサブタスクを表示"}>
                                 {showDoneSubtasks.has(t.id) ? "👁" : "🙈"}
                               </button>
+                              {isWorkPJ(p) && <AssigneeSelect value={t.assignee} assignees={assignees} onChange={(v) => updateTaskAssignee(p.id, t.id, v)} onEditList={editAssignees} />}
                               <select value={p.id} onChange={(e) => moveTask(p.id, t.id, e.target.value)} style={styles.moveSelect} aria-label="PJを変更">
                                 {projects.map((pp) => <option key={pp.id} value={pp.id}>{pjLabel(pp)}</option>)}
                               </select>
@@ -2983,6 +3102,12 @@ export default function App() {
                                               <span style={styles.scheduleEditLabel}>予定日</span>
                                               <input type="date" value={s.scheduledDate || ""} onChange={(e) => updateSubtaskSchedule(p.id, t.id, s.id, "scheduledDate", e.target.value)} min={t.startDate || undefined} max={t.endDate || undefined} style={styles.scheduleEditInput} />
                                             </label>
+                                            {isWorkPJ(p) && (
+                                              <label style={styles.scheduleEditField}>
+                                                <span style={styles.scheduleEditLabel}>担当</span>
+                                                <AssigneeSelect value={s.assignee} assignees={assignees} onChange={(v) => updateSubtaskSchedule(p.id, t.id, s.id, "assignee", v)} onEditList={editAssignees} style={styles.scheduleEditInput} />
+                                              </label>
+                                            )}
                                             <label style={styles.scheduleEditField}>
                                               <span style={styles.scheduleEditLabel}>繰り返し{p.owner === "kkr" && p.subcategory === "仕事" ? "(休日は翌日へ)" : ""}</span>
                                               <select value={parseMonthlyRepeat(s.repeatWeekday) ? "monthly" : (s.repeatWeekday ?? "")} onChange={(e) => { const v = e.target.value; updateSubtaskSchedule(p.id, t.id, s.id, "repeatWeekday", v === "" ? "" : v === "monthly" ? monthlyRepeatFromDate(s.scheduledDate || toDateStr(new Date())) : /^\d$/.test(v) ? Number(v) : v); }} style={styles.scheduleEditInput}>
@@ -3581,7 +3706,7 @@ export default function App() {
           {pjDetailModal && (() => {
             const p = (projects || []).find((pp) => pp.id === pjDetailModal);
             if (!p) return null;
-            return <PJDetailModal key={p.id} project={p} onUpdateNote={updatePJNote} onUpdateName={updatePJName} onUpdateStatus={updatePJStatus} onClose={() => setPjDetailModal(null)} onAddTask={openAddTaskModal} onAddSubtask={openAddSubtaskModal} onGoToPJ={goToPJ} />;
+            return <PJDetailModal key={p.id} project={p} onUpdateNote={updatePJNote} onUpdateName={updatePJName} onUpdateStatus={updatePJStatus} onClose={() => setPjDetailModal(null)} onAddTask={openAddTaskModal} onAddSubtask={openAddSubtaskModal} onGoToPJ={goToPJ} assignees={assignees} onEditAssignees={() => setAssigneeListOpen(true)} />;
           })()}
 
           {taskEditModal && (() => {
@@ -3627,6 +3752,12 @@ export default function App() {
                       <input type="number" min="0" step="15" value={t.estimatedMinutes ?? ""} onChange={(e) => updateTaskEstimatedMinutes(pjId, t.id, e.target.value)}
                         placeholder={taskEstimatedSubtotal(t) ? String(taskEstimatedSubtotal(t)) : "―"} style={{ ...styles.scheduleEditInput, width: 64 }} />
                     </label>
+                    {isWorkPJ(p) && (
+                      <label style={styles.scheduleEditField}>
+                        <span style={styles.scheduleEditLabel}>担当</span>
+                        <AssigneeSelect value={t.assignee} assignees={assignees} onChange={(v) => updateTaskAssignee(pjId, t.id, v)} onEditList={editAssignees} style={styles.scheduleEditInput} />
+                      </label>
+                    )}
                     <label style={styles.scheduleEditField}>
                       <span style={styles.scheduleEditLabel}>PJ</span>
                       <select value={pjId} onChange={(e) => moveTask(pjId, t.id, e.target.value)} style={styles.moveSelect}>
@@ -3898,6 +4029,12 @@ export default function App() {
                         {MINUTE_OPTIONS.map((m) => <option key={m} value={m}>{formatDuration(m)}</option>)}
                       </select>
                     </label>
+                    {isWorkPJ(p) && (
+                      <label style={styles.scheduleEditField}>
+                        <span style={styles.scheduleEditLabel}>担当</span>
+                        <AssigneeSelect value={s.assignee} assignees={assignees} onChange={(v) => updateSubtaskSchedule(pjId, taskId, s.id, "assignee", v)} onEditList={editAssignees} style={styles.scheduleEditInput} />
+                      </label>
+                    )}
                   </div>
                   <div style={{ ...styles.modalActions, justifyContent: "flex-start", flexWrap: "wrap", gap: 6 }}>
                     {renderStopwatchControl(pjId, taskId, s.id)}
@@ -3909,6 +4046,8 @@ export default function App() {
               </div>
             );
           })()}
+
+          {assigneeListOpen && <AssigneeListModal assignees={assignees} onSave={saveAssigneeList} onClose={() => setAssigneeListOpen(false)} />}
 
           {mainView === "pj" && (
             <div style={styles.tree}>
@@ -4089,6 +4228,7 @@ const styles = {
   scheduleEditField: { display: "flex", flexDirection: "column", gap: 1 },
   scheduleEditLabel: { fontSize: 9, color: "#9B9B9B", fontWeight: 700 },
   scheduleEditInput: { fontSize: 11, padding: "3px 5px", borderRadius: 5, border: "1.5px solid #E5E5E5", background: "#FFFFFF", color: "#2C3645", fontFamily: "inherit" },
+  assigneeSet: { borderColor: "#8B6F3E", color: "#8B6F3E", fontWeight: 700 },
   moveSelect: { fontSize: 10, padding: "2px 4px", borderRadius: 5, border: "1.5px solid #D8D8D8", background: "#FFFFFF", color: "#2C3645", fontFamily: "inherit", maxWidth: 92 },
   moyamoyaToggleBtn: { fontSize: 10, fontWeight: 700, padding: "3px 7px", borderRadius: 5, border: "1.5px solid", cursor: "pointer", fontFamily: "inherit", flexShrink: 0 },
   brainRow: { display: "flex", gap: 18, marginBottom: 12, flexWrap: "wrap" },

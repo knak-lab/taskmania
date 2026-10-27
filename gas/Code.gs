@@ -93,8 +93,8 @@ const SHEET_MOYAMOYA = "MoyamoyaNotes";
 const SHEET_WORKADJ = "WorkAdjustments";
 const SHEET_THEMES = "Themes";
 
-const PROJECTS_HEADERS = ["id", "owner", "name", "subcategory", "priority", "status", "completedNote", "nextAction", "moyamoya", "progressRate", "themeId", "purpose", "relatedLink", "goalTarget"];
-const TASKS_HEADERS = ["id", "projectId", "name", "startDate", "endDate", "estimatedMinutes", "sourceTodoId", "done"];
+const PROJECTS_HEADERS = ["id", "owner", "name", "subcategory", "priority", "status", "completedNote", "nextAction", "moyamoya", "progressRate", "themeId", "purpose", "relatedLink", "goalTarget", "assignee"];
+const TASKS_HEADERS = ["id", "projectId", "name", "startDate", "endDate", "estimatedMinutes", "sourceTodoId", "done", "assignee"];
 const SUBTASKS_HEADERS = [
   "id",
   "taskId",
@@ -110,12 +110,16 @@ const SUBTASKS_HEADERS = [
   "sourceSubtaskId",
   "doneUpdatedAt",
   "repeatEndDate",
+  "assignee",
 ];
 const STEPS_HEADERS = ["id", "subtaskId", "text", "done"];
 const MOYAMOYA_HEADERS = ["id", "text"];
 const WORKADJ_HEADERS = ["date", "hours"];
 // マップ画面のテーマ(PJの上の見出し)。並び順はシートの行順
 const THEMES_HEADERS = ["id", "owner", "subcategory", "name"];
+// kkr>workのPJ・タスク・サブタスクの担当者の選択肢。並び順はシートの行順
+const SHEET_ASSIGNEES = "Assignees";
+const ASSIGNEES_HEADERS = ["name"];
 
 /**
  * Googleカレンダー送信機能の初回権限付与用。エディタの関数選択でこれを選び、
@@ -136,6 +140,7 @@ function setup() {
   getOrCreateSheet_(SHEET_MOYAMOYA, MOYAMOYA_HEADERS);
   getOrCreateSheet_(SHEET_WORKADJ, WORKADJ_HEADERS);
   getOrCreateSheet_(SHEET_THEMES, THEMES_HEADERS);
+  getOrCreateSheet_(SHEET_ASSIGNEES, ASSIGNEES_HEADERS);
   Logger.log("セットアップ完了: Projects / Tasks / Subtasks / Steps / MoyamoyaNotes / WorkAdjustments シートを用意しました");
 }
 
@@ -144,7 +149,8 @@ function doGet(e) {
   const moyamoyaNotes = readMoyamoyaNotes_();
   const workAdj = readWorkAdj_();
   const themes = readThemes_();
-  return jsonResponse_({ projects: projects, moyamoyaNotes: moyamoyaNotes, workAdj: workAdj, themes: themes });
+  const assignees = readAssignees_();
+  return jsonResponse_({ projects: projects, moyamoyaNotes: moyamoyaNotes, workAdj: workAdj, themes: themes, assignees: assignees });
 }
 
 function doPost(e) {
@@ -170,6 +176,9 @@ function doPost(e) {
     if (body.themes !== undefined) {
       writeThemes_(body.themes || []);
       themeCount = (body.themes || []).length;
+    }
+    if (body.assignees !== undefined) {
+      writeAssignees_(body.assignees || []);
     }
     if (body.calendarEvent !== undefined) {
       calendarEventId = createCalendarEvent_(body.calendarEvent);
@@ -241,7 +250,8 @@ function readProjects_() {
       repeatWeekday = r[10],
       sourceSubtaskId = r[11],
       doneUpdatedAt = r[12],
-      repeatEndDate = r[13];
+      repeatEndDate = r[13],
+      subAssignee = r[14];
     if (!id || !taskId) return;
     if (!subtasksByTask[taskId]) subtasksByTask[taskId] = [];
     subtasksByTask[taskId].push({
@@ -264,6 +274,7 @@ function readProjects_() {
       sourceSubtaskId: sourceSubtaskId ? String(sourceSubtaskId) : null,
       doneUpdatedAt: doneUpdatedAt ? Number(doneUpdatedAt) : 0,
       repeatEndDate: repeatEndDate ? String(repeatEndDate) : null,
+      assignee: subAssignee ? String(subAssignee) : "",
     });
   });
 
@@ -276,7 +287,8 @@ function readProjects_() {
       endDate = r[4],
       estimatedMinutes = r[5],
       sourceTodoId = r[6],
-      done = r[7];
+      done = r[7],
+      taskAssignee = r[8];
     if (!id || !projectId) return;
     if (!tasksByProject[projectId]) tasksByProject[projectId] = [];
     tasksByProject[projectId].push({
@@ -288,6 +300,7 @@ function readProjects_() {
       subtasks: subtasksByTask[id] || [],
       sourceTodoId: sourceTodoId ? String(sourceTodoId) : null,
       done: done === true || done === "TRUE" || done === "true",
+      assignee: taskAssignee ? String(taskAssignee) : "",
     });
   });
 
@@ -309,7 +322,8 @@ function readProjects_() {
         themeId = r[10],
         purpose = r[11],
         relatedLink = r[12],
-        goalTarget = r[13];
+        goalTarget = r[13],
+        assignee = r[14];
       return {
         id: String(id),
         owner: owner || "",
@@ -325,6 +339,7 @@ function readProjects_() {
         purpose: purpose || "",
         relatedLink: relatedLink || "",
         goalTarget: goalTarget === true || goalTarget === "TRUE" || goalTarget === "true",
+        assignee: assignee ? String(assignee) : "",
         tasks: tasksByProject[id] || [],
       };
     });
@@ -386,9 +401,9 @@ function writeProjects_(projects) {
   const stepRows = [];
 
   (projects || []).forEach(function (p) {
-    projRows.push([p.id, p.owner || "", p.name || "", p.subcategory || "", p.priority || 2, p.status || "", p.completedNote || "", p.nextAction || "", !!p.moyamoya, p.progressRate != null ? p.progressRate : "", p.themeId || "", p.purpose || "", p.relatedLink || "", !!p.goalTarget]);
+    projRows.push([p.id, p.owner || "", p.name || "", p.subcategory || "", p.priority || 2, p.status || "", p.completedNote || "", p.nextAction || "", !!p.moyamoya, p.progressRate != null ? p.progressRate : "", p.themeId || "", p.purpose || "", p.relatedLink || "", !!p.goalTarget, p.assignee || ""]);
     (p.tasks || []).forEach(function (t) {
-      taskRows.push([t.id, p.id, t.name || "", t.startDate || "", t.endDate || "", t.estimatedMinutes || "", t.sourceTodoId || "", !!t.done]);
+      taskRows.push([t.id, p.id, t.name || "", t.startDate || "", t.endDate || "", t.estimatedMinutes || "", t.sourceTodoId || "", !!t.done, t.assignee || ""]);
       (t.subtasks || []).forEach(function (s) {
         subRows.push([
           s.id,
@@ -405,6 +420,7 @@ function writeProjects_(projects) {
           s.sourceSubtaskId || "",
           s.doneUpdatedAt || "",
           s.repeatEndDate || "",
+          s.assignee || "",
         ]);
         (s.steps || []).forEach(function (st) {
           stepRows.push([st.id, s.id, st.text || "", !!st.done]);
@@ -436,6 +452,25 @@ function writeThemes_(themes) {
     return [t.id, t.owner || "", t.subcategory || "", t.name || ""];
   });
   writeRowsReplacing_(sheet, rows, THEMES_HEADERS.length);
+}
+
+function readAssignees_() {
+  const sheet = getOrCreateSheet_(SHEET_ASSIGNEES, ASSIGNEES_HEADERS);
+  return getDataRows_(sheet)
+    .map(function (r) {
+      return String(r[0] || "").trim();
+    })
+    .filter(function (n) {
+      return n;
+    });
+}
+
+function writeAssignees_(assignees) {
+  const sheet = getOrCreateSheet_(SHEET_ASSIGNEES, ASSIGNEES_HEADERS);
+  const rows = (assignees || []).map(function (n) {
+    return [n];
+  });
+  writeRowsReplacing_(sheet, rows, ASSIGNEES_HEADERS.length);
 }
 
 // ---- ユーティリティ ----
