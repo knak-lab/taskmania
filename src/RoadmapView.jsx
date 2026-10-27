@@ -158,6 +158,14 @@ export default function RoadmapView({ projects, themes, onOpenPJ, onOpenTask, on
     return i * colW + (day / daysInMonth(monthKey(dateStr))) * colW;
   };
   const todayX = xOf(todayStr, false) + colW / daysInMonth(todayMonth) / 2;
+  // 週の区切り(月曜)。月初と重なる週は月の線があるので省く
+  const weekXs = [];
+  months.forEach((m, i) => {
+    const [y, mm] = m.split("-").map(Number);
+    for (let d = 2; d <= daysInMonth(m); d++) {
+      if (new Date(y, mm - 1, d).getDay() === 1) weekXs.push(i * colW + ((d - 1) / daysInMonth(m)) * colW);
+    }
+  });
 
   function scrollToToday(smooth) {
     const el = scrollRef.current;
@@ -202,6 +210,9 @@ export default function RoadmapView({ projects, themes, onOpenPJ, onOpenTask, on
       ) : (
         <div className="rm-scroll" ref={scrollRef}>
           <div className="rm-inner" style={{ width: labelW + trackW, "--lw": `${labelW}px`, "--cw": `${colW}px` }}>
+            <div className="rm-weeks" style={{ left: labelW, width: trackW }}>
+              {weekXs.map((x) => <i key={x} style={{ left: x }} />)}
+            </div>
             <div className="rm-head">
               <div className="rm-corner">PJ</div>
               {months.map((m, i) => {
