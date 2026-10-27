@@ -244,7 +244,7 @@ export default function RoadmapView({ projects, themes, onOpenPJ, onOpenTask, on
                         <span className="rm-grip" title="ドラッグで並び替え" aria-label="ドラッグで並び替え"
                           onPointerDown={(e) => onGripDown(e, p.id, g.id)} onPointerMove={onGripMove} onPointerUp={onGripUp} onPointerCancel={onGripUp}>⋮⋮</span>
                       )}
-                      <span className="rm-pj-name">{p.name}</span>
+                      <span className="rm-pj-name">{p.goalTarget && "☆"}{p.name}</span>
                       <span className="rm-pj-meta">
                         {pct !== null && <span>{pct}%</span>}
                         {undated > 0 && <span className="rm-undated">期間未設定{undated}</span>}

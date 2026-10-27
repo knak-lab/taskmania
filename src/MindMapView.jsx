@@ -407,7 +407,7 @@ export default function MindMapView({ rootLabel, projects, themes, allProjects, 
       ? <input className="mm-edit" autoFocus defaultValue={n.text} onFocus={(e) => e.currentTarget.select()}
           onKeyDown={(e) => editKeys(e, (v) => commitRename(n, v), () => { editingRef.current = null; setEditing(null); focusMap(); }, false)}
           onBlur={(e) => commitRename(n, e.currentTarget.value)} aria-label="名前" />
-      : <span className="mm-label">{n.text}</span>;
+      : <span className="mm-label">{n.type === "pj" && n.pj.goalTarget && "☆"}{n.text}</span>;
     const tog = n.children.length > 0 && (
       <button type="button" className="mm-tog" onClick={() => setOpen((o) => ({ ...o, [n.id]: !isOpen(n) }))} aria-label={isOpen(n) ? "たたむ" : "開く"}>
         {isOpen(n) ? "−" : `▸ ${n.children.length}`}
@@ -469,7 +469,7 @@ export default function MindMapView({ rootLabel, projects, themes, allProjects, 
         {rs.slice(0, max).map((r) => (
           <li key={r.s.id}>
             <button type="button" className="mm-link" onClick={() => revealSub(r)}>{r.s.text}</button>
-            <span className="mm-muted">{r.p.name}{extra ? `・${extra(r)}` : ""}</span>
+            <span className="mm-muted">{r.p.goalTarget && "☆"}{r.p.name}{extra ? `・${extra(r)}` : ""}</span>
           </li>
         ))}
         {rs.length > max && <li className="mm-muted">ほか {rs.length - max}件</li>}
@@ -477,7 +477,7 @@ export default function MindMapView({ rootLabel, projects, themes, allProjects, 
     );
     const pjList = (ps, max = 6) => (
       <ul className="mm-ck-list">
-        {ps.slice(0, max).map((p) => <li key={p.id}><button type="button" className="mm-link" onClick={() => onOpenPJ(p.id)}>{p.name}</button></li>)}
+        {ps.slice(0, max).map((p) => <li key={p.id}><button type="button" className="mm-link" onClick={() => onOpenPJ(p.id)}>{p.goalTarget && "☆"}{p.name}</button></li>)}
         {ps.length > max && <li className="mm-muted">ほか {ps.length - max}件</li>}
       </ul>
     );
@@ -563,7 +563,7 @@ export default function MindMapView({ rootLabel, projects, themes, allProjects, 
       const bc = BRANCH[index.get(pn.id)?.branch ?? 0];
       return (
         <button type="button" key={pn.id} className="mm-pjrow" style={{ "--bc": bc }} onClick={() => { const par = index.get(pn.id)?.parent; if (par) setOpen((o) => ({ ...o, [par.id]: true })); selectAndReveal(pn.id); }}>
-          <span className="mm-pjrow-t"><span className="mm-dot" />{pn.text}<span className={`mm-pill mm-p-${s.k}`}>{s.t}</span></span>
+          <span className="mm-pjrow-t"><span className="mm-dot" />{pn.pj.goalTarget && "☆"}{pn.text}<span className={`mm-pill mm-p-${s.k}`}>{s.t}</span></span>
           <span className="mm-sum"><span className="mm-bar"><i style={{ width: `${p.total ? (p.done / p.total) * 100 : 0}%` }} /></span><span className="mm-num">{p.done}/{p.total}</span></span>
           {pn.pj.nextAction && <span className="mm-pjrow-n">次の一歩：{pn.pj.nextAction}</span>}
         </button>

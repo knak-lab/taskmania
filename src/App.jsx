@@ -757,6 +757,11 @@ function NoteField({ title, placeholder, value, onChange }) {
   );
 }
 
+// 目標管理対象のPJは名前の頭に☆を付けて表示する
+function pjLabel(p) {
+  return p ? `${p.goalTarget ? "☆" : ""}${p.name}` : "";
+}
+
 // 関連リンク: スキーム無しで入力されたURLはhttps://を補う
 function normalizeLink(v) {
   const s = (v || "").trim();
@@ -792,6 +797,7 @@ function PJDetailModal({ project, onUpdateNote, onUpdateName, onUpdateStatus, on
     <div style={styles.modalOverlay} onClick={onClose}>
       <div style={styles.modalBoxLarge} onClick={(e) => e.stopPropagation()}>
         <div style={styles.modalHeader}>
+          {project.goalTarget && <span style={{ ...styles.goalStar, fontSize: 18 }} title="目標管理対象">☆</span>}
           <input type="text" value={nameDraft}
             onChange={(e) => { setNameDraft(e.target.value); if (e.target.value.trim()) onUpdateName(project.id, e.target.value); }}
             onBlur={() => { if (!nameDraft.trim()) setNameDraft(project.name); }}
@@ -809,6 +815,10 @@ function PJDetailModal({ project, onUpdateNote, onUpdateName, onUpdateStatus, on
 
         <div style={styles.pjLinkRow}>
           {onGoToPJ && <button type="button" onClick={() => onGoToPJ(project.id)} style={styles.pjOpenBtn}>PJを開く</button>}
+          <label style={styles.goalCheckLabel}>
+            <input type="checkbox" checked={!!project.goalTarget} onChange={(e) => onUpdateNote(project.id, "goalTarget", e.target.checked)} />
+            目標管理対象
+          </label>
           <span style={styles.pjLinkLabel}>関連リンク</span>
           {linkDraft === null ? (
             <>
@@ -879,7 +889,7 @@ function PJDetailModal({ project, onUpdateNote, onUpdateName, onUpdateStatus, on
 
         <div style={styles.sectionTitleRow}>
           <h4 style={styles.sectionTitleFlush}>タスク・サブタスク一覧</h4>
-          <button type="button" onClick={() => onAddTask(project.id, project.name)} style={styles.inlineAddBtn}>＋タスク</button>
+          <button type="button" onClick={() => onAddTask(project.id, pjLabel(project))} style={styles.inlineAddBtn}>＋タスク</button>
         </div>
         <ul style={styles.detailTaskList}>
           {project.tasks.length === 0 && <li style={styles.emptySmall}>タスクなし</li>}
@@ -900,7 +910,7 @@ function PJDetailModal({ project, onUpdateNote, onUpdateName, onUpdateStatus, on
                     aria-label={showDone ? "完了済みサブタスクを隠す" : "完了済みサブタスクを表示"}>
                     {showDone ? "👁" : "🙈"}
                   </button>
-                  <button type="button" onClick={() => onAddSubtask(project.id, t.id, project.name, t.name)} style={styles.inlineAddBtn}>＋サブ</button>
+                  <button type="button" onClick={() => onAddSubtask(project.id, t.id, pjLabel(project), t.name)} style={styles.inlineAddBtn}>＋サブ</button>
                 </div>
                 {open && (
                   <ul style={styles.detailSubList}>
@@ -1416,7 +1426,7 @@ function DashboardModal({ projects, onClose, onToggleDone, onMoveDate, stamping,
   const pjPieData = useMemo(() => {
     const top = projectTotals
       .filter((d) => topProjectIds.has(d.p.id))
-      .map((d) => ({ label: d.p.name, minutes: d.minutes, color: pjColorMap.get(d.p.id) }));
+      .map((d) => ({ label: pjLabel(d.p), minutes: d.minutes, color: pjColorMap.get(d.p.id) }));
     const otherMinutes = projectTotals
       .filter((d) => !topProjectIds.has(d.p.id))
       .reduce((sum, d) => sum + d.minutes, 0);
@@ -1444,7 +1454,7 @@ function DashboardModal({ projects, onClose, onToggleDone, onMoveDate, stamping,
       const key = isTop ? p.id : "__other__";
       let entry = seriesMap.get(key);
       if (!entry) {
-        entry = { pjId: key, label: isTop ? p.name : "その他", color: isTop ? pjColorMap.get(p.id) : DASHBOARD_OTHER_COLOR, valuesByDate: new Map() };
+        entry = { pjId: key, label: isTop ? pjLabel(p) : "その他", color: isTop ? pjColorMap.get(p.id) : DASHBOARD_OTHER_COLOR, valuesByDate: new Map() };
         seriesMap.set(key, entry);
       }
       entry.valuesByDate.set(s.scheduledDate, (entry.valuesByDate.get(s.scheduledDate) || 0) + minutes);
@@ -1458,7 +1468,7 @@ function DashboardModal({ projects, onClose, onToggleDone, onMoveDate, stamping,
   const totalMin = pjPieData.reduce((sum, d) => sum + d.minutes, 0);
 
   const dashboardTasks = useMemo(() => {
-    const tasks = filteredSubs.map(({ p, t, s }) => ({ pjId: p.id, pjName: p.name, taskId: t.id, taskName: t.name, sub: s }));
+    const tasks = filteredSubs.map(({ p, t, s }) => ({ pjId: p.id, pjName: pjLabel(p), taskId: t.id, taskName: t.name, sub: s }));
     tasks.sort((a, b) => {
       if (a.sub.scheduledDate !== b.sub.scheduledDate) return a.sub.scheduledDate.localeCompare(b.sub.scheduledDate);
       if (!a.sub.startTime && !b.sub.startTime) return 0;
@@ -1636,7 +1646,7 @@ function TodayView({
     for (const t of p.tasks) {
       for (const s of t.subtasks) {
         if (s.done) continue;
-        flat.push({ pjId: p.id, pjName: p.name, taskId: t.id, taskName: t.name, sub: s });
+        flat.push({ pjId: p.id, pjName: pjLabel(p), taskId: t.id, taskName: t.name, sub: s });
       }
     }
   }
@@ -2010,7 +2020,7 @@ export default function App() {
     for (const p of visibleProjects) {
       for (const t of p.tasks) {
         for (const s of t.subtasks) {
-          if (s.scheduledDate === dayViewDate) dayTasks.push({ pjId: p.id, pjName: p.name, taskId: t.id, taskName: t.name, sub: s });
+          if (s.scheduledDate === dayViewDate) dayTasks.push({ pjId: p.id, pjName: pjLabel(p), taskId: t.id, taskName: t.name, sub: s });
         }
       }
     }
@@ -2034,7 +2044,7 @@ export default function App() {
     for (const p of visibleProjects) {
       for (const t of p.tasks) {
         for (const s of t.subtasks) {
-          if (s.scheduledDate && s.scheduledDate < dayViewDate && !s.done) overdueTasks.push({ pjId: p.id, pjName: p.name, taskId: t.id, taskName: t.name, sub: s });
+          if (s.scheduledDate && s.scheduledDate < dayViewDate && !s.done) overdueTasks.push({ pjId: p.id, pjName: pjLabel(p), taskId: t.id, taskName: t.name, sub: s });
         }
       }
     }
@@ -2055,7 +2065,7 @@ export default function App() {
     for (const p of visibleProjects) {
       for (const t of p.tasks) {
         for (const s of t.subtasks) {
-          if (!s.scheduledDate && !s.done) unscheduledTasks.push({ pjId: p.id, pjName: p.name, taskId: t.id, taskName: t.name, sub: s });
+          if (!s.scheduledDate && !s.done) unscheduledTasks.push({ pjId: p.id, pjName: pjLabel(p), taskId: t.id, taskName: t.name, sub: s });
         }
       }
     }
@@ -2070,7 +2080,7 @@ export default function App() {
       for (const t of p.tasks) {
         for (const s of t.subtasks) {
           if (!s.scheduledDate) continue;
-          (map[s.scheduledDate] ||= []).push({ pjId: p.id, pjName: p.name, taskId: t.id, taskName: t.name, owner: p.owner, sub: s });
+          (map[s.scheduledDate] ||= []).push({ pjId: p.id, pjName: pjLabel(p), taskId: t.id, taskName: t.name, owner: p.owner, sub: s });
         }
       }
     }
@@ -2213,7 +2223,7 @@ export default function App() {
       for (const t of p.tasks) {
         for (const s of t.subtasks) {
           if (weekDates.includes(s.scheduledDate))
-            tasks.push({ pjId: p.id, pjName: p.name, taskId: t.id, taskName: t.name, sub: s });
+            tasks.push({ pjId: p.id, pjName: pjLabel(p), taskId: t.id, taskName: t.name, sub: s });
         }
       }
     }
@@ -2260,7 +2270,7 @@ export default function App() {
       for (const t of p.tasks) {
         for (const s of t.subtasks) {
           if (nextWeekDates.includes(s.scheduledDate))
-            tasks.push({ pjId: p.id, pjName: p.name, taskId: t.id, taskName: t.name, sub: s });
+            tasks.push({ pjId: p.id, pjName: pjLabel(p), taskId: t.id, taskName: t.name, sub: s });
         }
       }
     }
@@ -2299,7 +2309,7 @@ export default function App() {
       for (const t of p.tasks) {
         for (const s of t.subtasks) {
           if (lastWeekDates.includes(s.scheduledDate))
-            tasks.push({ pjId: p.id, pjName: p.name, taskId: t.id, taskName: t.name, sub: s });
+            tasks.push({ pjId: p.id, pjName: pjLabel(p), taskId: t.id, taskName: t.name, sub: s });
         }
       }
     }
@@ -2868,6 +2878,7 @@ export default function App() {
                       <button type="button" onClick={() => movePJInSection(groupIds, p.id, "down")} disabled={pIdx === groupIds.length - 1} style={{ ...styles.reorderBtn, opacity: pIdx === groupIds.length - 1 ? 0.3 : 1, cursor: pIdx === groupIds.length - 1 ? "default" : "pointer" }} aria-label="下へ移動">▼</button>
                     </div>
                     <button onClick={() => toggleOpenPJ(p.id)} style={styles.collapseBtn} aria-label={pjOpen ? "折りたたむ" : "展開する"}>{pjOpen ? "▾" : "▸"}</button>
+                    {p.goalTarget && <span style={styles.goalStar} title="目標管理対象">☆</span>}
                     <input type="text" value={p.name} onChange={(e) => updatePJName(p.id, e.target.value)} style={styles.pjNameInput} className="pj-title-input" aria-label="PJ名を編集" />
                     {pt > 0 && pd === pt && <span style={styles.doneMark}>✅</span>}
                     <button type="button" onClick={() => setPjDetailModal(p.id)} style={styles.ganttToggleBtn} aria-label="ガントチャートを表示">📊</button>
@@ -2895,7 +2906,7 @@ export default function App() {
                       </select>
                     )}
                     <span style={styles.progressTag}>{pd}/{pt}</span>
-                    <button type="button" onClick={() => openAddTaskModal(p.id, p.name)} style={styles.inlineAddBtn}>＋タスク</button>
+                    <button type="button" onClick={() => openAddTaskModal(p.id, pjLabel(p))} style={styles.inlineAddBtn}>＋タスク</button>
                     <button onClick={() => removePJ(p.id)} aria-label="PJを削除" style={styles.deleteBtn}>×</button>
                   </div>
                   {pjOpen && (
@@ -2928,9 +2939,9 @@ export default function App() {
                                 {showDoneSubtasks.has(t.id) ? "👁" : "🙈"}
                               </button>
                               <select value={p.id} onChange={(e) => moveTask(p.id, t.id, e.target.value)} style={styles.moveSelect} aria-label="PJを変更">
-                                {projects.map((pp) => <option key={pp.id} value={pp.id}>{pp.name}</option>)}
+                                {projects.map((pp) => <option key={pp.id} value={pp.id}>{pjLabel(pp)}</option>)}
                               </select>
-                              <button type="button" onClick={() => openAddSubtaskModal(p.id, t.id, p.name, t.name)} style={styles.inlineAddBtn}>＋サブ</button>
+                              <button type="button" onClick={() => openAddSubtaskModal(p.id, t.id, pjLabel(p), t.name)} style={styles.inlineAddBtn}>＋サブ</button>
                               <button onClick={() => removeTask(p.id, t.id)} aria-label="タスクを削除" style={styles.deleteBtn}>×</button>
                             </div>
                             <div style={styles.taskDatesRow}>
@@ -3033,7 +3044,7 @@ export default function App() {
                                                 const toTaskId = toPj?.tasks[0]?.id;
                                                 if (toTaskId) moveSubtask(p.id, t.id, s.id, toPjId, toTaskId);
                                               }} style={styles.moveSelect}>
-                                                {projects.map((pp) => <option key={pp.id} value={pp.id}>{pp.name}</option>)}
+                                                {projects.map((pp) => <option key={pp.id} value={pp.id}>{pjLabel(pp)}</option>)}
                                               </select>
                                             </label>
                                             <label style={styles.scheduleEditField}>
@@ -3588,7 +3599,7 @@ export default function App() {
                     <h3 style={styles.modalTitle}>タスクを編集</h3>
                     <button type="button" onClick={close} aria-label="閉じる" style={styles.modalCloseBtn}>×</button>
                   </div>
-                  <p style={styles.modalContext}>{p.name}</p>
+                  <p style={styles.modalContext}>{pjLabel(p)}</p>
                   <div style={{ ...styles.calendarLine1, marginBottom: 10 }}>
                     <button onClick={() => toggleTaskDone(pjId, t.id)} aria-label={t.done ? "未完了に戻す" : "完了にする"} style={styles.stampWrap}>
                       {t.done ? <span style={styles.hankoStamp} className={stamping === t.id ? "hanko-pop" : ""}>済</span> : <span style={styles.hankoEmpty} />}
@@ -3619,13 +3630,13 @@ export default function App() {
                     <label style={styles.scheduleEditField}>
                       <span style={styles.scheduleEditLabel}>PJ</span>
                       <select value={pjId} onChange={(e) => moveTask(pjId, t.id, e.target.value)} style={styles.moveSelect}>
-                        {projects.map((pp) => <option key={pp.id} value={pp.id}>{pp.name}</option>)}
+                        {projects.map((pp) => <option key={pp.id} value={pp.id}>{pjLabel(pp)}</option>)}
                       </select>
                     </label>
                   </div>
                   <div style={{ ...styles.sectionTitleRow, marginTop: 12 }}>
                     <h4 style={styles.sectionTitleFlush}>サブタスク</h4>
-                    <button type="button" onClick={() => openAddSubtaskModal(pjId, t.id, p.name, t.name)} style={styles.inlineAddBtn}>＋サブ</button>
+                    <button type="button" onClick={() => openAddSubtaskModal(pjId, t.id, pjLabel(p), t.name)} style={styles.inlineAddBtn}>＋サブ</button>
                   </div>
                   <ul style={styles.detailTaskList}>
                     {t.subtasks.length === 0 && <li style={styles.emptySmall}>サブタスクなし</li>}
@@ -3851,7 +3862,7 @@ export default function App() {
                     <h3 style={styles.modalTitle}>サブタスクを編集</h3>
                     <button type="button" onClick={() => setCalSubtaskModal(null)} aria-label="閉じる" style={styles.modalCloseBtn}>×</button>
                   </div>
-                  <p style={styles.modalContext}>{p.name} ／ {t.name}</p>
+                  <p style={styles.modalContext}>{pjLabel(p)} ／ {t.name}</p>
                   <div style={{ ...styles.calendarLine1, marginBottom: 10 }}>
                     <button onClick={() => toggleSubtaskDone(pjId, taskId, s.id)} aria-label={s.done ? "未完了に戻す" : "完了にする"} style={styles.stampWrap}>
                       {s.done ? <span style={styles.hankoStamp} className={stamping === s.id ? "hanko-pop" : ""}>済</span> : <span style={styles.hankoEmpty} />}
@@ -4029,6 +4040,8 @@ const styles = {
   reorderBtn: { background: "none", border: "none", fontSize: 8, lineHeight: 1, color: "#7A7A7A", cursor: "pointer", width: 14, height: 9, padding: 0 },
   collapseBtn: { background: "none", border: "none", fontSize: 13, color: "#2C3645", cursor: "pointer", width: 18, padding: 0, flexShrink: 0 },
   collapseBtnSm: { background: "none", border: "none", fontSize: 11, color: "#12314F", cursor: "pointer", width: 16, padding: 0, flexShrink: 0 },
+  goalStar: { flex: "none", fontSize: 15, fontWeight: 700, color: "#F39800", marginRight: -4 },
+  goalCheckLabel: { display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, fontWeight: 700, color: "#2C3645", whiteSpace: "nowrap", cursor: "pointer" },
   pjNameInput: { flex: 1, fontSize: 14, fontWeight: 700, color: "#2C3645", minWidth: 0, textAlign: "left", border: "none", background: "transparent", fontFamily: "inherit", padding: "3px 5px", borderRadius: 5 },
   taskNameInput: { flex: 1, fontSize: 13, fontWeight: 600, color: "#2C3645", minWidth: 0, border: "none", background: "transparent", fontFamily: "inherit", padding: "2px 4px", borderRadius: 5, textDecoration: "underline" },
   ganttToggleBtn: { flexShrink: 0, border: "none", borderRadius: 5, padding: "3px 6px", fontSize: 13, cursor: "pointer", fontFamily: "inherit", lineHeight: 1 },
