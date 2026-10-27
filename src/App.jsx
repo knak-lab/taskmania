@@ -12,6 +12,9 @@ const TOP_TABS = [
 ];
 
 const PERSON_KEYS = ["kkr", "acco"];
+// kkr>work 以外を見るためのパスワード(簡易な目隠し。データ自体は暗号化されない)
+const LOCK_PASSWORD = "0810";
+const UNLOCK_KEY = "tm_unlocked";
 const SUB_TABS = [
   { key: "総合", label: "総合" },
   { key: "趣味", label: "PB", color: "#F39800" },
@@ -1756,6 +1759,28 @@ export default function App() {
   const [topTab, setTopTab] = useState("kkr");
   const [subTab, setSubTab] = useState("仕事");
   const [menuOpen, setMenuOpen] = useState(false);
+  // パスワード解除状態はアプリ(タブ)を閉じるまで保持
+  const [unlocked, setUnlocked] = useState(() => {
+    try { return sessionStorage.getItem(UNLOCK_KEY) === "1"; } catch { return false; }
+  });
+  const [lockInput, setLockInput] = useState("");
+  const [lockError, setLockError] = useState(false);
+  const isLocked = !unlocked && !(topTab === "kkr" && subTab === "仕事");
+  const submitUnlock = (e) => {
+    e.preventDefault();
+    if (lockInput === LOCK_PASSWORD) {
+      setUnlocked(true);
+      setLockInput("");
+      setLockError(false);
+      try { sessionStorage.setItem(UNLOCK_KEY, "1"); } catch { /* ignore */ }
+    } else {
+      setLockError(true);
+    }
+  };
+  const relock = () => {
+    setUnlocked(false);
+    try { sessionStorage.removeItem(UNLOCK_KEY); } catch { /* ignore */ }
+  };
   const [openPJ, setOpenPJ] = useState(() => new Set());
   const [openTask, setOpenTask] = useState(() => new Set());
   const [showDoneSubtasks, setShowDoneSubtasks] = useState(() => new Set());
@@ -3139,9 +3164,16 @@ export default function App() {
           <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
             <div style={styles.saveIndicator} aria-live="polite">{saveLabel}</div>
             <div style={{ display: "flex", gap: 6 }}>
-              <button type="button" onClick={openAddPJModal} style={styles.reloadBtn}>
-                PJ追加
-              </button>
+              {unlocked && (
+                <button type="button" onClick={relock} aria-label="ロックする" title="ロックする" style={styles.reloadBtn}>
+                  🔒
+                </button>
+              )}
+              {!isLocked && (
+                <button type="button" onClick={openAddPJModal} style={styles.reloadBtn}>
+                  PJ追加
+                </button>
+              )}
               <button type="button" onClick={handleLoad} disabled={saveState === "loading"} style={styles.reloadBtn}>
                 読込
               </button>
@@ -3166,6 +3198,19 @@ export default function App() {
           </nav>
         )}
 
+        {isLocked ? (
+        <section style={{ ...styles.panel, borderColor: activeTopColor, borderRadius: PERSON_KEYS.includes(topTab) ? "0 0 10px 10px" : styles.panel.borderRadius }}>
+          <form onSubmit={submitUnlock} style={styles.lockForm}>
+            <div style={styles.lockIcon}>🔒</div>
+            <p style={styles.lockText}>このタブを見るにはパスワードを入力してください</p>
+            <input type="password" inputMode="numeric" autoComplete="off" value={lockInput} autoFocus
+              onChange={(e) => { setLockInput(e.target.value); setLockError(false); }}
+              aria-label="パスワード" style={{ ...styles.lockInput, borderColor: lockError ? "#C0392B" : "#D8D8D8" }} />
+            {lockError && <p style={styles.lockError}>パスワードが違います</p>}
+            <button type="submit" style={{ ...styles.reloadBtn, padding: "6px 18px", fontSize: 13 }}>解除</button>
+          </form>
+        </section>
+        ) : (
         <section style={{ ...styles.panel, borderColor: activeTopColor, borderRadius: PERSON_KEYS.includes(topTab) ? "0 0 10px 10px" : styles.panel.borderRadius }}>
           {showTaskSections && (
             <nav style={styles.viewSwitcher} role="tablist" aria-label="表示切替">
@@ -3865,6 +3910,7 @@ export default function App() {
             </div>
           )}
         </section>
+        )}
       </div>
     </div>
   );
@@ -3970,6 +4016,11 @@ const styles = {
   prioritySectionBody: { display: "flex", flexDirection: "column", gap: 10 },
   statusSection: { display: "flex", flexDirection: "column", gap: 6, marginTop: 4, paddingTop: 10, borderTop: "1px dashed #D8D8D8" },
   statusSectionHeader: { display: "flex", alignItems: "center", gap: 6, width: "100%", background: "transparent", border: "none", borderBottom: "1px dashed", padding: "0 0 3px", cursor: "pointer", fontFamily: "inherit", fontSize: 11, fontWeight: 700, textAlign: "left", opacity: 0.85 },
+  lockForm: { display: "flex", flexDirection: "column", alignItems: "center", gap: 10, padding: "32px 12px" },
+  lockIcon: { fontSize: 32 },
+  lockText: { margin: 0, fontSize: 13, color: "#555555", textAlign: "center" },
+  lockInput: { width: 160, fontSize: 16, padding: "6px 10px", border: "1.5px solid", borderRadius: 6, textAlign: "center", fontFamily: "inherit" },
+  lockError: { margin: 0, fontSize: 12, color: "#C0392B" },
   empty: { padding: "18px 4px", color: "#9B9B9B", fontSize: 13, textAlign: "center" },
   emptySmall: { padding: "6px 4px", color: "#9B9B9B", fontSize: 11.5, margin: 0 },
   pjCard: { background: "#FFFFFF", border: "1px solid #E0E0E0", borderLeft: "4px solid", borderRadius: 8, padding: 10 },
