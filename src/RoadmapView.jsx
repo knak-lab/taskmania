@@ -158,9 +158,9 @@ export default function RoadmapView({ projects, themes, onOpenPJ, onOpenTask, on
     return i * colW + (day / daysInMonth(monthKey(dateStr))) * colW;
   };
   const todayX = xOf(todayStr, false) + colW / daysInMonth(todayMonth) / 2;
-  // 週の区切り(月曜)。月初と重なる週は月の線があるので省く
+  // 週の区切り(月曜)。月初と重なる週は月の線があるので省く。12ヶ月表示は詰まりすぎるので出さない
   const weekXs = [];
-  months.forEach((m, i) => {
+  if (span < 12) months.forEach((m, i) => {
     const [y, mm] = m.split("-").map(Number);
     for (let d = 2; d <= daysInMonth(m); d++) {
       if (new Date(y, mm - 1, d).getDay() === 1) weekXs.push(i * colW + ((d - 1) / daysInMonth(m)) * colW);

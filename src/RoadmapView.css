@@ -39,7 +39,7 @@
 .rm-pop-empty { font-size: 12px; color: var(--muted); }
 .rm-pj-meta { display: flex; gap: 6px; font-size: 10.5px; color: var(--muted); white-space: nowrap; overflow: hidden; }
 .rm-undated { color: #A8670F; }
-.rm-track { position: relative; flex: none; background-image: linear-gradient(to right, #E6EAEE 1px, transparent 1px); background-size: var(--cw) 100%; }
+.rm-track { position: relative; flex: none; background-image: linear-gradient(to right, #C5CED7 1px, transparent 1px); background-size: var(--cw) 100%; }
 /* 週の縦線(月の線より控えめ)。行の背景より上・矢羽根より下 */
 .rm-weeks { position: absolute; top: 0; bottom: 0; z-index: 0; pointer-events: none; }
 .rm-weeks i { position: absolute; top: 0; bottom: 0; border-left: 1px dashed #EDF0F3; }
