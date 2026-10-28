@@ -100,3 +100,7 @@
 .mm-ck-table td.mm-num { text-align: right; white-space: nowrap; }
 .mm-ck-table tr { cursor: pointer; }
 .mm-ck-table tr:hover td { background: var(--mm-soft); }
+
+/* テーマ・PJの並び替え: 落とす位置(前/後ろ)を線で示す */
+.mm-drop-before { box-shadow: 0 -4px 0 -1px var(--mm-ink); }
+.mm-drop-after { box-shadow: 0 4px 0 -1px var(--mm-ink); }

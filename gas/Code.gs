@@ -274,7 +274,7 @@ function readProjects_() {
       sourceSubtaskId: sourceSubtaskId ? String(sourceSubtaskId) : null,
       doneUpdatedAt: doneUpdatedAt ? Number(doneUpdatedAt) : 0,
       repeatEndDate: repeatEndDate ? String(repeatEndDate) : null,
-      assignee: subAssignee ? String(subAssignee) : "",
+      assignees: splitAssignees_(subAssignee),
     });
   });
 
@@ -300,7 +300,7 @@ function readProjects_() {
       subtasks: subtasksByTask[id] || [],
       sourceTodoId: sourceTodoId ? String(sourceTodoId) : null,
       done: done === true || done === "TRUE" || done === "true",
-      assignee: taskAssignee ? String(taskAssignee) : "",
+      assignees: splitAssignees_(taskAssignee),
     });
   });
 
@@ -339,7 +339,7 @@ function readProjects_() {
         purpose: purpose || "",
         relatedLink: relatedLink || "",
         goalTarget: goalTarget === true || goalTarget === "TRUE" || goalTarget === "true",
-        assignee: assignee ? String(assignee) : "",
+        assignees: splitAssignees_(assignee),
         tasks: tasksByProject[id] || [],
       };
     });
@@ -401,9 +401,9 @@ function writeProjects_(projects) {
   const stepRows = [];
 
   (projects || []).forEach(function (p) {
-    projRows.push([p.id, p.owner || "", p.name || "", p.subcategory || "", p.priority || 2, p.status || "", p.completedNote || "", p.nextAction || "", !!p.moyamoya, p.progressRate != null ? p.progressRate : "", p.themeId || "", p.purpose || "", p.relatedLink || "", !!p.goalTarget, p.assignee || ""]);
+    projRows.push([p.id, p.owner || "", p.name || "", p.subcategory || "", p.priority || 2, p.status || "", p.completedNote || "", p.nextAction || "", !!p.moyamoya, p.progressRate != null ? p.progressRate : "", p.themeId || "", p.purpose || "", p.relatedLink || "", !!p.goalTarget, (p.assignees || []).join(",")]);
     (p.tasks || []).forEach(function (t) {
-      taskRows.push([t.id, p.id, t.name || "", t.startDate || "", t.endDate || "", t.estimatedMinutes || "", t.sourceTodoId || "", !!t.done, t.assignee || ""]);
+      taskRows.push([t.id, p.id, t.name || "", t.startDate || "", t.endDate || "", t.estimatedMinutes || "", t.sourceTodoId || "", !!t.done, (t.assignees || []).join(",")]);
       (t.subtasks || []).forEach(function (s) {
         subRows.push([
           s.id,
@@ -420,7 +420,7 @@ function writeProjects_(projects) {
           s.sourceSubtaskId || "",
           s.doneUpdatedAt || "",
           s.repeatEndDate || "",
-          s.assignee || "",
+          (s.assignees || []).join(","),
         ]);
         (s.steps || []).forEach(function (st) {
           stepRows.push([st.id, s.id, st.text || "", !!st.done]);
@@ -452,6 +452,18 @@ function writeThemes_(themes) {
     return [t.id, t.owner || "", t.subcategory || "", t.name || ""];
   });
   writeRowsReplacing_(sheet, rows, THEMES_HEADERS.length);
+}
+
+// 担当は複数選択。シートのassignee列にはカンマ区切りで入れる
+function splitAssignees_(v) {
+  return String(v || "")
+    .split(",")
+    .map(function (n) {
+      return n.trim();
+    })
+    .filter(function (n) {
+      return n;
+    });
 }
 
 function readAssignees_() {

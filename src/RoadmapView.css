@@ -80,3 +80,13 @@
 .rm-row.drop-before::after, .rm-row.drop-after::after { content: ""; position: absolute; left: 0; right: 0; height: 3px; background: var(--ink); z-index: 5; pointer-events: none; }
 .rm-row.drop-before::after { top: -1px; }
 .rm-row.drop-after::after { bottom: -1px; }
+
+/* テーマのドラッグ並び替え(テーマ見出しの⋮⋮をつまむ。テーマ単位でまとめて動く) */
+.rm-theme-label { position: sticky; padding-left: 18px; }
+.rm-group.dragging { opacity: .45; }
+.rm-group.drop-before, .rm-group.drop-after { position: relative; }
+.rm-group.drop-before::after, .rm-group.drop-after::after { content: ""; position: absolute; left: 0; right: 0; height: 3px; background: var(--ink); z-index: 6; pointer-events: none; }
+.rm-group.drop-before::after { top: -1px; }
+.rm-group.drop-after::after { bottom: -1px; }
+.rm-theme-label .rm-grip { color: rgba(255,255,255,.75); }
+.rm-theme-label .rm-grip:hover { color: #fff; }

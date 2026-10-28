@@ -43,7 +43,7 @@ function loadSpan() {
   try { const v = Number(localStorage.getItem("tm_roadmap_span")); return SPANS.includes(v) ? v : 6; } catch { return 6; }
 }
 
-export default function RoadmapView({ projects, themes, onOpenPJ, onOpenTask, onMovePJ }) {
+export default function RoadmapView({ projects, themes, onOpenPJ, onOpenTask, onMovePJ, onMoveTheme }) {
   const todayStr = toDateStr(new Date());
   const todayMonth = monthKey(todayStr);
   const [span, setSpan] = useState(loadSpan);
@@ -52,15 +52,16 @@ export default function RoadmapView({ projects, themes, onOpenPJ, onOpenTask, on
   const [hover, setHover] = useState(null); // PJ名にマウスを乗せたときのネクストアクション表示 { p, x, y }
   const rootRef = useRef(null);
   const scrollRef = useRef(null);
-  // PJのドラッグ並び替え(同じテーマ内だけ)。⋮⋮をつまんで動かす。マウス・タッチ共通でpointerイベントを使う
-  const [drag, setDrag] = useState(null); // { id, groupId, overId, after }
+  // PJ(同じテーマ内だけ)・テーマのドラッグ並び替え。⋮⋮をつまんで動かす。マウス・タッチ共通でpointerイベントを使う。
+  // 並びはマップと共通(themes/projects配列の順)
+  const [drag, setDrag] = useState(null); // { kind: "pj"|"theme", id, groupId, overId, after }
   const dragRef = useRef(null);
 
-  function onGripDown(e, pjId, groupId) {
+  function onGripDown(e, id, groupId, kind = "pj") {
     e.preventDefault();
     e.stopPropagation();
     e.currentTarget.setPointerCapture(e.pointerId);
-    dragRef.current = { id: pjId, groupId, overId: null, after: false };
+    dragRef.current = { kind, id, groupId, overId: null, after: false };
     setDrag(dragRef.current);
     setHover(null);
   }
@@ -74,12 +75,14 @@ export default function RoadmapView({ projects, themes, onOpenPJ, onOpenTask, on
       if (e.clientY < r.top + 40) sc.scrollTop -= 12;
       else if (e.clientY > r.bottom - 30) sc.scrollTop += 12;
     }
-    const rows = [...rootRef.current.querySelectorAll(".rm-row")].filter((el) => el.dataset.group === d.groupId);
+    const rows = d.kind === "theme"
+      ? [...rootRef.current.querySelectorAll(".rm-group[data-theme]")]
+      : [...rootRef.current.querySelectorAll(".rm-row")].filter((el) => el.dataset.group === d.groupId);
     let overId = null;
     let after = false;
     for (const el of rows) {
       const rc = el.getBoundingClientRect();
-      overId = el.dataset.pj;
+      overId = d.kind === "theme" ? el.dataset.theme : el.dataset.pj;
       if (e.clientY < rc.top + rc.height / 2) { after = false; break; }
       after = true;
     }
@@ -91,7 +94,9 @@ export default function RoadmapView({ projects, themes, onOpenPJ, onOpenTask, on
     const d = dragRef.current;
     dragRef.current = null;
     setDrag(null);
-    if (d?.overId && d.overId !== d.id) onMovePJ(d.id, d.overId, d.after);
+    if (!d?.overId || d.overId === d.id) return;
+    if (d.kind === "theme") onMoveTheme(d.id, d.overId, d.after);
+    else onMovePJ(d.id, d.overId, d.after);
   }
 
   useEffect(() => { try { localStorage.setItem("tm_roadmap_span", String(span)); } catch { /* ignore */ } }, [span]);
@@ -227,16 +232,23 @@ export default function RoadmapView({ projects, themes, onOpenPJ, onOpenTask, on
             </div>
 
             {groups.map((g) => (
-              <div key={g.id} style={{ "--bc": g.color }}>
+              <div key={g.id} style={{ "--bc": g.color }} data-theme={g.id === "__none" ? undefined : g.id}
+                className={`rm-group${drag?.kind === "theme" && drag.id === g.id ? " dragging" : ""}${drag?.kind === "theme" && drag.overId === g.id && drag.overId !== drag.id ? (drag.after ? " drop-after" : " drop-before") : ""}`}>
                 {g.name && (
                   <div className="rm-theme">
-                    <div className="rm-theme-label">{g.name}</div>
+                    <div className="rm-theme-label">
+                      {g.id !== "__none" && groups.filter((x) => x.id !== "__none").length > 1 && (
+                        <span className="rm-grip" title="ドラッグでテーマを並び替え" aria-label="ドラッグでテーマを並び替え"
+                          onPointerDown={(e) => onGripDown(e, g.id, null, "theme")} onPointerMove={onGripMove} onPointerUp={onGripUp} onPointerCancel={onGripUp}>⋮⋮</span>
+                      )}
+                      {g.name}
+                    </div>
                     <div className="rm-theme-track" style={{ width: trackW }} />
                   </div>
                 )}
                 {g.rows.map(({ p, bars, lanes, undated, pct }) => (
                   <div key={p.id} data-pj={p.id} data-group={g.id}
-                    className={`rm-row${drag?.id === p.id ? " dragging" : ""}${drag?.overId === p.id && drag.overId !== drag.id ? (drag.after ? " drop-after" : " drop-before") : ""}`}>
+                    className={`rm-row${drag?.kind === "pj" && drag.id === p.id ? " dragging" : ""}${drag?.kind === "pj" && drag.overId === p.id && drag.overId !== drag.id ? (drag.after ? " drop-after" : " drop-before") : ""}`}>
                     <button type="button" className="rm-pj" onClick={(e) => { if (e.target.closest(".rm-grip")) return; setHover(null); onOpenPJ(p.id); }}
                       onMouseEnter={(e) => { if (dragRef.current) return; const r = e.currentTarget.getBoundingClientRect(); setHover({ p, x: r.right + 6, y: r.top }); }}
                       onMouseLeave={() => setHover(null)}>

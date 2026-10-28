@@ -114,6 +114,7 @@ export default function MindMapView({ rootLabel, projects, themes, allProjects, 
   const [draft, setDraft] = useState(null); // 新規作成中 {parentId, type, afterId}
   const [zoom, setZoom] = useState(1);
   const [dropId, setDropId] = useState(null);
+  const [dropAfter, setDropAfter] = useState(null); // 並び替えのドロップ位置(null=子として入れる、false=前、true=後ろ)
   const [toast, setToast] = useState(null);
   const [undoStack, setUndoStack] = useState([]);
   const wrapRef = useRef(null);
@@ -308,6 +309,52 @@ export default function MindMapView({ rootLabel, projects, themes, allProjects, 
     setSel((sibs[i + 1] || sibs[i - 1] || info.parent).id);
     flash(n.type === "theme" ? `テーマ「${n.text}」を削除しました（中のPJは残っています）` : `「${n.text}」を削除しました`, true);
   }
+  // テーマ・PJの並び替え。並びはthemes/projects配列の順そのもので、ロードマップの並びと共通
+  function reorderable(drag, target) {
+    return drag && target && drag.id !== target.id && drag.type === target.type && (target.type === "theme" || target.type === "pj");
+  }
+  function reorder(drag, target, after) {
+    snapshot();
+    if (drag.type === "theme") {
+      setThemes((prev) => {
+        const moving = prev.find((t) => t.id === drag.id);
+        const rest = prev.filter((t) => t.id !== drag.id);
+        const i = rest.findIndex((t) => t.id === target.id);
+        if (!moving || i === -1) return prev;
+        rest.splice(after ? i + 1 : i, 0, moving);
+        return rest;
+      });
+    } else {
+      // 別テーマのPJの前後に落としたら、そのテーマへ移す
+      const par = index.get(target.id)?.parent;
+      const themeId = par && par.type === "theme" ? par.id : null;
+      setProjects((prev) => {
+        const moving = prev.find((p) => p.id === drag.id);
+        const rest = prev.filter((p) => p.id !== drag.id);
+        const i = rest.findIndex((p) => p.id === target.id);
+        if (!moving || i === -1) return prev;
+        rest.splice(after ? i + 1 : i, 0, { ...moving, themeId });
+        return rest;
+      });
+    }
+  }
+  // 選択中のテーマ/PJを同じ並びの中で1つ上・下へ
+  function moveSel(dir) {
+    const info = sel && index.get(sel);
+    if (!info || !info.parent || (info.n.type !== "theme" && info.n.type !== "pj")) return;
+    const sibs = info.parent.children.filter((c) => c.type === info.n.type);
+    const target = sibs[sibs.indexOf(info.n) + dir];
+    if (!target) return;
+    reorder(info.n, target, dir > 0);
+    selectAndReveal(info.n.id);
+  }
+  const selMovable = (() => {
+    const info = sel && index.get(sel);
+    if (!info || !info.parent || (info.n.type !== "theme" && info.n.type !== "pj")) return { up: false, down: false };
+    const sibs = info.parent.children.filter((c) => c.type === info.n.type);
+    const i = sibs.indexOf(info.n);
+    return { up: i > 0, down: i < sibs.length - 1 };
+  })();
   function canDrop(drag, target) {
     return drag && target && drag.id !== target.id && (ACCEPTS[target.type] || []).includes(drag.type);
   }
@@ -363,6 +410,7 @@ export default function MindMapView({ rootLabel, projects, themes, allProjects, 
     const info = sel && index.get(sel);
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") { e.preventDefault(); undo(); return; }
     if (!info) return;
+    if (e.altKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) { e.preventDefault(); moveSel(e.key === "ArrowUp" ? -1 : 1); return; }
     const n = info.n;
     const k = e.key;
     if (k === "Tab") { e.preventDefault(); startAddChild(); }
@@ -413,16 +461,34 @@ export default function MindMapView({ rootLabel, projects, themes, allProjects, 
         {isOpen(n) ? "−" : `▸ ${n.children.length}`}
       </button>
     );
-    const cls = `mm-node mm-${n.type}${isSel ? " mm-sel" : ""}${dropId === n.id ? " mm-drop" : ""}${n.type === "sub" && n.done ? " mm-done" : ""}`;
-    const dragProps = n.type === "root" || n.type === "theme" || editing === n.id ? {} : {
+    const cls = `mm-node mm-${n.type}${isSel ? " mm-sel" : ""}${dropId === n.id ? (dropAfter === null ? " mm-drop" : dropAfter ? " mm-drop-after" : " mm-drop-before") : ""}${n.type === "sub" && n.done ? " mm-done" : ""}`;
+    const dragProps = n.type === "root" || editing === n.id ? {} : {
       draggable: true,
       onDragStart: (e) => { dragRef.current = n; e.dataTransfer.effectAllowed = "move"; try { e.dataTransfer.setData("text/plain", n.id); } catch { /* ignore */ } },
-      onDragEnd: () => { dragRef.current = null; setDropId(null); },
+      onDragEnd: () => { dragRef.current = null; setDropId(null); setDropAfter(null); },
     };
     const dropProps = ACCEPTS[n.type] ? {
-      onDragOver: (e) => { if (canDrop(dragRef.current, n)) { e.preventDefault(); if (dropId !== n.id) setDropId(n.id); } },
-      onDragLeave: () => { if (dropId === n.id) setDropId(null); },
-      onDrop: (e) => { e.preventDefault(); const d = dragRef.current; setDropId(null); dragRef.current = null; if (canDrop(d, n)) drop(d, n); },
+      onDragOver: (e) => {
+        const d = dragRef.current;
+        if (reorderable(d, n)) {
+          e.preventDefault();
+          const r = e.currentTarget.getBoundingClientRect();
+          const after = e.clientY > r.top + r.height / 2;
+          if (dropId !== n.id || dropAfter !== after) { setDropId(n.id); setDropAfter(after); }
+        } else if (canDrop(d, n)) {
+          e.preventDefault();
+          if (dropId !== n.id || dropAfter !== null) { setDropId(n.id); setDropAfter(null); }
+        }
+      },
+      onDragLeave: () => { if (dropId === n.id) { setDropId(null); setDropAfter(null); } },
+      onDrop: (e) => {
+        e.preventDefault();
+        const d = dragRef.current;
+        const after = dropAfter;
+        setDropId(null); setDropAfter(null); dragRef.current = null;
+        if (reorderable(d, n)) reorder(d, n, !!after);
+        else if (canDrop(d, n)) drop(d, n);
+      },
     } : {};
     let inner;
     if (n.type === "pj") {
@@ -637,6 +703,8 @@ export default function MindMapView({ rootLabel, projects, themes, allProjects, 
         <button type="button" onClick={startAddSibling} disabled={!selNode}>＋兄弟 <kbd>Enter</kbd></button>
         <button type="button" onClick={() => selNode && selNode.type !== "root" && setEditing(selNode.id)} disabled={!selNode || selNode.type === "root"}>名前 <kbd>F2</kbd></button>
         <button type="button" onClick={remove} disabled={!selNode || selNode.type === "root"}>削除 <kbd>Del</kbd></button>
+        <button type="button" onClick={() => moveSel(-1)} disabled={!selMovable.up} title="テーマ・PJを上へ (Alt+↑)">▲上へ</button>
+        <button type="button" onClick={() => moveSel(1)} disabled={!selMovable.down} title="テーマ・PJを下へ (Alt+↓)">▼下へ</button>
         <button type="button" onClick={undo} disabled={!undoStack.length}>戻す</button>
         <span className="mm-sp" />
         <button type="button" onClick={() => setAll(true)}>すべて開く</button>

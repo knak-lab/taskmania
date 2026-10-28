@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
+import { createPortal } from "react-dom";
 import * as XLSX from "xlsx";
 import { loadAppData, loadKamoTodos, saveProjects as gasSave, saveMoyamoyaNotes as gasSaveMoyamoyaNotes, saveWorkAdj as gasSaveWorkAdj, saveThemes as gasSaveThemes, saveAssignees as gasSaveAssignees, sendToCalendar as gasSendToCalendar } from "./api/gas";
 import MindMapView from "./MindMapView";
@@ -764,22 +765,51 @@ function pjLabel(p) {
 
 // kkr>workのPJ・タスク・サブタスクには担当を付けられる。選択肢はスプレッドシート(Assigneesシート)で端末間同期
 const DEFAULT_ASSIGNEES = ["永井", "田之上"];
-const EDIT_ASSIGNEES = "__edit_assignees__";
 function isWorkPJ(p) {
   return !!p && p.owner === "kkr" && p.subcategory === "仕事";
 }
 
-// 担当プルダウン。末尾の「リストを編集…」で担当者リストの編集画面を開く
-function AssigneeSelect({ value, assignees, onChange, onEditList, style }) {
-  const missing = value && !assignees.includes(value);
+// 担当(複数選択)。ボタンを押すとチェックボックスの選択画面が開き、そこから担当者リストの編集も開ける。
+// labelや別モーダルの中に置いても誤作動しないよう、選択画面はbody直下にポータルで出す
+function AssigneePicker({ value, assignees, onChange, onEditList, style }) {
+  const [open, setOpen] = useState(false);
+  const selected = value || [];
+  const extra = selected.filter((n) => !assignees.includes(n));
+  const toggle = (n) => onChange(selected.includes(n) ? selected.filter((x) => x !== n) : [...assignees, ...extra].filter((x) => x === n || selected.includes(x)));
   return (
-    <select value={value || ""} onChange={(e) => (e.target.value === EDIT_ASSIGNEES ? onEditList() : onChange(e.target.value))}
-      style={{ ...styles.moveSelect, ...(value ? styles.assigneeSet : null), ...style }} aria-label="担当を変更" title="担当">
-      <option value="">担当なし</option>
-      {assignees.map((n) => <option key={n} value={n}>{n}</option>)}
-      {missing && <option value={value}>{value}(リスト外)</option>}
-      <option value={EDIT_ASSIGNEES}>✎ リストを編集…</option>
-    </select>
+    <>
+      <button type="button" onClick={(e) => { e.preventDefault(); setOpen(true); }}
+        style={{ ...styles.moveSelect, ...styles.assigneeBtn, ...(selected.length ? styles.assigneeSet : null), ...style }} aria-label="担当を変更" title="担当">
+        {selected.length ? selected.join("・") : "担当なし"}
+      </button>
+      {open && createPortal(
+        <div style={{ ...styles.modalOverlay, zIndex: 60 }} onClick={(e) => { e.stopPropagation(); setOpen(false); }}>
+          <div style={{ ...styles.modalBox, maxWidth: 320 }} onClick={(e) => e.stopPropagation()}>
+            <div style={styles.modalHeader}>
+              <h3 style={styles.modalTitle}>担当を選ぶ</h3>
+              <button type="button" onClick={() => setOpen(false)} aria-label="閉じる" style={styles.modalCloseBtn}>×</button>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {[...assignees, ...extra].map((n) => (
+                <label key={n} style={styles.goalCheckLabel}>
+                  <input type="checkbox" checked={selected.includes(n)} onChange={() => toggle(n)} />
+                  {n}{!assignees.includes(n) && <span style={{ color: "#9B9B9B", fontWeight: 400 }}>(リスト外)</span>}
+                </label>
+              ))}
+              {assignees.length === 0 && extra.length === 0 && <p style={styles.emptySmall}>担当者リストが空です</p>}
+            </div>
+            <div style={{ ...styles.modalActions, justifyContent: "space-between" }}>
+              <div style={{ display: "flex", gap: 6 }}>
+                <button type="button" onClick={() => onChange([])} style={styles.inlineAddBtn}>クリア</button>
+                <button type="button" onClick={() => { setOpen(false); onEditList(); }} style={styles.inlineAddBtn}>✎ リストを編集</button>
+              </div>
+              <button type="button" onClick={() => setOpen(false)} style={styles.addBtn}>閉じる</button>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
+    </>
   );
 }
 
@@ -831,7 +861,7 @@ function AssigneeListModal({ assignees, onSave, onClose }) {
           <input type="text" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="担当者を追加…" style={{ ...styles.scheduleEditInput, flex: 1, minWidth: 0 }} />
           <button type="submit" style={styles.inlineAddBtn}>＋追加</button>
         </form>
-        <p style={{ ...styles.emptySmall, marginTop: 8 }}>名前を変えると、その担当が付いたPJ・タスク・サブタスクも新しい名前に変わる。削除しても付いている担当はそのまま残る。</p>
+        <p style={{ ...styles.emptySmall, marginTop: 8 }}>名前を変えると、その担当が付いたPJ・タスク・サブタスクも新しい名前に変わる。削除しても付いている担当はそのまま残る(リスト外と表示)。</p>
         {(dup || empty) && <p style={{ fontSize: 12, color: "#C0392B", margin: "4px 0" }}>{empty ? "空欄の名前がある" : `「${dup}」が重複している`}</p>}
         <div style={styles.modalActions}>
           <button type="button" onClick={onClose} style={styles.inlineAddBtn}>キャンセル</button>
@@ -849,7 +879,7 @@ function normalizeLink(v) {
   return /^[a-z][a-z0-9+.-]*:/i.test(s) ? s : `https://${s}`;
 }
 
-function PJDetailModal({ project, onUpdateNote, onUpdateName, onUpdateStatus, onClose, onAddTask, onAddSubtask, onGoToPJ, assignees, onEditAssignees }) {
+function PJDetailModal({ project, onUpdateNote, onUpdateName, onUpdateStatus, onClose, onAddTask, onAddSubtask, onGoToPJ, assignees, onEditAssignees, onUpdateTaskAssignees, onUpdateSubtaskAssignees }) {
   const [exporting, setExporting] = useState(false);
   const [linkDraft, setLinkDraft] = useState(null); // null=表示中、文字列=編集中
   function saveLink() {
@@ -899,7 +929,11 @@ function PJDetailModal({ project, onUpdateNote, onUpdateName, onUpdateStatus, on
             <input type="checkbox" checked={!!project.goalTarget} onChange={(e) => onUpdateNote(project.id, "goalTarget", e.target.checked)} />
             目標管理対象
           </label>
-          {isWorkPJ(project) && <AssigneeSelect value={project.assignee} assignees={assignees} onChange={(v) => onUpdateNote(project.id, "assignee", v)} onEditList={onEditAssignees} style={{ fontSize: 12, maxWidth: 120 }} />}
+          {isWorkPJ(project) && (
+            <span style={styles.goalCheckLabel}>担当
+              <AssigneePicker value={project.assignees} assignees={assignees} onChange={(v) => onUpdateNote(project.id, "assignees", v)} onEditList={onEditAssignees} style={{ fontSize: 12, maxWidth: 160 }} />
+            </span>
+          )}
           <span style={styles.pjLinkLabel}>関連リンク</span>
           {linkDraft === null ? (
             <>
@@ -984,6 +1018,7 @@ function PJDetailModal({ project, onUpdateNote, onUpdateName, onUpdateStatus, on
                 <div style={styles.detailTaskRow}>
                   <button type="button" onClick={() => toggleOpenTask(t.id)} style={styles.collapseBtnSm} aria-label={open ? "折りたたむ" : "展開する"}>{open ? "▾" : "▸"}</button>
                   <span style={styles.detailTaskName}>{t.name}</span>
+                  {isWorkPJ(project) && <AssigneePicker value={t.assignees} assignees={assignees} onChange={(v) => onUpdateTaskAssignees(project.id, t.id, v)} onEditList={onEditAssignees} />}
                   <span style={styles.calEstTag}>{t.startDate ? formatDate(t.startDate) : "―"}〜{t.endDate ? formatDate(t.endDate) : "―"}</span>
                   <span style={styles.progressTagSm}>{done}/{total}</span>
                   <button type="button" onClick={() => toggleDoneVisible(t.id)}
@@ -1002,6 +1037,7 @@ function PJDetailModal({ project, onUpdateNote, onUpdateName, onUpdateStatus, on
                         <span style={{ ...styles.doneMark, opacity: s.done ? 1 : 0.15 }}>✅</span>
                         <span style={{ ...styles.subText, textDecoration: s.done ? "line-through" : "none", color: s.done ? "#9B9B9B" : "#2C3645" }}>{s.text}</span>
                         {s.scheduledDate && <span style={styles.calEstTag}>{formatDate(s.scheduledDate)}</span>}
+                        {isWorkPJ(project) && <AssigneePicker value={s.assignees} assignees={assignees} onChange={(v) => onUpdateSubtaskAssignees(project.id, t.id, s.id, v)} onEditList={onEditAssignees} />}
                       </li>
                     ))}
                   </ul>
@@ -2257,7 +2293,7 @@ export default function App() {
   function saveAssigneeList(names, renames) {
     setAssignees(names);
     if (Object.keys(renames).length > 0) {
-      const rn = (o) => (o.assignee && renames[o.assignee] ? { ...o, assignee: renames[o.assignee] } : o);
+      const rn = (o) => (o.assignees && o.assignees.some((n) => renames[n]) ? { ...o, assignees: o.assignees.map((n) => renames[n] || n) } : o);
       setProjects((prev) => prev.map((p) => rn({ ...p, tasks: p.tasks.map((t) => rn({ ...t, subtasks: t.subtasks.map(rn) })) })));
     }
     setAssigneeListOpen(false);
@@ -2535,6 +2571,20 @@ export default function App() {
   }
 
   // ロードマップのドラッグ並び替え: dragIdのPJをtargetIdの前(after=trueなら後)へ移す。PJの並びは配列順そのもの
+  // テーマの並び替え(マップ・ロードマップ共通。themes配列内の位置を動かす)
+  function moveThemeTo(dragId, targetId, after) {
+    if (dragId === targetId) return;
+    setThemes((prev) => {
+      const moving = prev.find((t) => t.id === dragId);
+      if (!moving) return prev;
+      const rest = prev.filter((t) => t.id !== dragId);
+      const i = rest.findIndex((t) => t.id === targetId);
+      if (i === -1) return prev;
+      rest.splice(after ? i + 1 : i, 0, moving);
+      return rest;
+    });
+  }
+
   function movePJTo(dragId, targetId, after) {
     if (dragId === targetId) return;
     setProjects((prev) => {
@@ -2556,8 +2606,8 @@ export default function App() {
     setProjects((prev) => prev.map((p) => p.id !== pjId ? p : { ...p, tasks: p.tasks.map((t) => (t.id === taskId ? { ...t, name } : t)) }));
   }
 
-  function updateTaskAssignee(pjId, taskId, assignee) {
-    setProjects((prev) => prev.map((p) => p.id !== pjId ? p : { ...p, tasks: p.tasks.map((t) => (t.id === taskId ? { ...t, assignee } : t)) }));
+  function updateTaskAssignees(pjId, taskId, assignees) {
+    setProjects((prev) => prev.map((p) => p.id !== pjId ? p : { ...p, tasks: p.tasks.map((t) => (t.id === taskId ? { ...t, assignees } : t)) }));
   }
 
   function toggleTaskDone(pjId, taskId) {
@@ -2583,7 +2633,7 @@ export default function App() {
     } else if (addLevel === "task") {
       if (!addPJId) return;
       // 担当は親(PJ)から引き継ぐ
-      setProjects((prev) => prev.map((p) => (p.id === addPJId ? { ...p, tasks: [...p.tasks, { ...task(trimmed, [], addTaskStartDate, addTaskEndDate), assignee: p.assignee || "" }] } : p)));
+      setProjects((prev) => prev.map((p) => (p.id === addPJId ? { ...p, tasks: [...p.tasks, { ...task(trimmed, [], addTaskStartDate, addTaskEndDate), assignees: p.assignees || [] }] } : p)));
     } else {
       if (!addPJId || !addTaskId) return;
       const parentTask = projects.find((p) => p.id === addPJId)?.tasks.find((t) => t.id === addTaskId);
@@ -2594,7 +2644,7 @@ export default function App() {
       }
       setProjects((prev) => prev.map((p) => {
         if (p.id !== addPJId) return p;
-        return { ...p, tasks: p.tasks.map((t) => t.id === addTaskId ? { ...t, subtasks: [...t.subtasks, { ...sub(trimmed, false, addPriority, clampedDate, addStartTime, addEstMinutes ? Number(addEstMinutes) : null), assignee: t.assignee || p.assignee || "" }] } : t) };
+        return { ...p, tasks: p.tasks.map((t) => t.id === addTaskId ? { ...t, subtasks: [...t.subtasks, { ...sub(trimmed, false, addPriority, clampedDate, addStartTime, addEstMinutes ? Number(addEstMinutes) : null), assignees: t.assignees?.length ? t.assignees : p.assignees || [] }] } : t) };
       }));
     }
     setAddText(""); setAddDate(""); setAddStartTime(""); setAddEstMinutes(""); setAddTaskStartDate(""); setAddTaskEndDate("");
@@ -3009,7 +3059,7 @@ export default function App() {
                         style={{ ...styles.moyamoyaToggleBtn, background: p.moyamoya ? MOYAMOYA_COLOR : "transparent", color: p.moyamoya ? "#FFFFFF" : MOYAMOYA_COLOR, borderColor: MOYAMOYA_COLOR }}
                         aria-label={p.moyamoya ? "もやもやから外す" : "もやもやに入れる"}>もや</button>
                     )}
-                    {isWorkPJ(p) && <AssigneeSelect value={p.assignee} assignees={assignees} onChange={(v) => updatePJNote(p.id, "assignee", v)} onEditList={editAssignees} />}
+                    {isWorkPJ(p) && <AssigneePicker value={p.assignees} assignees={assignees} onChange={(v) => updatePJNote(p.id, "assignees", v)} onEditList={editAssignees} />}
                     <select value={p.priority || 2} onChange={(e) => updatePJPriority(p.id, Number(e.target.value))} style={styles.moveSelect} aria-label="優先度を変更">
                       {PJ_PRIORITIES.map((pr) => <option key={pr.v} value={pr.v}>{pr.label}</option>)}
                     </select>
@@ -3056,7 +3106,7 @@ export default function App() {
                                 aria-label={showDoneSubtasks.has(t.id) ? "完了済みサブタスクを隠す" : "完了済みサブタスクを表示"}>
                                 {showDoneSubtasks.has(t.id) ? "👁" : "🙈"}
                               </button>
-                              {isWorkPJ(p) && <AssigneeSelect value={t.assignee} assignees={assignees} onChange={(v) => updateTaskAssignee(p.id, t.id, v)} onEditList={editAssignees} />}
+                              {isWorkPJ(p) && <AssigneePicker value={t.assignees} assignees={assignees} onChange={(v) => updateTaskAssignees(p.id, t.id, v)} onEditList={editAssignees} />}
                               <select value={p.id} onChange={(e) => moveTask(p.id, t.id, e.target.value)} style={styles.moveSelect} aria-label="PJを変更">
                                 {projects.map((pp) => <option key={pp.id} value={pp.id}>{pjLabel(pp)}</option>)}
                               </select>
@@ -3105,7 +3155,7 @@ export default function App() {
                                             {isWorkPJ(p) && (
                                               <label style={styles.scheduleEditField}>
                                                 <span style={styles.scheduleEditLabel}>担当</span>
-                                                <AssigneeSelect value={s.assignee} assignees={assignees} onChange={(v) => updateSubtaskSchedule(p.id, t.id, s.id, "assignee", v)} onEditList={editAssignees} style={styles.scheduleEditInput} />
+                                                <AssigneePicker value={s.assignees} assignees={assignees} onChange={(v) => updateSubtaskSchedule(p.id, t.id, s.id, "assignees", v)} onEditList={editAssignees} style={styles.scheduleEditInput} />
                                               </label>
                                             )}
                                             <label style={styles.scheduleEditField}>
@@ -3681,7 +3731,7 @@ export default function App() {
                 <h3 style={{ ...styles.sectionTitleFlush, fontWeight: 900 }}>ロードマップ（月×PJ）</h3>
               </div>
               <p style={styles.ganttHint}>矢羽根＝タスク(開始日〜終了日)。矢羽根を押すとタスク編集、PJ名を押すとPJ詳細。</p>
-              <RoadmapView projects={visibleProjects.filter((p) => !p.status)} themes={visibleThemes} onOpenPJ={setPjDetailModal} onMovePJ={movePJTo} onOpenTask={(pjId, taskId) => setTaskEditModal({ pjId, taskId })} />
+              <RoadmapView projects={visibleProjects.filter((p) => !p.status)} themes={visibleThemes} onOpenPJ={setPjDetailModal} onMovePJ={movePJTo} onMoveTheme={moveThemeTo} onOpenTask={(pjId, taskId) => setTaskEditModal({ pjId, taskId })} />
             </>
           )}
 
@@ -3706,7 +3756,7 @@ export default function App() {
           {pjDetailModal && (() => {
             const p = (projects || []).find((pp) => pp.id === pjDetailModal);
             if (!p) return null;
-            return <PJDetailModal key={p.id} project={p} onUpdateNote={updatePJNote} onUpdateName={updatePJName} onUpdateStatus={updatePJStatus} onClose={() => setPjDetailModal(null)} onAddTask={openAddTaskModal} onAddSubtask={openAddSubtaskModal} onGoToPJ={goToPJ} assignees={assignees} onEditAssignees={() => setAssigneeListOpen(true)} />;
+            return <PJDetailModal key={p.id} project={p} onUpdateNote={updatePJNote} onUpdateName={updatePJName} onUpdateStatus={updatePJStatus} onClose={() => setPjDetailModal(null)} onAddTask={openAddTaskModal} onAddSubtask={openAddSubtaskModal} onGoToPJ={goToPJ} assignees={assignees} onEditAssignees={() => setAssigneeListOpen(true)} onUpdateTaskAssignees={updateTaskAssignees} onUpdateSubtaskAssignees={(pjId, taskId, subId, v) => updateSubtaskSchedule(pjId, taskId, subId, "assignees", v)} />;
           })()}
 
           {taskEditModal && (() => {
@@ -3755,7 +3805,7 @@ export default function App() {
                     {isWorkPJ(p) && (
                       <label style={styles.scheduleEditField}>
                         <span style={styles.scheduleEditLabel}>担当</span>
-                        <AssigneeSelect value={t.assignee} assignees={assignees} onChange={(v) => updateTaskAssignee(pjId, t.id, v)} onEditList={editAssignees} style={styles.scheduleEditInput} />
+                        <AssigneePicker value={t.assignees} assignees={assignees} onChange={(v) => updateTaskAssignees(pjId, t.id, v)} onEditList={editAssignees} style={styles.scheduleEditInput} />
                       </label>
                     )}
                     <label style={styles.scheduleEditField}>
@@ -4032,7 +4082,7 @@ export default function App() {
                     {isWorkPJ(p) && (
                       <label style={styles.scheduleEditField}>
                         <span style={styles.scheduleEditLabel}>担当</span>
-                        <AssigneeSelect value={s.assignee} assignees={assignees} onChange={(v) => updateSubtaskSchedule(pjId, taskId, s.id, "assignee", v)} onEditList={editAssignees} style={styles.scheduleEditInput} />
+                        <AssigneePicker value={s.assignees} assignees={assignees} onChange={(v) => updateSubtaskSchedule(pjId, taskId, s.id, "assignees", v)} onEditList={editAssignees} style={styles.scheduleEditInput} />
                       </label>
                     )}
                   </div>
@@ -4228,6 +4278,7 @@ const styles = {
   scheduleEditField: { display: "flex", flexDirection: "column", gap: 1 },
   scheduleEditLabel: { fontSize: 9, color: "#9B9B9B", fontWeight: 700 },
   scheduleEditInput: { fontSize: 11, padding: "3px 5px", borderRadius: 5, border: "1.5px solid #E5E5E5", background: "#FFFFFF", color: "#2C3645", fontFamily: "inherit" },
+  assigneeBtn: { cursor: "pointer", maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textAlign: "left" },
   assigneeSet: { borderColor: "#8B6F3E", color: "#8B6F3E", fontWeight: 700 },
   moveSelect: { fontSize: 10, padding: "2px 4px", borderRadius: 5, border: "1.5px solid #D8D8D8", background: "#FFFFFF", color: "#2C3645", fontFamily: "inherit", maxWidth: 92 },
   moyamoyaToggleBtn: { fontSize: 10, fontWeight: 700, padding: "3px 7px", borderRadius: 5, border: "1.5px solid", cursor: "pointer", fontFamily: "inherit", flexShrink: 0 },
