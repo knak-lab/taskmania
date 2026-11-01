@@ -144,7 +144,13 @@ function setup() {
   Logger.log("セットアップ完了: Projects / Tasks / Subtasks / Steps / MoyamoyaNotes / WorkAdjustments シートを用意しました");
 }
 
+// 認証は Auth.gs（Googleログイン）。IDトークンが正しく、許可されたメールのときだけ通す
+function unauthorized_() {
+  return jsonResponse_({ ok: false, error: "Unauthorized" });
+}
+
 function doGet(e) {
+  if (!verifyIdToken_(e && e.parameter && e.parameter.id_token)) return unauthorized_();
   const projects = readProjects_();
   const moyamoyaNotes = readMoyamoyaNotes_();
   const workAdj = readWorkAdj_();
@@ -156,6 +162,7 @@ function doGet(e) {
 function doPost(e) {
   try {
     const body = JSON.parse(e.postData.contents);
+    if (!verifyIdToken_(body.id_token)) return unauthorized_();
     let projectCount = null;
     let moyamoyaCount = null;
     let workAdjCount = null;
