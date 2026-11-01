@@ -14,7 +14,7 @@ const TOP_TABS = [
 
 const PERSON_KEYS = ["kkr", "acco"];
 // kkr>work 以外を見るためのパスワード(簡易な目隠し。データ自体は暗号化されない)
-const LOCK_PASSWORD = "0810";
+const LOCK_PASSWORD = "8888";
 const UNLOCK_KEY = "tm_unlocked";
 const SUB_TABS = [
   { key: "総合", label: "総合" },

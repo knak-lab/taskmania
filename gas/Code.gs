@@ -149,50 +149,106 @@ function unauthorized_() {
   return jsonResponse_({ ok: false, error: "Unauthorized: " + authFailReason_() });
 }
 
+// =============================================================
+//  見える範囲（スコープ）
+//    スクリプトプロパティ WORK_ONLY_EMAILS（カンマ区切り）に入っている人は
+//    「kkr > work」のプロジェクトとテーマだけを読み書きできる。
+//    それ以外の人（ALLOWED_EMAILS のみ）はすべて見える。
+//    ※ 絞り込みはサーバー側で行うので、画面のパスワードとは関係なく守られる
+// =============================================================
+const WORK_OWNER = "kkr";
+const WORK_SUB = "仕事";
+
+function scopeFor_(email) {
+  const list = String(PropertiesService.getScriptProperties().getProperty("WORK_ONLY_EMAILS") || "")
+    .split(/[,、\s]+/)
+    .map(function (s) { return s.trim().toLowerCase(); })
+    .filter(Boolean);
+  return list.indexOf(String(email || "").toLowerCase()) >= 0 ? "work" : "full";
+}
+
+function isWorkItem_(x) {
+  return x && x.owner === WORK_OWNER && x.subcategory === WORK_SUB;
+}
+
+// work スコープの人が送ってきた一覧を、work 以外の既存データと合わせる。
+//  - 既存の work 以外はそのまま残す（送られてきても上書きしない）
+//  - 送られてきたものは owner / subcategory を work に固定する
+function mergeWorkScope_(existing, incoming) {
+  const keep = existing.filter(function (x) { return !isWorkItem_(x); });
+  const keepIds = {};
+  keep.forEach(function (x) { keepIds[x.id] = true; });
+  const work = (incoming || [])
+    .filter(function (x) { return x && x.id && !keepIds[x.id]; })
+    .map(function (x) { return Object.assign({}, x, { owner: WORK_OWNER, subcategory: WORK_SUB }); });
+  return keep.concat(work);
+}
+
 function doGet(e) {
-  if (!verifyIdToken_(e && e.parameter && e.parameter.id_token)) return unauthorized_();
+  const email = verifyIdToken_(e && e.parameter && e.parameter.id_token);
+  if (!email) return unauthorized_();
+  const scope = scopeFor_(email);
   const projects = readProjects_();
-  const moyamoyaNotes = readMoyamoyaNotes_();
-  const workAdj = readWorkAdj_();
   const themes = readThemes_();
   const assignees = readAssignees_();
-  return jsonResponse_({ projects: projects, moyamoyaNotes: moyamoyaNotes, workAdj: workAdj, themes: themes, assignees: assignees });
+  if (scope === "work") {
+    return jsonResponse_({
+      projects: projects.filter(isWorkItem_),
+      moyamoyaNotes: [],
+      workAdj: [],
+      themes: themes.filter(isWorkItem_),
+      assignees: assignees,
+      viewerScope: "work",
+    });
+  }
+  return jsonResponse_({ projects: projects, moyamoyaNotes: readMoyamoyaNotes_(), workAdj: readWorkAdj_(), themes: themes, assignees: assignees, viewerScope: "full" });
 }
 
 function doPost(e) {
+  const lock = LockService.getScriptLock();
   try {
     const body = JSON.parse(e.postData.contents);
-    if (!verifyIdToken_(body.id_token)) return unauthorized_();
+    const email = verifyIdToken_(body.id_token);
+    if (!email) return unauthorized_();
+    const scope = scopeFor_(email);
+    lock.waitLock(20000);
     let projectCount = null;
     let moyamoyaCount = null;
     let workAdjCount = null;
     let calendarEventId = null;
     let themeCount = null;
     if (body.projects !== undefined) {
-      writeProjects_(body.projects || []);
-      projectCount = (body.projects || []).length;
+      const projects = scope === "work" ? mergeWorkScope_(readProjects_(), body.projects) : body.projects || [];
+      writeProjects_(projects);
+      projectCount = projects.length;
     }
-    if (body.moyamoyaNotes !== undefined) {
+    // もやもやメモ・稼働調整は個人用なので、work スコープの人からの書き込みは無視する
+    if (body.moyamoyaNotes !== undefined && scope === "full") {
       writeMoyamoyaNotes_(body.moyamoyaNotes || []);
       moyamoyaCount = (body.moyamoyaNotes || []).length;
     }
-    if (body.workAdj !== undefined) {
+    if (body.workAdj !== undefined && scope === "full") {
       writeWorkAdj_(body.workAdj || []);
       workAdjCount = (body.workAdj || []).length;
     }
     if (body.themes !== undefined) {
-      writeThemes_(body.themes || []);
-      themeCount = (body.themes || []).length;
+      const themes = scope === "work" ? mergeWorkScope_(readThemes_(), body.themes) : body.themes || [];
+      writeThemes_(themes);
+      themeCount = themes.length;
     }
     if (body.assignees !== undefined) {
       writeAssignees_(body.assignees || []);
     }
     if (body.calendarEvent !== undefined) {
+      // 予定はこのスクリプトの持ち主（kkr）のカレンダーに入るため、work スコープの人は使えない
+      if (scope === "work") return jsonResponse_({ ok: false, error: "カレンダー登録は利用できません" });
       calendarEventId = createCalendarEvent_(body.calendarEvent);
     }
     return jsonResponse_({ ok: true, projectCount: projectCount, moyamoyaCount: moyamoyaCount, workAdjCount: workAdjCount, themeCount: themeCount, calendarEventId: calendarEventId });
   } catch (err) {
     return jsonResponse_({ ok: false, error: String(err) });
+  } finally {
+    try { lock.releaseLock(); } catch (_) { /* ロック前に失敗したとき */ }
   }
 }
 

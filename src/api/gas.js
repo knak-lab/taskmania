@@ -1,4 +1,4 @@
-import { withIdToken } from '../auth/googleAuth';
+import { peekIdToken, withIdToken } from '../auth/googleAuth';
 
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 const KAMO_GAS_URL = import.meta.env.VITE_KAMO_GAS_URL;
@@ -41,10 +41,20 @@ async function postJson(body) {
   })));
 }
 
+// カモの小屋のTodoを「ついでに」読む。カモの小屋に登録されていない人（仕事用メンバーなど）は
+// 読めなくて当然なので、失敗してもログイン画面は出さずに空で返す。
 export async function loadKamoTodos() {
-  if (!KAMO_GAS_URL) return { todos: [], subtasks: [] };
-  const data = await getJson(KAMO_GAS_URL, 0);
-  return { todos: data.todos || [], subtasks: data.subtasks || [] };
+  const idToken = peekIdToken();
+  if (!KAMO_GAS_URL || !idToken) return { todos: [], subtasks: [] };
+  try {
+    const url = new URL(KAMO_GAS_URL);
+    url.searchParams.set('id_token', idToken);
+    const data = await fetchGasJson(url.toString(), undefined, 0);
+    if (!data || data.ok === false) return { todos: [], subtasks: [] };
+    return { todos: data.todos || [], subtasks: data.subtasks || [] };
+  } catch {
+    return { todos: [], subtasks: [] };
+  }
 }
 
 export async function loadAppData() {
