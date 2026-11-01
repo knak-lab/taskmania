@@ -146,7 +146,7 @@ function setup() {
 
 // 認証は Auth.gs（Googleログイン）。IDトークンが正しく、許可されたメールのときだけ通す
 function unauthorized_() {
-  return jsonResponse_({ ok: false, error: "Unauthorized" });
+  return jsonResponse_({ ok: false, error: "Unauthorized: " + authFailReason_() });
 }
 
 function doGet(e) {
