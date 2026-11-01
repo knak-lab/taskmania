@@ -10,6 +10,7 @@
  * API:
  *   GET  {webAppUrl}            → { projects: [...] } (PJ→タスク→サブタスクのネスト構造。フロント側のprojects stateとそのまま互換)
  *   POST {webAppUrl}            → body: { projects: [...] } を受け取り、3シートを全件書き換え
+ *   POST {webAppUrl}            → body: { ops: [...], read } で1件ずつ足す・変える・完了にする（Ops.gs。CLI は service_token で呼ぶ）
  *   POST {webAppUrl}            → body: { calendarEvent: { title, date, startTime, estimatedMinutes } } を受け取り、
  *                                  このスクリプトのデフォルトGoogleカレンダーに予定を1件作成する
  *
@@ -208,10 +209,17 @@ function doPost(e) {
   const lock = LockService.getScriptLock();
   try {
     const body = JSON.parse(e.postData.contents);
+    // CLI（tools/tm.cjs）は SERVICE_TOKEN で来る。使えるのは 1件ずつの受け口（Ops.gs）と読み込みだけ
+    if (body.service_token !== undefined) {
+      if (!verifyServiceToken_(body.service_token)) return jsonResponse_({ ok: false, error: "Unauthorized: service_token" });
+      lock.waitLock(20000);
+      return handleOps_(body, "full");
+    }
     const email = verifyIdToken_(body.id_token);
     if (!email) return unauthorized_();
     const scope = scopeFor_(email);
     lock.waitLock(20000);
+    if (body.ops !== undefined || body.read === true) return handleOps_(body, scope);
     let projectCount = null;
     let moyamoyaCount = null;
     let workAdjCount = null;

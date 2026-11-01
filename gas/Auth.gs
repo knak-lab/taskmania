@@ -87,3 +87,17 @@ function authSelfCheck() {
   Logger.log('ALLOWED_EMAILS : ' + (allowedEmails_().length ? allowedEmails_().join(', ') : '★未設定'))
   Logger.log('API_TOKEN(旧)  : ' + (props.getProperty('API_TOKEN') ? '残っています（使っていなければ削除してOK）' : 'なし'))
 }
+
+// =============================================================
+//  CLI（tools/tm.cjs）用のサービストークン
+//    スクリプトプロパティ SERVICE_TOKEN（32文字以上）と一致したときだけ true。
+//    このトークンで使えるのは「1件ずつの受け口（body.ops）」と読み込みだけ（Ops.gs）。
+//    全件洗い替えの保存には使えない。未設定なら常に false（安全側に倒す）。
+// =============================================================
+function verifyServiceToken_(token) {
+  const expected = String(PropertiesService.getScriptProperties().getProperty('SERVICE_TOKEN') || '').trim()
+  if (expected.length < 32 || typeof token !== 'string' || token.length !== expected.length) return false
+  let diff = 0
+  for (let i = 0; i < expected.length; i++) diff |= expected.charCodeAt(i) ^ token.charCodeAt(i)
+  return diff === 0
+}
