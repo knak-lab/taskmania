@@ -118,3 +118,5 @@
 .rm-subarrow span { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .rm-subarrow:hover { background: color-mix(in srgb, var(--bc) 35%, #fff); }
 .rm-subarrow.done { opacity: .5; text-decoration: line-through; }
+/* PJ名の下の段(進捗・期間未設定・▸サブ・＋タスク)は入りきらなければ折り返す */
+.rm-pj-meta { flex-wrap: wrap; row-gap: 3px; overflow: visible; }
