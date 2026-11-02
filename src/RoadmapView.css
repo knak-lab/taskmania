@@ -90,3 +90,5 @@
 .rm-group.drop-after::after { bottom: -1px; }
 .rm-theme-label .rm-grip { color: rgba(255,255,255,.75); }
 .rm-theme-label .rm-grip:hover { color: #fff; }
+.rm-add { margin-left: auto; color: var(--ink); border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; background: #fff; cursor: pointer; font-weight: 700; }
+.rm-add:hover { background: var(--soft); }

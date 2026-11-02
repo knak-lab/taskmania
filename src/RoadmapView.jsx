@@ -43,7 +43,7 @@ function loadSpan() {
   try { const v = Number(localStorage.getItem("tm_roadmap_span")); return SPANS.includes(v) ? v : 6; } catch { return 6; }
 }
 
-export default function RoadmapView({ projects, themes, onOpenPJ, onOpenTask, onMovePJ, onMoveTheme }) {
+export default function RoadmapView({ projects, themes, onOpenPJ, onOpenTask, onAddTask, onMovePJ, onMoveTheme }) {
   const todayStr = toDateStr(new Date());
   const todayMonth = monthKey(todayStr);
   const [span, setSpan] = useState(loadSpan);
@@ -261,6 +261,11 @@ export default function RoadmapView({ projects, themes, onOpenPJ, onOpenTask, on
                         {pct !== null && <span>{pct}%</span>}
                         {undated > 0 && <span className="rm-undated">期間未設定{undated}</span>}
                         {bars.length === 0 && undated === 0 && <span>タスクなし</span>}
+                        {onAddTask && (
+                          <span className="rm-add" role="button" tabIndex={0} title="このPJにタスクを追加"
+                            onClick={(e) => { e.stopPropagation(); setHover(null); onAddTask(p.id); }}
+                            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); onAddTask(p.id); } }}>＋タスク</span>
+                        )}
                       </span>
                     </button>
                     <div className="rm-track" style={{ width: trackW, minHeight: lanes * LANE_H + 8 }}>

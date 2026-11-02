@@ -106,7 +106,7 @@ function loadOpen() {
   try { return JSON.parse(localStorage.getItem("tm_map_open") || "{}"); } catch { return {}; }
 }
 
-export default function MindMapView({ rootLabel, projects, themes, allProjects, allThemes, scope, setProjects, setThemes, onOpenPJ, onToggleSub, onOpenSub }) {
+export default function MindMapView({ rootLabel, projects, themes, allProjects, allThemes, scope, setProjects, setThemes, onOpenPJ, onToggleSub, onOpenSub, onOpenTask, addPJRequest, onAddPJRequestDone }) {
   const todayStr = toDateStr(new Date());
   const [open, setOpen] = useState(loadOpen);
   const [sel, setSel] = useState(null);
@@ -290,7 +290,7 @@ export default function MindMapView({ rootLabel, projects, themes, allProjects, 
     if (!info || !info.parent) return;
     const n = info.n;
     if ((n.type === "pj" || n.type === "task") && n.children.length) {
-      flash("中身があるので、PJ詳細から削除してください");
+      flash(n.type === "pj" ? "中身があるので、PJ詳細の「PJを削除」から削除してください" : "中身があるので、タスク編集の「タスクを削除」から削除してください");
       return;
     }
     snapshot();
@@ -396,6 +396,18 @@ export default function MindMapView({ rootLabel, projects, themes, allProjects, 
     });
   }
 
+  useEffect(() => {
+    if (!addPJRequest) return;
+    onAddPJRequestDone && onAddPJRequestDone();
+    let info = sel && index.get(sel);
+    while (info && info.n.type !== "theme" && info.n.type !== "root") info = info.parent && index.get(info.parent.id);
+    const target = info?.n.type === "theme" ? info.n : (tree.children.find((c) => c.type === "theme") || tree);
+    setSel(target.id);
+    setOpen((o) => ({ ...o, [target.id]: true }));
+    setDraft({ parentId: target.id, type: "pj", afterId: null, token: uid() });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [addPJRequest]);
+
   // ---- 入力 ----
   function onNodeClick(e, n) {
     if (e.target.closest(".mm-tog") || e.target.tagName === "INPUT") return;
@@ -443,7 +455,7 @@ export default function MindMapView({ rootLabel, projects, themes, allProjects, 
     if (b.draft) {
       return (
         <div key="__draft" className={`mm-node mm-${b.type} mm-sel`} style={style}>
-          <input key={draft.token} className="mm-edit" autoFocus placeholder={{ theme: "テーマ名", pj: "PJ名", task: "タスク名", sub: "サブタスク" }[b.type]}
+          <input key={draft.token} className="mm-edit" autoFocus ref={(el) => el && el.scrollIntoView({ block: "nearest", inline: "nearest" })} placeholder={{ theme: "テーマ名", pj: "PJ名", task: "タスク名", sub: "サブタスク" }[b.type]}
             onKeyDown={(e) => editKeys(e, (v, tab) => commitDraft(draft.token, v, tab), () => { draftRef.current = null; setDraft(null); focusMap(); }, true)}
             onBlur={(e) => commitDraft(draft.token, e.currentTarget.value, false)} aria-label="新しい項目の名前" />
         </div>
@@ -618,7 +630,7 @@ export default function MindMapView({ rootLabel, projects, themes, allProjects, 
         <>
           <h4 className="mm-title">点検：{tree.text}</h4>
           {renderCheckup(all, true)}
-          <p className="mm-empty">箱を選ぶとその中身が出ます。PJはダブルクリックで詳細を開きます。</p>
+          <p className="mm-empty">箱を選ぶとその中身が出ます。PJはダブルクリックで詳細、タスク・サブタスクは右の一覧から編集できます。</p>
         </>
       );
     }
@@ -658,17 +670,30 @@ export default function MindMapView({ rootLabel, projects, themes, allProjects, 
       return (
         <>
           <div className="mm-sum"><span className={`mm-pill mm-p-${s.k}`}>{s.t}</span><span className="mm-bar"><i style={{ width: `${p.total ? (p.done / p.total) * 100 : 0}%` }} /></span><span className="mm-num">{p.done}/{p.total}</span></div>
-          <button type="button" className="mm-primary" onClick={() => onOpenPJ(n.id)}>PJ詳細を開く</button>
+          <div className="mm-actions">
+            <button type="button" className="mm-primary" onClick={() => onOpenPJ(n.id)}>PJ詳細を開く</button>
+            <button type="button" className="mm-secondary" onClick={startAddChild}>＋タスク</button>
+          </div>
           {n.pj.nextAction && <div className="mm-field"><b>次の一歩</b><p>{n.pj.nextAction}</p></div>}
           {n.pj.completedNote && <div className="mm-field"><b>現在地</b><p>{n.pj.completedNote}</p></div>}
           {n.children.map((t) => {
             const tp = progressOf(t, todayStr);
-            return <div key={t.id} className="mm-tk"><div className="mm-tk-h">{t.text}<span className="mm-num mm-muted">{tp.done}/{tp.total}</span></div>{subList(t)}</div>;
+            return <div key={t.id} className="mm-tk"><div className="mm-tk-h"><button type="button" className="mm-sublink" onClick={() => onOpenTask && onOpenTask(t.pjId, t.id)} title="タスクを編集">{t.text}</button><span className="mm-num mm-muted">{tp.done}/{tp.total}</span></div>{subList(t)}</div>;
           })}
         </>
       );
     }
-    if (n.type === "task") return subList(n);
+    if (n.type === "task") {
+      return (
+        <>
+          <div className="mm-actions">
+            {onOpenTask && <button type="button" className="mm-primary" onClick={() => onOpenTask(n.pjId, n.id)}>タスクを編集</button>}
+            <button type="button" className="mm-secondary" onClick={startAddChild}>＋サブ</button>
+          </div>
+          {subList(n)}
+        </>
+      );
+    }
     if (n.type === "sub") {
       return (
         <>

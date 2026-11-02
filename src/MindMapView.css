@@ -104,3 +104,6 @@
 /* テーマ・PJの並び替え: 落とす位置(前/後ろ)を線で示す */
 .mm-drop-before { box-shadow: 0 -4px 0 -1px var(--mm-ink); }
 .mm-drop-after { box-shadow: 0 4px 0 -1px var(--mm-ink); }
+.mm-actions { display: flex; gap: 6px; }
+.mm-actions .mm-primary { flex: 1; }
+.mm-secondary { border: 1.5px solid var(--mm-ink); background: #fff; color: var(--mm-ink); border-radius: 6px; padding: 6px 10px; font-weight: 700; font-size: 13px; cursor: pointer; }

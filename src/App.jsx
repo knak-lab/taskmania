@@ -879,7 +879,7 @@ function normalizeLink(v) {
   return /^[a-z][a-z0-9+.-]*:/i.test(s) ? s : `https://${s}`;
 }
 
-function PJDetailModal({ project, onUpdateNote, onUpdateName, onUpdateStatus, onClose, onAddTask, onAddSubtask, onGoToPJ, assignees, onEditAssignees, onUpdateTaskAssignees, onUpdateSubtaskAssignees }) {
+function PJDetailModal({ project, onUpdateNote, onUpdateName, onUpdateStatus, onUpdatePriority, onUpdateSubcategory, onToggleMoyamoya, onRemove, onOpenTask, onOpenSub, onClose, onAddTask, onAddSubtask, onGoToPJ, assignees, onEditAssignees, onUpdateTaskAssignees, onUpdateSubtaskAssignees }) {
   const [exporting, setExporting] = useState(false);
   const [linkDraft, setLinkDraft] = useState(null); // null=表示中、文字列=編集中
   function saveLink() {
@@ -925,6 +925,19 @@ function PJDetailModal({ project, onUpdateNote, onUpdateName, onUpdateStatus, on
 
         <div style={styles.pjLinkRow}>
           {onGoToPJ && <button type="button" onClick={() => onGoToPJ(project.id)} style={styles.pjOpenBtn}>PJを開く</button>}
+          <select value={project.priority || 2} onChange={(e) => onUpdatePriority(project.id, Number(e.target.value))} style={{ ...styles.moveSelect, fontSize: 12 }} aria-label="優先度を変更">
+            {PJ_PRIORITIES.map((pr) => <option key={pr.v} value={pr.v}>{pr.label}</option>)}
+          </select>
+          {PERSON_KEYS.includes(project.owner) && (
+            <select value={project.subcategory || ""} onChange={(e) => onUpdateSubcategory(project.id, e.target.value)} style={{ ...styles.moveSelect, fontSize: 12 }} aria-label="サブカテゴリを変更">
+              {REAL_SUBS.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+            </select>
+          )}
+          {isWorkPJ(project) && (
+            <button type="button" onClick={() => onToggleMoyamoya(project.id)}
+              style={{ ...styles.moyamoyaToggleBtn, background: project.moyamoya ? MOYAMOYA_COLOR : "transparent", color: project.moyamoya ? "#FFFFFF" : MOYAMOYA_COLOR, borderColor: MOYAMOYA_COLOR }}
+              aria-label={project.moyamoya ? "もやもやから外す" : "もやもやに入れる"}>もや</button>
+          )}
           <label style={styles.goalCheckLabel}>
             <input type="checkbox" checked={!!project.goalTarget} onChange={(e) => onUpdateNote(project.id, "goalTarget", e.target.checked)} />
             目標管理対象
@@ -1017,7 +1030,7 @@ function PJDetailModal({ project, onUpdateNote, onUpdateName, onUpdateStatus, on
               <li key={t.id} style={styles.detailTaskGroup}>
                 <div style={styles.detailTaskRow}>
                   <button type="button" onClick={() => toggleOpenTask(t.id)} style={styles.collapseBtnSm} aria-label={open ? "折りたたむ" : "展開する"}>{open ? "▾" : "▸"}</button>
-                  <span style={styles.detailTaskName}>{t.name}</span>
+                  <button type="button" onClick={() => onOpenTask(project.id, t.id)} style={{ ...styles.taskEditSubBtn, ...styles.detailTaskName, textDecoration: t.done ? "line-through" : "none" }} title="タスクを編集">{t.name}</button>
                   {isWorkPJ(project) && <AssigneePicker value={t.assignees} assignees={assignees} onChange={(v) => onUpdateTaskAssignees(project.id, t.id, v)} onEditList={onEditAssignees} />}
                   <span style={styles.calEstTag}>{t.startDate ? formatDate(t.startDate) : "―"}〜{t.endDate ? formatDate(t.endDate) : "―"}</span>
                   <span style={styles.progressTagSm}>{done}/{total}</span>
@@ -1035,7 +1048,7 @@ function PJDetailModal({ project, onUpdateNote, onUpdateName, onUpdateStatus, on
                     {visibleSubtasks.map((s) => (
                       <li key={s.id} style={styles.detailSubRow}>
                         <span style={{ ...styles.doneMark, opacity: s.done ? 1 : 0.15 }}>✅</span>
-                        <span style={{ ...styles.subText, textDecoration: s.done ? "line-through" : "none", color: s.done ? "#9B9B9B" : "#2C3645" }}>{s.text}</span>
+                        <button type="button" onClick={() => onOpenSub(project.id, t.id, s.id)} style={{ ...styles.taskEditSubBtn, ...styles.subText, textDecoration: s.done ? "line-through" : "none", color: s.done ? "#9B9B9B" : "#2C3645" }} title="サブタスクを編集">{s.text}</button>
                         {s.scheduledDate && <span style={styles.calEstTag}>{formatDate(s.scheduledDate)}</span>}
                         {isWorkPJ(project) && <AssigneePicker value={s.assignees} assignees={assignees} onChange={(v) => onUpdateSubtaskAssignees(project.id, t.id, s.id, v)} onEditList={onEditAssignees} />}
                       </li>
@@ -1046,6 +1059,11 @@ function PJDetailModal({ project, onUpdateNote, onUpdateName, onUpdateStatus, on
             );
           })}
         </ul>
+
+        <div style={{ ...styles.modalActions, justifyContent: "space-between" }}>
+          <button type="button" onClick={() => onRemove(project.id)} style={styles.inlineAddBtn}>PJを削除</button>
+          <button type="button" onClick={onClose} style={styles.addBtn}>閉じる</button>
+        </div>
       </div>
     </div>
   );
@@ -2709,10 +2727,11 @@ export default function App() {
     setAddModalOpen(false);
   }
 
+  // PJの追加はマップで行う: マップへ切り替え、選択中のテーマ(なければ先頭)の下に入力欄を出す
+  const [mapAddPJRequest, setMapAddPJRequest] = useState(null);
   function openAddPJModal() {
-    setAddLevel("pj");
-    setAddText("");
-    setAddModalOpen(true);
+    setMainView("map");
+    setMapAddPJRequest(Date.now());
   }
 
   function openAddTaskModal(pjId, pjName) {
@@ -2910,6 +2929,50 @@ export default function App() {
       }), 2000);
     }
   }
+  // サブタスクの繰り返し設定(PJタブの行とサブタスク編集画面で共通)
+  function renderRepeatFields(p, t, s) {
+    return (
+      <>
+        <label style={styles.scheduleEditField}>
+          <span style={styles.scheduleEditLabel}>繰り返し{p.owner === "kkr" && p.subcategory === "仕事" ? "(休日は翌日へ)" : ""}</span>
+          <select value={parseMonthlyRepeat(s.repeatWeekday) ? "monthly" : (s.repeatWeekday ?? "")} onChange={(e) => { const v = e.target.value; updateSubtaskSchedule(p.id, t.id, s.id, "repeatWeekday", v === "" ? "" : v === "monthly" ? monthlyRepeatFromDate(s.scheduledDate || toDateStr(new Date())) : /^\d$/.test(v) ? Number(v) : v); }} style={styles.scheduleEditInput}>
+            <option value="">なし</option>
+            <option value="daily">毎日</option>
+            <option value="weekday">平日(月〜金・祝日除く)</option>
+            <option value="satsun">毎週土曜・日曜</option>
+            {WEEKDAY_LABELS.map((label, idx) => <option key={idx} value={idx}>毎週{label}曜</option>)}
+            <option value="monthly">毎月第N◯曜</option>
+            <option value="3m">3ヶ月毎</option>
+            <option value="6m">半年毎</option>
+            <option value="1y">1年毎</option>
+          </select>
+        </label>
+        {parseMonthlyRepeat(s.repeatWeekday) && (() => {
+          const mr = parseMonthlyRepeat(s.repeatWeekday);
+          return (
+            <label style={styles.scheduleEditField}>
+              <span style={styles.scheduleEditLabel}>毎月</span>
+              <span style={{ display: "flex", gap: 4 }}>
+                <select value={mr.n} onChange={(e) => updateSubtaskSchedule(p.id, t.id, s.id, "repeatWeekday", monthlyRepeatValue(Number(e.target.value), mr.w))} style={styles.scheduleEditInput}>
+                  {[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n === 5 ? "最終" : `第${n}`}</option>)}
+                </select>
+                <select value={mr.w} onChange={(e) => updateSubtaskSchedule(p.id, t.id, s.id, "repeatWeekday", monthlyRepeatValue(mr.n, Number(e.target.value)))} style={styles.scheduleEditInput}>
+                  {WEEKDAY_LABELS.map((label, idx) => <option key={idx} value={idx}>{label}曜</option>)}
+                </select>
+              </span>
+            </label>
+          );
+        })()}
+        {s.repeatWeekday != null && (
+          <label style={styles.scheduleEditField}>
+            <span style={styles.scheduleEditLabel}>繰り返し終了日</span>
+            <input type="date" value={s.repeatEndDate || ""} onChange={(e) => updateSubtaskSchedule(p.id, t.id, s.id, "repeatEndDate", e.target.value)} min={s.scheduledDate || undefined} max={t.endDate || undefined} style={styles.scheduleEditInput} />
+          </label>
+        )}
+      </>
+    );
+  }
+
   function renderSendToCalendarButton(s) {
     if (!s.scheduledDate) return null;
     const sending = sendingCalId === s.id;
@@ -3216,42 +3279,7 @@ export default function App() {
                                                 <AssigneePicker value={s.assignees} assignees={assignees} onChange={(v) => updateSubtaskSchedule(p.id, t.id, s.id, "assignees", v)} onEditList={editAssignees} style={styles.scheduleEditInput} />
                                               </label>
                                             )}
-                                            <label style={styles.scheduleEditField}>
-                                              <span style={styles.scheduleEditLabel}>繰り返し{p.owner === "kkr" && p.subcategory === "仕事" ? "(休日は翌日へ)" : ""}</span>
-                                              <select value={parseMonthlyRepeat(s.repeatWeekday) ? "monthly" : (s.repeatWeekday ?? "")} onChange={(e) => { const v = e.target.value; updateSubtaskSchedule(p.id, t.id, s.id, "repeatWeekday", v === "" ? "" : v === "monthly" ? monthlyRepeatFromDate(s.scheduledDate || toDateStr(new Date())) : /^\d$/.test(v) ? Number(v) : v); }} style={styles.scheduleEditInput}>
-                                                <option value="">なし</option>
-                                                <option value="daily">毎日</option>
-                                                <option value="weekday">平日(月〜金・祝日除く)</option>
-                                                <option value="satsun">毎週土曜・日曜</option>
-                                                {WEEKDAY_LABELS.map((label, idx) => <option key={idx} value={idx}>毎週{label}曜</option>)}
-                                                <option value="monthly">毎月第N◯曜</option>
-                                                <option value="3m">3ヶ月毎</option>
-                                                <option value="6m">半年毎</option>
-                                                <option value="1y">1年毎</option>
-                                              </select>
-                                            </label>
-                                            {parseMonthlyRepeat(s.repeatWeekday) && (() => {
-                                              const mr = parseMonthlyRepeat(s.repeatWeekday);
-                                              return (
-                                                <label style={styles.scheduleEditField}>
-                                                  <span style={styles.scheduleEditLabel}>毎月</span>
-                                                  <span style={{ display: "flex", gap: 4 }}>
-                                                    <select value={mr.n} onChange={(e) => updateSubtaskSchedule(p.id, t.id, s.id, "repeatWeekday", monthlyRepeatValue(Number(e.target.value), mr.w))} style={styles.scheduleEditInput}>
-                                                      {[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n === 5 ? "最終" : `第${n}`}</option>)}
-                                                    </select>
-                                                    <select value={mr.w} onChange={(e) => updateSubtaskSchedule(p.id, t.id, s.id, "repeatWeekday", monthlyRepeatValue(mr.n, Number(e.target.value)))} style={styles.scheduleEditInput}>
-                                                      {WEEKDAY_LABELS.map((label, idx) => <option key={idx} value={idx}>{label}曜</option>)}
-                                                    </select>
-                                                  </span>
-                                                </label>
-                                              );
-                                            })()}
-                                            {s.repeatWeekday != null && (
-                                              <label style={styles.scheduleEditField}>
-                                                <span style={styles.scheduleEditLabel}>繰り返し終了日</span>
-                                                <input type="date" value={s.repeatEndDate || ""} onChange={(e) => updateSubtaskSchedule(p.id, t.id, s.id, "repeatEndDate", e.target.value)} min={s.scheduledDate || undefined} max={t.endDate || undefined} style={styles.scheduleEditInput} />
-                                              </label>
-                                            )}
+                                            {renderRepeatFields(p, t, s)}
                                             <label style={styles.scheduleEditField}>
                                               <span style={styles.scheduleEditLabel}>想定(分)</span>
                                               <select value={s.estimatedMinutes || ""} onChange={(e) => updateSubtaskSchedule(p.id, t.id, s.id, "estimatedMinutes", e.target.value ? Number(e.target.value) : "")} style={{ ...styles.scheduleEditInput, width: 64 }}>
@@ -3814,8 +3842,8 @@ export default function App() {
               <div style={styles.sectionTitleRow}>
                 <h3 style={{ ...styles.sectionTitleFlush, fontWeight: 900 }}>ロードマップ（月×PJ）</h3>
               </div>
-              <p style={styles.ganttHint}>矢羽根＝タスク(開始日〜終了日)。矢羽根を押すとタスク編集、PJ名を押すとPJ詳細。</p>
-              <RoadmapView projects={visibleProjects.filter((p) => !p.status)} themes={visibleThemes} onOpenPJ={setPjDetailModal} onMovePJ={movePJTo} onMoveTheme={moveThemeTo} onOpenTask={(pjId, taskId) => setTaskEditModal({ pjId, taskId })} />
+              <p style={styles.ganttHint}>矢羽根＝タスク(開始日〜終了日)。矢羽根を押すとタスク編集、PJ名を押すとPJ詳細、＋でタスク追加。</p>
+              <RoadmapView projects={visibleProjects.filter((p) => !p.status)} themes={visibleThemes} onOpenPJ={setPjDetailModal} onMovePJ={movePJTo} onMoveTheme={moveThemeTo} onOpenTask={(pjId, taskId) => setTaskEditModal({ pjId, taskId })} onAddTask={(pjId) => { const p = projects.find((pp) => pp.id === pjId); if (p) openAddTaskModal(p.id, pjLabel(p)); }} />
             </>
           )}
 
@@ -3832,6 +3860,9 @@ export default function App() {
               onOpenPJ={setPjDetailModal}
               onToggleSub={toggleSubtaskDone}
               onOpenSub={(pjId, taskId, subId) => setCalSubtaskModal({ pjId, taskId, subId })}
+              onOpenTask={(pjId, taskId) => setTaskEditModal({ pjId, taskId })}
+              addPJRequest={mapAddPJRequest}
+              onAddPJRequestDone={() => setMapAddPJRequest(null)}
             />
           )}
 
@@ -3840,7 +3871,9 @@ export default function App() {
           {pjDetailModal && (() => {
             const p = (projects || []).find((pp) => pp.id === pjDetailModal);
             if (!p) return null;
-            return <PJDetailModal key={p.id} project={p} onUpdateNote={updatePJNote} onUpdateName={updatePJName} onUpdateStatus={updatePJStatus} onClose={() => setPjDetailModal(null)} onAddTask={openAddTaskModal} onAddSubtask={openAddSubtaskModal} onGoToPJ={goToPJ} assignees={assignees} onEditAssignees={() => setAssigneeListOpen(true)} onUpdateTaskAssignees={updateTaskAssignees} onUpdateSubtaskAssignees={(pjId, taskId, subId, v) => updateSubtaskSchedule(pjId, taskId, subId, "assignees", v)} />;
+            return <PJDetailModal key={p.id} project={p} onUpdateNote={updatePJNote} onUpdateName={updatePJName} onUpdateStatus={updatePJStatus} onUpdatePriority={updatePJPriority} onUpdateSubcategory={updatePJSubcategory} onToggleMoyamoya={togglePJMoyamoya}
+              onRemove={removePJ} onOpenTask={(pjId, taskId) => setTaskEditModal({ pjId, taskId })} onOpenSub={(pjId, taskId, subId) => setCalSubtaskModal({ pjId, taskId, subId })}
+              onClose={() => setPjDetailModal(null)} onAddTask={openAddTaskModal} onAddSubtask={openAddSubtaskModal} onGoToPJ={goToPJ} assignees={assignees} onEditAssignees={() => setAssigneeListOpen(true)} onUpdateTaskAssignees={updateTaskAssignees} onUpdateSubtaskAssignees={(pjId, taskId, subId, v) => updateSubtaskSchedule(pjId, taskId, subId, "assignees", v)} />;
           })()}
 
           {taskEditModal && (() => {
@@ -4115,11 +4148,18 @@ export default function App() {
           })()}
 
           {calSubtaskModal && (() => {
-            const p = (projects || []).find((pp) => pp.id === calSubtaskModal.pjId);
-            const t = p?.tasks.find((tt) => tt.id === calSubtaskModal.taskId);
-            const s = t?.subtasks.find((ss) => ss.id === calSubtaskModal.subId);
+            // PJ・タスクを移しても開いたままにできるよう、subIdで全PJから引き直す
+            let p, t, s;
+            for (const pp of projects || []) {
+              for (const tt of pp.tasks) {
+                const ss = tt.subtasks.find((x) => x.id === calSubtaskModal.subId);
+                if (ss) { p = pp; t = tt; s = ss; break; }
+              }
+              if (s) break;
+            }
             if (!s) return null;
-            const { pjId, taskId } = calSubtaskModal;
+            const pjId = p.id;
+            const taskId = t.id;
             return (
               <div style={styles.modalOverlay} onClick={() => setCalSubtaskModal(null)}>
                 <div style={styles.modalBox} onClick={(e) => e.stopPropagation()}>
@@ -4169,12 +4209,38 @@ export default function App() {
                         <AssigneePicker value={s.assignees} assignees={assignees} onChange={(v) => updateSubtaskSchedule(pjId, taskId, s.id, "assignees", v)} onEditList={editAssignees} style={styles.scheduleEditInput} />
                       </label>
                     )}
+                    {renderRepeatFields(p, t, s)}
+                    <label style={styles.scheduleEditField}>
+                      <span style={styles.scheduleEditLabel}>PJ</span>
+                      <select value={pjId} onChange={(e) => {
+                        const toPj = projects.find((pp) => pp.id === e.target.value);
+                        const toTaskId = toPj?.tasks[0]?.id;
+                        if (toTaskId) moveSubtask(pjId, taskId, s.id, toPj.id, toTaskId);
+                        else window.alert("移動先のPJにタスクがありません。先にタスクを作ってください。");
+                      }} style={styles.moveSelect}>
+                        {projects.map((pp) => <option key={pp.id} value={pp.id}>{pjLabel(pp)}</option>)}
+                      </select>
+                    </label>
+                    <label style={styles.scheduleEditField}>
+                      <span style={styles.scheduleEditLabel}>タスク</span>
+                      <select value={taskId} onChange={(e) => moveSubtask(pjId, taskId, s.id, pjId, e.target.value)} style={styles.moveSelect} disabled={p.tasks.length <= 1}>
+                        {p.tasks.map((tt) => <option key={tt.id} value={tt.id}>{tt.name}</option>)}
+                      </select>
+                    </label>
                   </div>
                   <div style={{ ...styles.modalActions, justifyContent: "flex-start", flexWrap: "wrap", gap: 6 }}>
                     {renderStopwatchControl(pjId, taskId, s.id)}
                     <button type="button" onClick={() => openStepsModal(pjId, taskId, s.id)} aria-label="ステップを開く" style={styles.inlineAddBtn}>☑ステップ</button>
                     <button type="button" onClick={() => setCopyDateModal({ pjId, taskId, subId: s.id, date: s.scheduledDate || dayViewDate, text: s.text })} aria-label="サブタスクをコピー" style={styles.inlineAddBtn}>📋コピー</button>
+                    <button type="button" onClick={() => skipSubtask(pjId, taskId, s.id)}
+                      title={s.repeatWeekday != null ? "次回発生日へ先送り" : "翌日へ先送り"}
+                      aria-label="先送り" style={styles.inlineAddBtn}>⏭先送り</button>
+                    {!!s.skipCount && <span style={styles.skipBadge} title={`先送り${s.skipCount}回`}>⏭×{s.skipCount}</span>}
                     {renderSendToCalendarButton(s)}
+                  </div>
+                  <div style={{ ...styles.modalActions, justifyContent: "space-between" }}>
+                    <button type="button" onClick={() => removeSubtask(pjId, taskId, s.id)} style={styles.inlineAddBtn}>サブタスクを削除</button>
+                    <button type="button" onClick={() => setCalSubtaskModal(null)} style={styles.addBtn}>閉じる</button>
                   </div>
                 </div>
               </div>
