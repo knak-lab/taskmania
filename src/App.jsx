@@ -2688,6 +2688,10 @@ export default function App() {
     }));
   }
 
+  function updateTaskDates(pjId, taskId, startDate, endDate) {
+    setProjects((prev) => prev.map((p) => p.id !== pjId ? p : { ...p, tasks: p.tasks.map((t) => (t.id === taskId ? { ...t, startDate, endDate } : t)) }));
+  }
+
   function updateTaskDate(pjId, taskId, field, value) {
     setProjects((prev) => prev.map((p) => p.id !== pjId ? p : { ...p, tasks: p.tasks.map((t) => (t.id === taskId ? { ...t, [field]: value || null } : t)) }));
   }
@@ -3698,8 +3702,8 @@ export default function App() {
               <div style={styles.sectionTitleRow}>
                 <h3 style={{ ...styles.sectionTitleFlush, fontWeight: 900 }}>ロードマップ（月×PJ）</h3>
               </div>
-              <p style={styles.ganttHint}>矢羽根＝タスク(開始日〜終了日)。矢羽根を押すとタスク編集、PJ名を押すとPJ詳細、＋でタスク追加。</p>
-              <RoadmapView projects={visibleProjects.filter((p) => !p.status)} themes={visibleThemes} onOpenPJ={setPjDetailModal} onMovePJ={movePJTo} onMoveTheme={moveThemeTo} sections={viewGroups} onOpenTask={(pjId, taskId) => setTaskEditModal({ pjId, taskId })} onAddTask={(pjId) => { const p = projects.find((pp) => pp.id === pjId); if (p) openAddTaskModal(p.id, pjLabel(p)); }} />
+              <p style={styles.ganttHint}>矢羽根＝タスク(開始日〜終了日)。矢羽根を押すとタスク編集、端をつまむと日程変更・真ん中で移動。PJ名を押すとPJ詳細、▸サブでサブタスク、＋でタスク追加。</p>
+              <RoadmapView projects={visibleProjects.filter((p) => !p.status)} themes={visibleThemes} onOpenPJ={setPjDetailModal} onMovePJ={movePJTo} onMoveTheme={moveThemeTo} sections={viewGroups} onUpdateTaskDates={updateTaskDates} onOpenSub={(pjId, taskId, subId) => setCalSubtaskModal({ pjId, taskId, subId })} onOpenTask={(pjId, taskId) => setTaskEditModal({ pjId, taskId })} onAddTask={(pjId) => { const p = projects.find((pp) => pp.id === pjId); if (p) openAddTaskModal(p.id, pjLabel(p)); }} />
             </>
           )}
 

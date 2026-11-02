@@ -12,6 +12,8 @@ const STATUS = {
   done: { label: "完了", color: "#7E9C83" },
 };
 const SPANS = [3, 6, 12];
+const SUB_H = 22; // サブタスク行の1レーンの高さ
+const SUB_W = 96; // サブタスク矢羽根の最小幅(名前が読めるように)
 const LANE_H = 30; // 1レーンの最低高さ。行がPJ名の折り返しで高くなったら矢羽根も行いっぱいに伸ばす
 
 function toDateStr(d) {
@@ -39,11 +41,19 @@ function taskStatus(t, todayStr) {
   if (t.startDate <= todayStr) return { st: STATUS.active, pct };
   return { st: STATUS.upcoming, pct };
 }
+function addDaysStr(s, n) {
+  const d = new Date(s + "T00:00:00");
+  d.setDate(d.getDate() + n);
+  return toDateStr(d);
+}
+function diffDays(a, b) {
+  return Math.round((new Date(b + "T00:00:00") - new Date(a + "T00:00:00")) / 864e5);
+}
 function loadSpan() {
   try { const v = Number(localStorage.getItem("tm_roadmap_span")); return SPANS.includes(v) ? v : 6; } catch { return 6; }
 }
 
-export default function RoadmapView({ projects, themes, onOpenPJ, onOpenTask, onAddTask, onMovePJ, onMoveTheme, sections }) {
+export default function RoadmapView({ projects, themes, onOpenPJ, onOpenTask, onAddTask, onMovePJ, onMoveTheme, sections, onUpdateTaskDates, onOpenSub }) {
   const todayStr = toDateStr(new Date());
   const todayMonth = monthKey(todayStr);
   const [span, setSpan] = useState(loadSpan);
@@ -56,6 +66,12 @@ export default function RoadmapView({ projects, themes, onOpenPJ, onOpenTask, on
   // 並びはマップと共通(themes/projects配列の順)
   const [drag, setDrag] = useState(null); // { kind: "pj"|"theme", id, groupId, overId, after }
   const dragRef = useRef(null);
+  // 矢羽根のドラッグ: 真ん中で期間ごと移動、左右の端で開始日・終了日を変える(1日単位)
+  const [tdrag, setTdrag] = useState(null); // 表示用 { id, start, end }
+  const tdragRef = useRef(null);
+  // サブタスクを開いているPJ
+  const [openSubs, setOpenSubs] = useState(() => new Set());
+  const toggleSubs = (id) => setOpenSubs((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
   function onGripDown(e, id, groupId, kind = "pj") {
     e.preventDefault();
@@ -177,6 +193,60 @@ export default function RoadmapView({ projects, themes, onOpenPJ, onOpenTask, on
     return i * colW + (day / daysInMonth(monthKey(dateStr))) * colW;
   };
   const todayX = xOf(todayStr, false) + colW / daysInMonth(todayMonth) / 2;
+  function dateAtX(clientX, track) {
+    const x = clientX - track.getBoundingClientRect().left;
+    const i = Math.max(0, Math.min(months.length - 1, Math.floor(x / colW)));
+    const dim = daysInMonth(months[i]);
+    const day = Math.max(1, Math.min(dim, Math.floor(((x - i * colW) / colW) * dim) + 1));
+    return `${months[i]}-${String(day).padStart(2, "0")}`;
+  }
+  function onTaskMove(e) {
+    const d = tdragRef.current;
+    if (!d) return;
+    if (!d.active) {
+      if (Math.abs(e.clientX - d.sx) < 4) return;
+      d.active = true;
+      setHover(null);
+    }
+    e.preventDefault();
+    const sc = scrollRef.current;
+    if (sc) {
+      const r = sc.getBoundingClientRect();
+      if (e.clientX < r.left + labelW + 24) sc.scrollLeft -= 12;
+      else if (e.clientX > r.right - 24) sc.scrollLeft += 12;
+    }
+    const date = dateAtX(e.clientX, d.track);
+    const t = d.t;
+    let start = t.startDate;
+    let end = t.endDate;
+    if (d.kind === "move") { start = addDaysStr(date, -d.grabOff); end = addDaysStr(start, d.len); }
+    else if (d.kind === "start") start = date <= t.endDate ? date : t.endDate;
+    else end = date >= t.startDate ? date : t.startDate;
+    d.preview = { id: t.id, start, end };
+    setTdrag(d.preview);
+  }
+  function onTaskUp() {
+    window.removeEventListener("pointermove", onTaskMove);
+    window.removeEventListener("pointerup", onTaskUp);
+    window.removeEventListener("pointercancel", onTaskUp);
+    const d = tdragRef.current;
+    tdragRef.current = null;
+    setTdrag(null);
+    if (!d) return;
+    if (!d.active) { onOpenTask(d.pjId, d.t.id); return; } // 動かさずに離した = クリック
+    const p = d.preview;
+    if (p && onUpdateTaskDates && (p.start !== d.t.startDate || p.end !== d.t.endDate)) onUpdateTaskDates(d.pjId, d.t.id, p.start, p.end);
+  }
+  function startTaskDrag(e, pjId, t) {
+    if (e.button !== undefined && e.button !== 0) return;
+    e.stopPropagation();
+    const track = e.currentTarget.closest(".rm-track");
+    const kind = e.target.closest(".rm-rz-l") ? "start" : e.target.closest(".rm-rz-r") ? "end" : "move";
+    tdragRef.current = { pjId, t, kind, track, sx: e.clientX, active: false, grabOff: diffDays(t.startDate, dateAtX(e.clientX, track)), len: diffDays(t.startDate, t.endDate) };
+    window.addEventListener("pointermove", onTaskMove, { passive: false });
+    window.addEventListener("pointerup", onTaskUp);
+    window.addEventListener("pointercancel", onTaskUp);
+  }
   // 週の区切り(月曜)。月初と重なる週は月の線があるので省く。12ヶ月表示は詰まりすぎるので出さない
   const weekXs = [];
   if (span < 12) months.forEach((m, i) => {
@@ -267,7 +337,8 @@ export default function RoadmapView({ projects, themes, onOpenPJ, onOpenTask, on
                   </div>
                 )}
                 {g.rows.map(({ p, bars, lanes, undated, pct }) => (
-                  <div key={p.id} data-pj={p.id} data-group={g.id}
+                  <Fragment key={p.id}>
+                  <div data-pj={p.id} data-group={g.id}
                     className={`rm-row${drag?.kind === "pj" && drag.id === p.id ? " dragging" : ""}${drag?.kind === "pj" && drag.overId === p.id && drag.overId !== drag.id ? (drag.after ? " drop-after" : " drop-before") : ""}`}>
                     <button type="button" className="rm-pj" onClick={(e) => { if (e.target.closest(".rm-grip")) return; setHover(null); onOpenPJ(p.id); }}
                       onMouseEnter={(e) => { if (dragRef.current) return; const r = e.currentTarget.getBoundingClientRect(); setHover({ p, x: r.right + 6, y: r.top }); }}
@@ -281,6 +352,11 @@ export default function RoadmapView({ projects, themes, onOpenPJ, onOpenTask, on
                         {pct !== null && <span>{pct}%</span>}
                         {undated > 0 && <span className="rm-undated">期間未設定{undated}</span>}
                         {bars.length === 0 && undated === 0 && <span>タスクなし</span>}
+                        {(p.tasks || []).some((t) => (t.subtasks || []).length) && (
+                          <span className="rm-subtog" role="button" tabIndex={0} title="サブタスクを表示"
+                            onClick={(e) => { e.stopPropagation(); toggleSubs(p.id); }}
+                            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); toggleSubs(p.id); } }}>{openSubs.has(p.id) ? "▾" : "▸"}サブ</span>
+                        )}
                         {onAddTask && (
                           <span className="rm-add" role="button" tabIndex={0} title="このPJにタスクを追加"
                             onClick={(e) => { e.stopPropagation(); setHover(null); onAddTask(p.id); }}
@@ -291,19 +367,59 @@ export default function RoadmapView({ projects, themes, onOpenPJ, onOpenTask, on
                     <div className="rm-track" style={{ width: trackW, minHeight: lanes * LANE_H + 8 }}>
                       <div className="rm-today" style={{ left: todayX }} />
                       {bars.map(({ t, lane, st, pct: tp }) => {
-                        const left = xOf(t.startDate, false);
-                        const w = Math.max(22, xOf(t.endDate, true) - left);
+                        const dragging = tdrag && tdrag.id === t.id;
+                        const sd = dragging ? tdrag.start : t.startDate;
+                        const ed = dragging ? tdrag.end : t.endDate;
+                        const left = xOf(sd, false);
+                        const w = Math.max(22, xOf(ed, true) - left);
                         return (
-                          <button key={t.id} type="button" className="rm-arrow"
+                          <div key={t.id} role="button" tabIndex={0} className={`rm-arrow${dragging ? " dragging" : ""}`}
                             style={{ left, width: w, top: `calc(4px + (100% - 8px) * ${lane / lanes})`, height: `calc((100% - 8px) / ${lanes} - ${lanes > 1 ? 3 : 0}px)`, "--sc": st.color, "--pct": `${tp}%` }}
-                            onClick={() => onOpenTask(p.id, t.id)}
-                            title={`${t.name}　${t.startDate.slice(5).replace("-", "/")}〜${t.endDate.slice(5).replace("-", "/")}　${st.label} ${tp}%`}>
-                            <span>{t.name}</span>
-                          </button>
+                            onPointerDown={(e) => startTaskDrag(e, p.id, t)}
+                            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpenTask(p.id, t.id); } }}
+                            title={`${t.name}　${sd.slice(5).replace("-", "/")}〜${ed.slice(5).replace("-", "/")}　${st.label} ${tp}%（端をつまんで日程変更、真ん中で移動）`}>
+                            <i className="rm-rz-l" />
+                            <span>{dragging ? `${sd.slice(5).replace("-", "/")}〜${ed.slice(5).replace("-", "/")}` : t.name}</span>
+                            <i className="rm-rz-r" />
+                          </div>
                         );
                       })}
                     </div>
                   </div>
+                  {openSubs.has(p.id) && (p.tasks || []).filter((t) => (t.subtasks || []).length).map((t) => {
+                    // サブタスクは予定日の1日に矢羽根を置く(名前が読めるよう最小幅あり、重なりはレーン分け)
+                    const subs = t.subtasks.filter((x) => x.scheduledDate && months.includes(monthKey(x.scheduledDate)))
+                      .map((x) => { const l = xOf(x.scheduledDate, false); return { x, left: l, w: Math.max(SUB_W, xOf(x.scheduledDate, true) - l) }; })
+                      .sort((a, b) => a.left - b.left);
+                    const ends = [];
+                    subs.forEach((it) => {
+                      let lane = ends.findIndex((e) => e <= it.left);
+                      if (lane === -1) { lane = ends.length; ends.push(0); }
+                      ends[lane] = it.left + it.w + 2;
+                      it.lane = lane;
+                    });
+                    const undatedSubs = t.subtasks.filter((x) => !x.scheduledDate).length;
+                    return (
+                      <div key={t.id} className="rm-row rm-subrow">
+                        <div className="rm-pj rm-subpj">
+                          <span className="rm-sub-name">{t.name}</span>
+                          {undatedSubs > 0 && <span className="rm-pj-meta"><span className="rm-undated">日付なし{undatedSubs}</span></span>}
+                        </div>
+                        <div className="rm-track" style={{ width: trackW, minHeight: Math.max(1, ends.length) * SUB_H + 6 }}>
+                          <div className="rm-today" style={{ left: todayX }} />
+                          {subs.map(({ x, left, w, lane }) => (
+                            <button key={x.id} type="button" className={`rm-subarrow${x.done ? " done" : ""}`}
+                              style={{ left, width: w, top: 3 + lane * SUB_H, height: SUB_H - 4 }}
+                              onClick={() => onOpenSub && onOpenSub(p.id, t.id, x.id)}
+                              title={`${x.scheduledDate.slice(5).replace("-", "/")} ${x.text}`}>
+                              <span>{x.text}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  </Fragment>
                 ))}
               </div>
               ));

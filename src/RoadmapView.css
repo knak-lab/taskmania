@@ -100,3 +100,21 @@
 .rm-sec-strip { position: sticky; left: 0; z-index: 4; width: var(--sw); flex: none; background: var(--sc); color: #fff; display: flex; justify-content: center; }
 .rm-sec-strip span { position: sticky; top: 44px; align-self: flex-start; writing-mode: vertical-rl; text-orientation: upright; font-size: 13px; font-weight: 800; letter-spacing: .15em; padding: 10px 0; }
 .rm-sec-body { flex: 1; min-width: 0; }
+/* 矢羽根のドラッグ(左右の端=日程変更、真ん中=移動) */
+.rm-arrow { cursor: grab; touch-action: none; user-select: none; }
+.rm-arrow.dragging { z-index: 3; filter: brightness(1.15); cursor: grabbing; }
+.rm-rz-l, .rm-rz-r { position: absolute; top: 0; bottom: 0; width: 12px; cursor: ew-resize; z-index: 2; }
+.rm-rz-l { left: 0; }
+.rm-rz-r { right: 0; }
+/* サブタスク(PJ行の「▸サブ」で開く) */
+.rm-subtog { color: var(--ink); border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; background: #fff; cursor: pointer; font-weight: 700; }
+.rm-subtog:hover { background: var(--soft); }
+.rm-subrow .rm-subpj { background: #FAFBFC; padding-left: 22px; border-left-width: 2px; }
+.rm-sub-name { font-size: 11.5px; font-weight: 700; color: var(--muted); white-space: normal; overflow-wrap: anywhere; line-height: 1.3; }
+.rm-subrow .rm-track { background-color: #FCFDFD; }
+.rm-subarrow { position: absolute; z-index: 1; display: flex; align-items: center; border: 0; padding: 0 12px 0 10px; box-sizing: border-box; cursor: pointer;
+  clip-path: polygon(0 0, calc(100% - 7px) 0, 100% 50%, calc(100% - 7px) 100%, 0 100%, 6px 50%);
+  background: color-mix(in srgb, var(--bc) 22%, #fff); color: #2C3645; font: inherit; font-size: 11px; font-weight: 700; text-align: left; }
+.rm-subarrow span { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rm-subarrow:hover { background: color-mix(in srgb, var(--bc) 35%, #fff); }
+.rm-subarrow.done { opacity: .5; text-decoration: line-through; }
