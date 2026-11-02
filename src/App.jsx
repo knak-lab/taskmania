@@ -3392,6 +3392,15 @@ export default function App() {
           .day-pc-row { display: none; }
           .day-mobile-row { display: contents; }
         }
+        /* タスク編集・サブタスク編集の画面は文字と入力欄を大きく(インラインの小さい指定を上書き) */
+        .tm-edit-modal { font-size: 15px; }
+        .tm-edit-modal h3 { font-size: 21px !important; }
+        .tm-edit-modal p { font-size: 13.5px !important; }
+        .tm-edit-modal input, .tm-edit-modal select { font-size: 15px !important; padding: 7px 9px !important; max-width: none !important; }
+        .tm-edit-modal label > span:first-child { font-size: 12px !important; margin-bottom: 2px; }
+        .tm-edit-modal button:not([aria-label="閉じる"]) { font-size: 14px !important; }
+        .tm-edit-modal ul button { font-size: 15px !important; }
+        .tm-edit-modal label { margin-right: 6px; }
       `}</style>
 
       {saveConflict && (
@@ -3892,7 +3901,7 @@ export default function App() {
             const close = () => setTaskEditModal(null);
             return (
               <div style={styles.modalOverlay} onClick={close}>
-                <div style={styles.modalBox} onClick={(e) => e.stopPropagation()}>
+                <div style={{ ...styles.modalBox, maxWidth: 760, padding: 26 }} className="tm-edit-modal" onClick={(e) => e.stopPropagation()}>
                   <div style={styles.modalHeader}>
                     <h3 style={styles.modalTitle}>タスクを編集</h3>
                     <button type="button" onClick={close} aria-label="閉じる" style={styles.modalCloseBtn}>×</button>
@@ -4066,7 +4075,7 @@ export default function App() {
             const s = t?.subtasks.find((ss) => ss.id === stepsModalTarget.subId);
             if (!s) return null;
             return (
-              <div style={styles.modalOverlay} onClick={closeStepsModal}>
+              <div style={{ ...styles.modalOverlay, zIndex: 65 }} onClick={closeStepsModal}>
                 <div style={styles.modalBox} onClick={(e) => e.stopPropagation()}>
                   <div style={styles.modalHeader}>
                     <h3 style={styles.modalTitle}>ステップ</h3>
@@ -4102,7 +4111,7 @@ export default function App() {
             const s = t?.subtasks.find((ss) => ss.id === copyDateModal.subId);
             if (!s) return null;
             return (
-              <div style={styles.modalOverlay} onClick={() => setCopyDateModal(null)}>
+              <div style={{ ...styles.modalOverlay, zIndex: 65 }} onClick={() => setCopyDateModal(null)}>
                 <div style={styles.modalBox} onClick={(e) => e.stopPropagation()}>
                   <div style={styles.modalHeader}>
                     <h3 style={styles.modalTitle}>サブタスクをコピー</h3>
@@ -4130,7 +4139,7 @@ export default function App() {
             const s = t?.subtasks.find((ss) => ss.id === moveDateModal.subId);
             if (!s) return null;
             return (
-              <div style={styles.modalOverlay} onClick={() => setMoveDateModal(null)}>
+              <div style={{ ...styles.modalOverlay, zIndex: 65 }} onClick={() => setMoveDateModal(null)}>
                 <div style={styles.modalBox} onClick={(e) => e.stopPropagation()}>
                   <div style={styles.modalHeader}>
                     <h3 style={styles.modalTitle}>予定日・開始時間を変更</h3>
@@ -4168,7 +4177,7 @@ export default function App() {
             const taskId = t.id;
             return (
               <div style={styles.modalOverlay} onClick={() => setCalSubtaskModal(null)}>
-                <div style={styles.modalBox} onClick={(e) => e.stopPropagation()}>
+                <div style={{ ...styles.modalBox, maxWidth: 760, padding: 26 }} className="tm-edit-modal" onClick={(e) => e.stopPropagation()}>
                   <div style={styles.modalHeader}>
                     <h3 style={styles.modalTitle}>サブタスクを編集</h3>
                     <button type="button" onClick={() => setCalSubtaskModal(null)} aria-label="閉じる" style={styles.modalCloseBtn}>×</button>
