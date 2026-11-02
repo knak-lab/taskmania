@@ -92,8 +92,11 @@
 .rm-theme-label .rm-grip:hover { color: #fff; }
 .rm-add { margin-left: auto; color: var(--ink); border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; background: #fff; cursor: pointer; font-weight: 700; }
 .rm-add:hover { background: var(--soft); }
-/* kkr＞総合の区分(PB / work)。行いっぱいの帯にして、テーマ行と見分けやすくする。2つ目以降は上に余白 */
-.rm-section { display: flex; background: var(--sc); }
-.rm-section ~ .rm-section, .rm-group + .rm-section { margin-top: 14px; }
-.rm-section-label { position: sticky; left: 0; z-index: 3; width: var(--lw); flex: none; box-sizing: border-box; padding: 8px 10px; font-size: 15px; font-weight: 800; letter-spacing: .08em; color: #fff; background: var(--sc); }
-.rm-section .rm-theme-track { min-height: 36px; }
+/* kkr＞総合の区分(PB / work)。左端に縦書きの帯を置き、その区分のテーマ・PJ全体にまたがらせる */
+.rm-corner { width: calc(var(--lw) + var(--sw, 0px)); }
+.rm-pj, .rm-theme-label { left: var(--sw, 0px); }
+.rm-sec { display: flex; }
+.rm-sec + .rm-sec { border-top: 10px solid #fff; }
+.rm-sec-strip { position: sticky; left: 0; z-index: 4; width: var(--sw); flex: none; background: var(--sc); color: #fff; display: flex; justify-content: center; }
+.rm-sec-strip span { position: sticky; top: 44px; align-self: flex-start; writing-mode: vertical-rl; text-orientation: upright; font-size: 13px; font-weight: 800; letter-spacing: .15em; padding: 10px 0; }
+.rm-sec-body { flex: 1; min-width: 0; }

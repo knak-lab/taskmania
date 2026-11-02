@@ -133,7 +133,7 @@ export default function RoadmapView({ projects, themes, onOpenPJ, onOpenTask, on
         { id: `__none_${sec.key}`, none: true, name: themes.length || sections ? "テーマなし" : null, color: "#66727F", pjs: loose },
       ].filter((g) => g.pjs.length > 0);
       ci += loose.length;
-      if (gs.length && sec.label) gs[0].section = sec;
+      gs.forEach((g) => { g.secKey = sec.key; g.section = sec.label ? sec : null; });
       return gs;
     });
 
@@ -167,7 +167,8 @@ export default function RoadmapView({ projects, themes, onOpenPJ, onOpenTask, on
     return { groups, months };
   }, [projects, themes, todayStr, todayMonth, sections]);
 
-  const labelW = wrapW && wrapW < 560 ? 120 : 200;
+  const stripW = sections ? 24 : 0;
+  const labelW = (wrapW && wrapW < 560 ? 120 : 200) + stripW;
   const colW = Math.max(36, Math.floor((wrapW - labelW) / span) || 80);
   const trackW = months.length * colW;
   const xOf = (dateStr, endOfDay) => {
@@ -227,7 +228,7 @@ export default function RoadmapView({ projects, themes, onOpenPJ, onOpenTask, on
         <p className="rm-empty">表示するPJがない。マップでテーマ・PJ・タスクを作ると、ここに並ぶ。</p>
       ) : (
         <div className="rm-scroll" ref={scrollRef}>
-          <div className="rm-inner" style={{ width: labelW + trackW, "--lw": `${labelW}px`, "--cw": `${colW}px` }}>
+          <div className="rm-inner" style={{ width: labelW + trackW, "--lw": `${labelW - stripW}px`, "--sw": `${stripW}px`, "--cw": `${colW}px` }}>
             <div className="rm-weeks" style={{ left: labelW, width: trackW }}>
               {weekXs.map((x) => <i key={x} style={{ left: x }} />)}
             </div>
@@ -244,15 +245,14 @@ export default function RoadmapView({ projects, themes, onOpenPJ, onOpenTask, on
               })}
             </div>
 
-            {groups.map((g) => (
-              <Fragment key={g.id}>
-              {g.section && (
-                <div className="rm-section" style={{ "--sc": g.section.color }}>
-                  <div className="rm-section-label">{g.section.label}</div>
-                  <div className="rm-theme-track" style={{ width: trackW }} />
-                </div>
-              )}
-              <div style={{ "--bc": g.color }} data-theme={g.none ? undefined : g.id}
+            {groups.reduce((chunks, g) => {
+              const last = chunks[chunks.length - 1];
+              if (last && last.key === g.secKey) last.gs.push(g);
+              else chunks.push({ key: g.secKey, sec: g.section, gs: [g] });
+              return chunks;
+            }, []).map((ch) => {
+              const body = ch.gs.map((g) => (
+              <div key={g.id} style={{ "--bc": g.color }} data-theme={g.none ? undefined : g.id}
                 className={`rm-group${drag?.kind === "theme" && drag.id === g.id ? " dragging" : ""}${drag?.kind === "theme" && drag.overId === g.id && drag.overId !== drag.id ? (drag.after ? " drop-after" : " drop-before") : ""}`}>
                 {g.name && (
                   <div className="rm-theme">
@@ -306,8 +306,14 @@ export default function RoadmapView({ projects, themes, onOpenPJ, onOpenTask, on
                   </div>
                 ))}
               </div>
-              </Fragment>
-            ))}
+              ));
+              return ch.sec ? (
+                <div key={ch.key} className="rm-sec" style={{ "--sc": ch.sec.color }}>
+                  <div className="rm-sec-strip"><span>{ch.sec.label}</span></div>
+                  <div className="rm-sec-body">{body}</div>
+                </div>
+              ) : <Fragment key={ch.key}>{body}</Fragment>;
+            })}
           </div>
         </div>
       )}
