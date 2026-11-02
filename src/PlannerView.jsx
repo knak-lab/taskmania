@@ -2,11 +2,11 @@ import { useState, useMemo, useRef, useEffect } from "react";
 import "./PlannerView.css";
 // 今日タブ: 週カレンダー(平日/7日) + 今日・日付なし・期限切れのサブタスク一覧。
 // 一覧や「時刻なし」のチップをカレンダーへドラッグで置くと、予定日・開始時刻・想定時間が入る。
-// カレンダー上の予定は Outlook と同じく、つかんで移動、上端・下端で開始/終了時刻を変えられる(15分単位)。
-const H0 = 6;
-const H1 = 24;
-const HH = 44; // 1時間の高さ(px)
-const SNAP = 15;
+// カレンダー上の予定は Outlook と同じく、つかんで移動、上端・下端で開始/終了時刻を変えられる(30分単位)。
+const H0 = 7;
+const H1 = 20;
+const HH = 56; // 1時間の高さ(px)
+const SNAP = 30;
 const DEF_DUR = 30;
 const CHIP_MAX = 3; // 時刻なしチップは日ごとにこの件数まで(残りは「他N件」で開く)
 const WD = ["日", "月", "火", "水", "木", "金", "土"];
@@ -303,9 +303,10 @@ export default function PlannerView({ projects, todayStr, ownerColorOf, onUpdate
             return (
               <div key={d} className={`pl-col${d === todayStr ? " today" : ""}`} data-pl-date={d}>
                 {hours.map((h) => <div key={h} className="pl-hline" style={{ top: (h - H0) * HH }} />)}
-                {d === todayStr && nowMin >= H0 * 60 && <div className="pl-now" style={{ top: ((nowMin - H0 * 60) / 60) * HH }} />}
-                {timed.map(({ it, start, end, col, cols }) => block(it, Math.max(start, H0 * 60), end - Math.max(start, H0 * 60), drag?.id === it.sub.id ? "ghost" : "",
-                  { left: `calc(${(col / cols) * 100}% + 2px)`, width: `calc(${100 / cols}% - 4px)` }))}
+                {hours.map((h) => <div key={`${h}h`} className="pl-hline half" style={{ top: (h - H0 + 0.5) * HH }} />)}
+                {d === todayStr && nowMin >= H0 * 60 && nowMin <= H1 * 60 && <div className="pl-now" style={{ top: ((nowMin - H0 * 60) / 60) * HH }} />}
+                {timed.map(({ it, start, end, col, cols }) => { const s0 = clamp(start, H0 * 60, H1 * 60 - SNAP); const e0 = clamp(end, s0 + SNAP, H1 * 60); return block(it, s0, e0 - s0, drag?.id === it.sub.id ? "ghost" : "",
+                  { left: `calc(${(col / cols) * 100}% + 2px)`, width: `calc(${100 / cols}% - 4px)` }); })}
                 {drag && drag.date === d && (() => {
                   const it = items.find((x) => x.sub.id === drag.id);
                   return it ? block(it, drag.start, drag.dur, "preview", { left: 2, right: 2 }) : null;

@@ -3370,7 +3370,7 @@ export default function App() {
         <section style={{ ...styles.panel, borderColor: activeTopColor, borderRadius: PERSON_KEYS.includes(topTab) ? "0 0 10px 10px" : styles.panel.borderRadius }}>
           {showTaskSections && (
             <nav style={styles.viewSwitcher} role="tablist" aria-label="表示切替">
-              {[{ k: "map", label: "マップ" }, { k: "overview", label: "ロードマップ" }, { k: "today", label: "今日" }, { k: "pj", label: "PJ" }].map((v) => (
+              {[{ k: "map", label: "マップ" }, { k: "overview", label: "ロードマップ" }, { k: "today", label: "カレンダー" }, { k: "pj", label: "PJ" }].map((v) => (
                 <button key={v.k} type="button" role="tab" aria-selected={mainView === v.k} onClick={() => setMainView(v.k)}
                   style={{ ...styles.viewSwitcherBtn, background: mainView === v.k ? activeTopColor : "transparent", color: mainView === v.k ? "#FFFFFF" : activeTopColor, borderColor: activeTopColor }}>
                   {v.label}
