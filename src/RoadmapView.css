@@ -120,3 +120,5 @@
 .rm-subarrow.done { opacity: .5; text-decoration: line-through; }
 /* PJ名の下の段(進捗・期間未設定・▸サブ・＋タスク)は入りきらなければ折り返す */
 .rm-pj-meta { flex-wrap: wrap; row-gap: 3px; overflow: visible; }
+/* 予定日なしのサブタスク(タスクの開始日にそろえて並べる) */
+.rm-subarrow.undated { clip-path: none; border-radius: 4px; background: #fff; outline: 1.5px dashed color-mix(in srgb, var(--bc) 60%, #fff); outline-offset: -1.5px; color: var(--muted); padding: 0 8px; }

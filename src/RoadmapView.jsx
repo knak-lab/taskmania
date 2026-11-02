@@ -387,10 +387,15 @@ export default function RoadmapView({ projects, themes, onOpenPJ, onOpenTask, on
                     </div>
                   </div>
                   {openSubs.has(p.id) && (p.tasks || []).filter((t) => (t.subtasks || []).length).map((t) => {
-                    // サブタスクは予定日の1日に矢羽根を置く(名前が読めるよう最小幅あり、重なりはレーン分け)
-                    const subs = t.subtasks.filter((x) => x.scheduledDate && months.includes(monthKey(x.scheduledDate)))
-                      .map((x) => { const l = xOf(x.scheduledDate, false); return { x, left: l, w: Math.max(SUB_W, xOf(x.scheduledDate, true) - l) }; })
-                      .sort((a, b) => a.left - b.left);
+                    // サブタスクは予定日の1日に矢羽根を置く(名前が読めるよう最小幅あり、重なりはレーン分け)。
+                    // 予定日なしはタスクの開始日(なければ今日)にそろえて縦に並べる
+                    const anchorDate = t.startDate && months.includes(monthKey(t.startDate)) ? t.startDate : todayStr;
+                    const anchorX = xOf(anchorDate, false);
+                    const subs = [
+                      ...t.subtasks.filter((x) => x.scheduledDate && months.includes(monthKey(x.scheduledDate)))
+                        .map((x) => { const l = xOf(x.scheduledDate, false); return { x, left: l, w: Math.max(SUB_W, xOf(x.scheduledDate, true) - l) }; }),
+                      ...t.subtasks.filter((x) => !x.scheduledDate).map((x) => ({ x, left: anchorX, w: SUB_W, undated: true })),
+                    ].sort((a, b) => a.left - b.left || (a.undated ? 1 : 0) - (b.undated ? 1 : 0));
                     const ends = [];
                     subs.forEach((it) => {
                       let lane = ends.findIndex((e) => e <= it.left);
@@ -398,20 +403,18 @@ export default function RoadmapView({ projects, themes, onOpenPJ, onOpenTask, on
                       ends[lane] = it.left + it.w + 2;
                       it.lane = lane;
                     });
-                    const undatedSubs = t.subtasks.filter((x) => !x.scheduledDate).length;
                     return (
                       <div key={t.id} className="rm-row rm-subrow">
                         <div className="rm-pj rm-subpj">
                           <span className="rm-sub-name">{t.name}</span>
-                          {undatedSubs > 0 && <span className="rm-pj-meta"><span className="rm-undated">日付なし{undatedSubs}</span></span>}
                         </div>
                         <div className="rm-track" style={{ width: trackW, minHeight: Math.max(1, ends.length) * SUB_H + 6 }}>
                           <div className="rm-today" style={{ left: todayX }} />
-                          {subs.map(({ x, left, w, lane }) => (
-                            <button key={x.id} type="button" className={`rm-subarrow${x.done ? " done" : ""}`}
+                          {subs.map(({ x, left, w, lane, undated }) => (
+                            <button key={x.id} type="button" className={`rm-subarrow${x.done ? " done" : ""}${undated ? " undated" : ""}`}
                               style={{ left, width: w, top: 3 + lane * SUB_H, height: SUB_H - 4 }}
                               onClick={() => onOpenSub && onOpenSub(p.id, t.id, x.id)}
-                              title={`${x.scheduledDate.slice(5).replace("-", "/")} ${x.text}`}>
+                              title={`${undated ? "予定日なし" : x.scheduledDate.slice(5).replace("-", "/")} ${x.text}`}>
                               <span>{x.text}</span>
                             </button>
                           ))}
