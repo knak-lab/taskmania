@@ -4,6 +4,7 @@ import * as XLSX from "xlsx";
 import { loadAppData, loadRev, loadKamoTodos, saveProjects as gasSave, saveMoyamoyaNotes as gasSaveMoyamoyaNotes, saveWorkAdj as gasSaveWorkAdj, saveThemes as gasSaveThemes, saveAssignees as gasSaveAssignees, sendToCalendar as gasSendToCalendar } from "./api/gas";
 import MindMapView from "./MindMapView";
 import RoadmapView from "./RoadmapView";
+import PlannerView from "./PlannerView";
 
 const TOP_TABS = [
   { key: "総合", label: "総合", color: "#2C3645" },
@@ -1771,140 +1772,6 @@ function BrainBadge({ label, ratio, moyaCount }) {
   );
 }
 
-const TODAY_PICK_LIMIT = 5;
-
-// 「今日」ビュー: インボックス / 今日やる(上限5) / 期限切れ / 今日期限 だけを平らに見せる
-function TodayView({
-  projects, todayStr, todayPicks, onTogglePick, pickError,
-  inbox, inboxText, onInboxTextChange, onAddInbox, onUpdateInbox, onRemoveInbox,
-  onToggleDone, onUpdateSchedule, onMoveDate, onOpenSteps, onSkip,
-  renderStopwatchControl, renderSendButton, stamping,
-  showMoyamoya, moyamoyaNotes, moyamoyaNewText, onMoyamoyaTextChange, onAddMoyamoya, onUpdateMoyamoya, onRemoveMoyamoya,
-}) {
-  const flat = [];
-  for (const p of projects) {
-    if (p.status) continue; // 保留・完了PJは除外
-    for (const t of p.tasks) {
-      for (const s of t.subtasks) {
-        if (s.done) continue;
-        flat.push({ pjId: p.id, pjName: pjLabel(p), taskId: t.id, taskName: t.name, sub: s });
-      }
-    }
-  }
-  const isPicked = (s) => todayPicks[s.id] === todayStr;
-  const pickedList = flat.filter((r) => isPicked(r.sub));
-  const overdue = flat
-    .filter((r) => r.sub.scheduledDate && r.sub.scheduledDate < todayStr && !isPicked(r.sub))
-    .sort((a, b) => a.sub.scheduledDate.localeCompare(b.sub.scheduledDate));
-  const dueToday = flat.filter((r) => r.sub.scheduledDate === todayStr && !isPicked(r.sub));
-  const pickCount = pickedList.length;
-
-  const row = (r) => {
-    const s = r.sub;
-    const picked = isPicked(s);
-    const isOverdue = s.scheduledDate && s.scheduledDate < todayStr;
-    return (
-      <li key={s.id} style={styles.todayRow} className="row-in">
-        <button onClick={() => onToggleDone(r.pjId, r.taskId, s.id)} aria-label={s.done ? "未完了に戻す" : "完了にする"} style={styles.stampWrap}>
-          {s.done ? <span style={styles.hankoStamp} className={stamping === s.id ? "hanko-pop" : ""}>済</span> : <span style={styles.hankoEmpty} />}
-        </button>
-        <div style={styles.todayRowBody}>
-          <div style={styles.todayRowLine1}>
-            <span style={styles.todayRowText}>{s.text}</span>
-            {isOverdue && <span style={styles.todayOverdueTag}>{formatDate(s.scheduledDate)}</span>}
-            <span style={styles.todayPjTag} title={`${r.pjName} ／ ${r.taskName}`}>{r.pjName}</span>
-          </div>
-          <div style={styles.todayRowLine2}>
-            <span style={styles.calendarLine2Label}>想定</span>
-            <select value={s.estimatedMinutes || ""} onChange={(e) => onUpdateSchedule(r.pjId, r.taskId, s.id, "estimatedMinutes", e.target.value ? Number(e.target.value) : "")} style={{ ...styles.scheduleEditInput, width: 62 }}>
-              <option value="">―</option>
-              {MINUTE_OPTIONS.map((m) => <option key={m} value={m}>{formatDuration(m)}</option>)}
-            </select>
-            <span style={styles.calendarLine2Label}>実績</span>
-            <select value={s.actualMinutes || ""} onChange={(e) => onUpdateSchedule(r.pjId, r.taskId, s.id, "actualMinutes", e.target.value ? Number(e.target.value) : "")} style={{ ...styles.scheduleEditInput, width: 62 }}>
-              <option value="">―</option>
-              {MINUTE_OPTIONS.map((m) => <option key={m} value={m}>{formatDuration(m)}</option>)}
-            </select>
-            {renderStopwatchControl(r.pjId, r.taskId, s.id)}
-            <button type="button" onClick={() => onOpenSteps(r.pjId, r.taskId, s.id)} style={styles.inlineAddBtn}>☑ステップ</button>
-            <button type="button" onClick={() => onMoveDate({ pjId: r.pjId, taskId: r.taskId, subId: s.id, date: s.scheduledDate || todayStr, time: s.startTime || "" })} style={styles.inlineAddBtn}>📅変更</button>
-            <button type="button" onClick={() => onSkip(r.pjId, r.taskId, s.id)} style={styles.inlineAddBtn}>⏭先送り</button>
-            {renderSendButton && renderSendButton(s)}
-          </div>
-        </div>
-        <button type="button" onClick={() => onTogglePick(s.id)} aria-label={picked ? "今日やるから外す" : "今日やるに入れる"}
-          style={{ ...styles.todayPickBtn, background: picked ? "#F39800" : "transparent", color: picked ? "#FFFFFF" : "#F39800" }}>★</button>
-      </li>
-    );
-  };
-
-  const captureList = (items, onUpdate, onRemove, label) => (
-    items.length > 0 && (
-      <ul style={styles.todayList}>
-        {items.map((n) => (
-          <li key={n.id} style={styles.moyamoyaNoteRow}>
-            <input type="text" value={n.text} onChange={(e) => onUpdate(n.id, e.target.value)} style={styles.moyamoyaInput} aria-label={`${label}を編集`} />
-            <button type="button" onClick={() => onRemove(n.id)} aria-label="削除" style={styles.deleteBtn}>×</button>
-          </li>
-        ))}
-      </ul>
-    )
-  );
-
-  return (
-    <div style={styles.todayView}>
-      <div style={styles.sectionTitleRow}>
-        <h3 style={{ ...styles.sectionTitleFlush, fontWeight: 900 }}>インボックス</h3>
-        <span style={styles.todayCountTag}>{inbox.length}</span>
-      </div>
-      <form onSubmit={onAddInbox} style={styles.inboxForm}>
-        <input type="text" value={inboxText} onChange={(e) => onInboxTextChange(e.target.value)} placeholder="思いついたことを1行で…（あとで仕分け）" style={styles.moyamoyaInput} aria-label="インボックスに追加" />
-        <button type="submit" style={styles.moyamoyaAddBtn}>＋</button>
-      </form>
-      {captureList(inbox, onUpdateInbox, onRemoveInbox, "インボックス")}
-
-      {showMoyamoya && (
-        <>
-          <div style={styles.sectionTitleRow}>
-            <h3 style={{ ...styles.sectionTitleFlush, fontWeight: 900, color: MOYAMOYA_COLOR }}>もやもや</h3>
-            <span style={styles.todayCountTag}>{moyamoyaNotes.length}</span>
-          </div>
-          <form onSubmit={onAddMoyamoya} style={styles.inboxForm}>
-            <input type="text" value={moyamoyaNewText} onChange={(e) => onMoyamoyaTextChange(e.target.value)} placeholder="もやもやしていることを書く…" style={styles.moyamoyaInput} aria-label="もやもやを追加" />
-            <button type="submit" style={styles.moyamoyaAddBtn}>＋</button>
-          </form>
-          {captureList(moyamoyaNotes, onUpdateMoyamoya, onRemoveMoyamoya, "もやもや")}
-        </>
-      )}
-
-      <div style={styles.sectionTitleRow}>
-        <h3 style={{ ...styles.sectionTitleFlush, fontWeight: 900 }}>今日やる</h3>
-        <span style={{ ...styles.todayCountTag, color: pickCount >= TODAY_PICK_LIMIT ? "#D64550" : "#7A7A7A" }}>{pickCount} / {TODAY_PICK_LIMIT}</span>
-      </div>
-      {pickError && <p style={styles.todayPickError}>「今日やる」は{TODAY_PICK_LIMIT}件まで。何か外してから追加する。</p>}
-      {pickedList.length === 0
-        ? <p style={styles.emptySmall}>下の「期限切れ」「今日期限」から ★ で今日やるものを選ぶ。</p>
-        : <ul style={styles.todayList}>{pickedList.map(row)}</ul>}
-
-      <div style={styles.sectionTitleRow}>
-        <h3 style={{ ...styles.sectionTitleFlush, fontWeight: 900, color: "#D64550" }}>期限切れ</h3>
-        <span style={styles.todayCountTag}>{overdue.length}</span>
-      </div>
-      {overdue.length === 0
-        ? <p style={styles.emptySmall}>期限切れはない。</p>
-        : <ul style={styles.todayList}>{overdue.map(row)}</ul>}
-
-      <div style={styles.sectionTitleRow}>
-        <h3 style={{ ...styles.sectionTitleFlush, fontWeight: 900 }}>今日期限</h3>
-        <span style={styles.todayCountTag}>{dueToday.length}</span>
-      </div>
-      {dueToday.length === 0
-        ? <p style={styles.emptySmall}>今日期限のタスクはない。</p>
-        : <ul style={styles.todayList}>{dueToday.map(row)}</ul>}
-    </div>
-  );
-}
-
 export default function App() {
   const [projects, setProjects] = useState(null);
   const [topTab, setTopTab] = useState("kkr");
@@ -1961,31 +1828,6 @@ export default function App() {
   function updateInboxItem(id, text) { setInbox((prev) => prev.map((n) => (n.id === id ? { ...n, text } : n))); }
   function removeInboxItem(id) { setInbox((prev) => prev.filter((n) => n.id !== id)); }
 
-  // 「今日やる」印。{subId: "YYYY-MM-DD"}。当日分以外は読み込み時に破棄=毎日自動リセット
-  const [todayPicks, setTodayPicks] = useState(() => {
-    try {
-      const raw = JSON.parse(localStorage.getItem("tm_today_picks") || "{}");
-      const t = toDateStr(new Date());
-      const pruned = {};
-      for (const k of Object.keys(raw)) if (raw[k] === t) pruned[k] = t;
-      return pruned;
-    } catch { return {}; }
-  });
-  useEffect(() => { try { localStorage.setItem("tm_today_picks", JSON.stringify(todayPicks)); } catch { /* ignore */ } }, [todayPicks]);
-  const [pickError, setPickError] = useState(false);
-  function toggleTodayPick(subId) {
-    setTodayPicks((prev) => {
-      const t = toDateStr(new Date());
-      if (prev[subId] === t) { const n = { ...prev }; delete n[subId]; return n; }
-      const count = Object.values(prev).filter((d) => d === t).length;
-      if (count >= TODAY_PICK_LIMIT) {
-        setPickError(true);
-        setTimeout(() => setPickError(false), 2600);
-        return prev;
-      }
-      return { ...prev, [subId]: t };
-    });
-  }
   const [runningTarget, setRunningTarget] = useState(() => {
     try { return JSON.parse(localStorage.getItem("tm_running_target") || "null"); } catch { return null; }
   });
@@ -2837,6 +2679,12 @@ export default function App() {
           }),
         };
       }),
+    }));
+  }
+
+  function updateSubtaskFields(pjId, taskId, subId, patch) {
+    setProjects((prev) => prev.map((p) => p.id !== pjId ? p : {
+      ...p, tasks: p.tasks.map((t) => t.id !== taskId ? t : { ...t, subtasks: t.subtasks.map((x) => (x.id === subId ? { ...x, ...patch } : x)) }),
     }));
   }
 
@@ -3805,33 +3653,35 @@ export default function App() {
           )}
 
           {showTaskSections && mainView === "today" && (
-            <TodayView
+            <PlannerView
               projects={visibleProjects}
               todayStr={todayStr}
-              todayPicks={todayPicks}
-              onTogglePick={toggleTodayPick}
-              pickError={pickError}
-              inbox={inbox}
-              inboxText={inboxText}
-              onInboxTextChange={setInboxText}
-              onAddInbox={addInboxItem}
-              onUpdateInbox={updateInboxItem}
-              onRemoveInbox={removeInboxItem}
+              ownerColorOf={ownerColorOf}
+              onUpdateFields={updateSubtaskFields}
+              onOpenSub={(pjId, taskId, subId) => setCalSubtaskModal({ pjId, taskId, subId })}
               onToggleDone={toggleSubtaskDone}
-              onUpdateSchedule={updateSubtaskSchedule}
-              onMoveDate={setMoveDateModal}
-              onOpenSteps={openStepsModal}
-              onSkip={skipSubtask}
-              renderStopwatchControl={renderStopwatchControl}
-              renderSendButton={renderSendToCalendarButton}
-              stamping={stamping}
-              showMoyamoya={showWorkSummary}
-              moyamoyaNotes={moyamoyaNotes}
-              moyamoyaNewText={moyamoyaNewText}
-              onMoyamoyaTextChange={setMoyamoyaNewText}
-              onAddMoyamoya={addMoyamoyaNote}
-              onUpdateMoyamoya={updateMoyamoyaNote}
-              onRemoveMoyamoya={removeMoyamoyaNote}
+              extra={(
+                <section style={styles.todayView}>
+                  <div style={styles.sectionTitleRow}>
+                    <h3 style={{ ...styles.sectionTitleFlush, fontWeight: 900 }}>インボックス</h3>
+                    <span style={styles.todayCountTag}>{inbox.length}</span>
+                  </div>
+                  <form onSubmit={addInboxItem} style={styles.inboxForm}>
+                    <input type="text" value={inboxText} onChange={(e) => setInboxText(e.target.value)} placeholder="思いついたことを1行で…（あとで仕分け）" style={styles.moyamoyaInput} aria-label="インボックスに追加" />
+                    <button type="submit" style={styles.moyamoyaAddBtn}>＋</button>
+                  </form>
+                  {inbox.length > 0 && (
+                    <ul style={styles.todayList}>
+                      {inbox.map((n) => (
+                        <li key={n.id} style={styles.moyamoyaNoteRow}>
+                          <input type="text" value={n.text} onChange={(e) => updateInboxItem(n.id, e.target.value)} style={styles.moyamoyaInput} aria-label="インボックスを編集" />
+                          <button type="button" onClick={() => removeInboxItem(n.id)} aria-label="削除" style={styles.deleteBtn}>×</button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </section>
+              )}
             />
           )}
 
