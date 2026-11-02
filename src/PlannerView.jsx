@@ -8,6 +8,7 @@ const H1 = 24;
 const HH = 44; // 1時間の高さ(px)
 const SNAP = 15;
 const DEF_DUR = 30;
+const CHIP_MAX = 3; // 時刻なしチップは日ごとにこの件数まで(残りは「他N件」で開く)
 const WD = ["日", "月", "火", "水", "木", "金", "土"];
 const pad = (n) => String(n).padStart(2, "0");
 const toStr = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -54,6 +55,7 @@ export default function PlannerView({ projects, todayStr, ownerColorOf, onUpdate
   const [weekStart, setWeekStart] = useState(() => mondayOf(todayStr));
   const [open, setOpen] = useState({ today: true, none: true, overdue: false });
   const [drag, setDrag] = useState(null); // 表示用: {id, date, start, dur}
+  const [chipOpen, setChipOpen] = useState(() => new Set());
   const dragRef = useRef(null); // 進行中のドラッグ(ポインタ座標など)
   const bodyRef = useRef(null);
   useEffect(() => { try { localStorage.setItem("tm_planner_mode", mode); } catch { /* ignore */ } }, [mode]);
@@ -190,8 +192,15 @@ export default function PlannerView({ projects, todayStr, ownerColorOf, onUpdate
         onPointerDown={(e) => startDrag(e, it, e.target.closest(".pl-rz-top") ? "start" : e.target.closest(".pl-rz-bot") ? "end" : "move")}
         title={`${toTime(start)}〜${toTime(start + dur)} ${s.text}（${it.pjName} ／ ${it.taskName}）`}>
         <div className="pl-rz-top" />
-        <div className="pl-block-t">{toTime(start)}〜{toTime(start + dur)}</div>
-        <div className="pl-block-n">{s.text}</div>
+        {dur <= 30 ? (
+          // 短い予定は1行に「時刻 名前」
+          <div className="pl-block-n"><span className="pl-block-t">{toTime(start)} </span>{s.text}</div>
+        ) : (
+          <>
+            <div className="pl-block-t">{toTime(start)}〜{toTime(start + dur)}</div>
+            <div className="pl-block-n">{s.text}</div>
+          </>
+        )}
         {dur >= 45 && <div className="pl-block-p">{it.pjName}</div>}
         <div className="pl-rz-bot" />
       </div>
@@ -262,15 +271,22 @@ export default function PlannerView({ projects, todayStr, ownerColorOf, onUpdate
           {dates.map((d) => {
             const dt = new Date(d + "T00:00:00");
             const untimed = (byDate[d] || []).filter((it) => !it.sub.startTime);
+            const chipsOpen = chipOpen.has(d);
+            const shown = chipsOpen ? untimed : untimed.slice(0, CHIP_MAX);
             return (
               <div key={d} className={`pl-dayh${d === todayStr ? " today" : ""}${dt.getDay() === 0 ? " sun" : dt.getDay() === 6 ? " sat" : ""}`}>
                 <div className="pl-dayh-d">{md(d)}<small>({WD[dt.getDay()]})</small></div>
-                {untimed.map((it) => (
+                {shown.map((it) => (
                   <div key={it.sub.id} className={`pl-chip${it.sub.done ? " done" : ""}${drag?.id === it.sub.id ? " dragging" : ""}`} style={{ "--oc": ownerColorOf(it.owner) }}
                     onPointerDown={(e) => startDrag(e, it, "move")} title={`${it.sub.text}（時刻なし。下へドラッグで時間を決める）`}>
                     {it.sub.text}
                   </div>
                 ))}
+                {untimed.length > CHIP_MAX && (
+                  <button type="button" className="pl-more" onClick={() => setChipOpen((prev) => { const n = new Set(prev); n.has(d) ? n.delete(d) : n.add(d); return n; })}>
+                    {chipsOpen ? "▲閉じる" : `▼他${untimed.length - CHIP_MAX}件`}
+                  </button>
+                )}
               </div>
             );
           })}

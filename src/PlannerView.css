@@ -75,3 +75,5 @@ body.pl-dragging, body.pl-dragging * { cursor: grabbing !important; user-select:
   .pl-block { font-size: 10.5px; padding: 1px 3px; }
   .pl-sec-hint { display: none; }
 }
+.pl-more { border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; padding: 0; text-align: left; }
+.pl-more:hover { color: var(--ink); }
