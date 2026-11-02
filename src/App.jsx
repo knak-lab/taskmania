@@ -914,10 +914,6 @@ function PJDetailModal({ project, onUpdateNote, onUpdateName, onUpdateStatus, on
             style={{ ...styles.modalTitle, fontSize: 26, fontWeight: 800, flex: 1, minWidth: 0, border: "none", borderBottom: "1.5px dashed #D8D8D8", background: "transparent", padding: "4px 4px", marginRight: 8 }}
             aria-label="PJ名を編集" />
           <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-            <select value={project.status || ""} onChange={(e) => onUpdateStatus(project.id, e.target.value)} style={{ ...styles.moveSelect, fontSize: 12, padding: "4px 6px" }} aria-label="状態を変更">
-              <option value="">進行中</option>
-              {PJ_STATUSES.map((st) => <option key={st.v} value={st.v}>{st.label}</option>)}
-            </select>
             <button type="button" onClick={handleExport} disabled={exporting} style={styles.addBtn}>{exporting ? "出力中…" : "Excelで出力"}</button>
             <button type="button" onClick={onClose} aria-label="閉じる" style={styles.modalCloseBtn}>×</button>
           </div>
@@ -925,23 +921,20 @@ function PJDetailModal({ project, onUpdateNote, onUpdateName, onUpdateStatus, on
 
         <div style={{ ...styles.pjLinkRow, flexDirection: "column", alignItems: "stretch", gap: 8 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            {isWorkPJ(project) && (
-              <button type="button" onClick={() => onToggleMoyamoya(project.id)}
-                style={{ ...styles.moyamoyaToggleBtn, background: project.moyamoya ? MOYAMOYA_COLOR : "transparent", color: project.moyamoya ? "#FFFFFF" : MOYAMOYA_COLOR, borderColor: MOYAMOYA_COLOR }}
-                aria-label={project.moyamoya ? "もやもやから外す" : "もやもやに入れる"}>もや</button>
-            )}
+            <select value={project.status || ""} onChange={(e) => onUpdateStatus(project.id, e.target.value)} style={{ ...styles.moveSelect, fontSize: 12, padding: "4px 6px" }} aria-label="状態を変更">
+              <option value="">進行中</option>
+              {PJ_STATUSES.map((st) => <option key={st.v} value={st.v}>{st.label}</option>)}
+            </select>
             {isWorkPJ(project) && (
               <span style={styles.goalCheckLabel}>担当
                 <AssigneePicker value={project.assignees} assignees={assignees} onChange={(v) => onUpdateNote(project.id, "assignees", v)} onEditList={onEditAssignees} style={{ fontSize: 12, maxWidth: 160 }} />
               </span>
             )}
-            <span style={styles.pjLinkLabel}>関連リンク</span>
+            {project.relatedLink
+              ? <a href={project.relatedLink} target="_blank" rel="noopener noreferrer" style={{ ...styles.pjLinkLabel, color: "#1F5FA8", textDecoration: "underline" }} title={project.relatedLink}>関連リンク</a>
+              : <span style={{ ...styles.pjLinkLabel, color: "#9B9B9B" }} title="未設定">関連リンク</span>}
             {linkDraft === null ? (
               <>
-                {project.relatedLink
-                  ? <a href={project.relatedLink} target="_blank" rel="noopener noreferrer" style={styles.pjLinkUrl} title={project.relatedLink}>{project.relatedLink}</a>
-                  : <span style={{ ...styles.pjLinkUrl, color: "#9B9B9B" }}>未設定</span>}
-                {project.relatedLink && <a href={project.relatedLink} target="_blank" rel="noopener noreferrer" style={{ ...styles.inlineAddBtn, textDecoration: "none" }}>開く</a>}
                 <button type="button" onClick={() => setLinkDraft(project.relatedLink || "")} style={styles.inlineAddBtn}>編集</button>
               </>
             ) : (
@@ -966,6 +959,11 @@ function PJDetailModal({ project, onUpdateNote, onUpdateName, onUpdateStatus, on
               <select value={project.subcategory || ""} onChange={(e) => onUpdateSubcategory(project.id, e.target.value)} style={{ ...styles.moveSelect, fontSize: 12 }} aria-label="サブカテゴリを変更">
                 {REAL_SUBS.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
               </select>
+            )}
+            {isWorkPJ(project) && (
+              <button type="button" onClick={() => onToggleMoyamoya(project.id)}
+                style={{ ...styles.moyamoyaToggleBtn, background: project.moyamoya ? MOYAMOYA_COLOR : "transparent", color: project.moyamoya ? "#FFFFFF" : MOYAMOYA_COLOR, borderColor: MOYAMOYA_COLOR }}
+                aria-label={project.moyamoya ? "もやもやから外す" : "もやもやに入れる"}>もや</button>
             )}
             <label style={styles.goalCheckLabel}>
               <input type="checkbox" checked={!!project.goalTarget} onChange={(e) => onUpdateNote(project.id, "goalTarget", e.target.checked)} />
