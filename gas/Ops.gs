@@ -186,6 +186,8 @@ function applyOps_(ops, scope) {
 function handleOps_(body, scope) {
   const results = body.ops !== undefined ? applyOps_(body.ops, scope) : [];
   const res = { ok: results.every(function (r) { return r.ok; }), results: results };
+  // 1件でも書けたら版を進める（開いたままの画面が、この分を古い全件保存で消さないように）
+  if (results.some(function (r) { return r.ok; })) res.rev = bumpProjectsRev_();
   if (body.read === true) {
     const projects = readProjects_();
     res.projects = scope === "work" ? projects.filter(isWorkItem_) : projects;

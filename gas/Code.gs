@@ -189,6 +189,10 @@ function doGet(e) {
   const email = verifyIdToken_(e && e.parameter && e.parameter.id_token);
   if (!email) return unauthorized_();
   const scope = scopeFor_(email);
+  // 開き直した画面が「自分の持っている版は古いか」だけ確かめるための軽い問い合わせ
+  if (e.parameter.revOnly) return jsonResponse_({ rev: getProjectsRev_() });
+  // 版はデータより先に読む（読む間に書き込みがあっても「古い版」側に倒れ、上書きはされない）
+  const rev = getProjectsRev_();
   const projects = readProjects_();
   const themes = readThemes_();
   const assignees = readAssignees_();
@@ -200,9 +204,10 @@ function doGet(e) {
       themes: themes.filter(isWorkItem_),
       assignees: assignees,
       viewerScope: "work",
+      rev: rev,
     });
   }
-  return jsonResponse_({ projects: projects, moyamoyaNotes: readMoyamoyaNotes_(), workAdj: readWorkAdj_(), themes: themes, assignees: assignees, viewerScope: "full" });
+  return jsonResponse_({ projects: projects, moyamoyaNotes: readMoyamoyaNotes_(), workAdj: readWorkAdj_(), themes: themes, assignees: assignees, viewerScope: "full", rev: rev });
 }
 
 function doPost(e) {
@@ -221,14 +226,21 @@ function doPost(e) {
     lock.waitLock(20000);
     if (body.ops !== undefined || body.read === true) return handleOps_(body, scope);
     let projectCount = null;
+    let projectsRev = null;
     let moyamoyaCount = null;
     let workAdjCount = null;
     let calendarEventId = null;
     let themeCount = null;
+    // 画面の保存は「読み込んだ時の版(baseRev)」を添えて来る。その後に他の端末やCLIが書いていたら、
+    // 古い画面で全件洗い替えすると相手の分を消してしまうので断る（force のときだけ上書きを許す）
+    if (body.projects !== undefined && body.baseRev != null && body.force !== true && Number(body.baseRev) !== getProjectsRev_()) {
+      return jsonResponse_({ ok: false, conflict: true, rev: getProjectsRev_(), error: "他の端末で更新されています" });
+    }
     if (body.projects !== undefined) {
       const projects = scope === "work" ? mergeWorkScope_(readProjects_(), body.projects) : body.projects || [];
       writeProjects_(projects);
       projectCount = projects.length;
+      projectsRev = bumpProjectsRev_();
     }
     // もやもやメモ・稼働調整は個人用なので、work スコープの人からの書き込みは無視する
     if (body.moyamoyaNotes !== undefined && scope === "full") {
@@ -252,7 +264,7 @@ function doPost(e) {
       if (scope === "work") return jsonResponse_({ ok: false, error: "カレンダー登録は利用できません" });
       calendarEventId = createCalendarEvent_(body.calendarEvent);
     }
-    return jsonResponse_({ ok: true, projectCount: projectCount, moyamoyaCount: moyamoyaCount, workAdjCount: workAdjCount, themeCount: themeCount, calendarEventId: calendarEventId });
+    return jsonResponse_({ ok: true, projectCount: projectCount, moyamoyaCount: moyamoyaCount, workAdjCount: workAdjCount, themeCount: themeCount, calendarEventId: calendarEventId, rev: projectsRev });
   } catch (err) {
     return jsonResponse_({ ok: false, error: String(err) });
   } finally {
@@ -609,4 +621,17 @@ function writeRowsReplacing_(sheet, rows, numCols) {
 
 function jsonResponse_(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
+}
+
+// PJ・タスク・サブタスク・ステップの「版」。画面の全件保存と Ops.gs の1件書き込みのたびに1つ進める。
+// 古い画面が他の端末・CLIの分を上書きしないよう、保存時に読み込んだ時の版と比べる（doPost）
+const PROJECTS_REV_KEY_ = "PROJECTS_REV";
+function getProjectsRev_() {
+  return Number(PropertiesService.getScriptProperties().getProperty(PROJECTS_REV_KEY_) || 0);
+}
+// 呼ぶのはロック中だけ（doPost 内）
+function bumpProjectsRev_() {
+  const next = getProjectsRev_() + 1;
+  PropertiesService.getScriptProperties().setProperty(PROJECTS_REV_KEY_, String(next));
+  return next;
 }

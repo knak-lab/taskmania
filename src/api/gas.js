@@ -19,7 +19,12 @@ async function fetchGasJson(url, options, retries = 2, delayMs = 1000) {
 }
 
 function throwIfError(data) {
-  if (data && data.ok === false) throw new Error(data.error || 'API error');
+  if (data && data.ok === false) {
+    const err = new Error(data.error || 'API error');
+    // 他の端末で先に更新されていて、保存を断られたとき
+    if (data.conflict) err.conflict = true;
+    throw err;
+  }
   return data;
 }
 
@@ -59,11 +64,20 @@ export async function loadKamoTodos() {
 
 export async function loadAppData() {
   const data = await getJson(GAS_URL);
-  return { projects: data.projects || [], moyamoyaNotes: data.moyamoyaNotes || [], workAdj: data.workAdj || [], themes: data.themes || [], assignees: data.assignees || [] };
+  return { projects: data.projects || [], moyamoyaNotes: data.moyamoyaNotes || [], workAdj: data.workAdj || [], themes: data.themes || [], assignees: data.assignees || [], rev: data.rev ?? null };
 }
 
-export async function saveProjects(projects) {
-  return postJson({ projects });
+// サーバー側の今の版だけを聞く（開き直した画面が古くなっていないか確かめる用）
+export async function loadRev() {
+  const url = new URL(GAS_URL);
+  url.searchParams.set('revOnly', '1');
+  const data = await getJson(url.toString(), 0);
+  return data.rev ?? null;
+}
+
+// baseRev: 読み込んだ時の版。その後に他で書かれていたら conflict エラーになる（force で上書き）
+export async function saveProjects(projects, { baseRev = null, force = false } = {}) {
+  return postJson({ projects, baseRev, force });
 }
 
 export async function saveMoyamoyaNotes(moyamoyaNotes) {

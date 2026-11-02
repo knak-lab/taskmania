@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import * as XLSX from "xlsx";
-import { loadAppData, loadKamoTodos, saveProjects as gasSave, saveMoyamoyaNotes as gasSaveMoyamoyaNotes, saveWorkAdj as gasSaveWorkAdj, saveThemes as gasSaveThemes, saveAssignees as gasSaveAssignees, sendToCalendar as gasSendToCalendar } from "./api/gas";
+import { loadAppData, loadRev, loadKamoTodos, saveProjects as gasSave, saveMoyamoyaNotes as gasSaveMoyamoyaNotes, saveWorkAdj as gasSaveWorkAdj, saveThemes as gasSaveThemes, saveAssignees as gasSaveAssignees, sendToCalendar as gasSendToCalendar } from "./api/gas";
 import MindMapView from "./MindMapView";
 import RoadmapView from "./RoadmapView";
 
@@ -2035,6 +2035,14 @@ export default function App() {
   const pendingProjectsSaveRef = useRef(false);
   const projectsRef = useRef(projects);
   useEffect(() => { projectsRef.current = projects; }, [projects]);
+  // 読み込んだ時のサーバー側の版。保存のたびに添えて送り、他の端末やCLIが先に書いていたら
+  // 保存を断ってもらう(開きっぱなしの古い画面が、相手の分を全件洗い替えで消さないため)
+  const projectsRevRef = useRef(null);
+  // 断られたら自動保存を止めて、どうするかを選んでもらう
+  const [saveConflict, setSaveConflict] = useState(false);
+  const saveConflictRef = useRef(false);
+  // 画面で変えたがまだ保存し終わっていない変更があるか(この間は最新の自動読み込みをしない)
+  const projectsDirtyRef = useRef(false);
   const moyamoyaSaveTimer = useRef(null);
   const skipNextMoyamoyaSaveRef = useRef(false);
   const workAdjSaveTimer = useRef(null);
@@ -2045,10 +2053,15 @@ export default function App() {
   const skipNextAssigneesSaveRef = useRef(false);
 
   // 初回ロード
-  const handleLoad = async () => {
-    setSaveState("loading");
+  // quiet: 開き直した時の自動読み込み。全画面の読み込み表示を出さず、失敗しても今の表示のまま
+  const handleLoad = async ({ quiet = false } = {}) => {
+    if (!quiet) setSaveState("loading");
     try {
       const data = await loadAppData();
+      projectsRevRef.current = data.rev;
+      projectsDirtyRef.current = false;
+      saveConflictRef.current = false;
+      setSaveConflict(false);
       if (data.projects.length > 0 || !hasLoadedRef.current) {
         skipNextSaveRef.current = true;
         setProjects(data.projects.length > 0 ? data.projects : seedProjects());
@@ -2075,6 +2088,7 @@ export default function App() {
         // カモの小屋側が読み込めなくても、タスクマニア自体の読み込みは成功扱いのまま続行する
       }
     } catch {
+      if (quiet) return;
       // 既に一度でも読み込みに成功していれば、今持っているデータを保持したまま
       // エラー表示のみ行う(サンプルデータで上書きして自動保存させない)。
       if (!hasLoadedRef.current) {
@@ -2087,19 +2101,61 @@ export default function App() {
 
   useEffect(() => { handleLoad(); }, []);
 
+  // スマホのホーム画面アプリなどを開き直した時、他の端末やCLIで更新されていたら最新を読み込み直す。
+  // まだ保存していない変更があるときは読み込まない(その変更は保存時に版の食い違いとして知らせる)
+  const handleLoadRef = useRef(handleLoad);
+  handleLoadRef.current = handleLoad;
+  useEffect(() => {
+    let checking = false;
+    const check = async () => {
+      if (document.visibilityState !== "visible" || checking) return;
+      if (!hasLoadedRef.current || projectsRevRef.current == null) return;
+      if (projectsDirtyRef.current || savingProjectsRef.current || saveConflictRef.current) return;
+      checking = true;
+      try {
+        const rev = await loadRev();
+        if (rev != null && rev !== projectsRevRef.current && !projectsDirtyRef.current && !savingProjectsRef.current) {
+          await handleLoadRef.current({ quiet: true });
+        }
+      } catch {
+        // 確かめられなくても、保存時の版チェックで上書きは防げるのでそのままにする
+      } finally {
+        checking = false;
+      }
+    };
+    document.addEventListener("visibilitychange", check);
+    window.addEventListener("focus", check);
+    return () => {
+      document.removeEventListener("visibilitychange", check);
+      window.removeEventListener("focus", check);
+    };
+  }, []);
+
   // 変更時に自動保存(初回読み込みが成功するまでは保存しない)
-  function runProjectsSave() {
+  function runProjectsSave(force = false) {
+    if (saveConflictRef.current && !force) return;
     if (savingProjectsRef.current) { pendingProjectsSaveRef.current = true; return; }
     savingProjectsRef.current = true;
-    gasSave(projectsRef.current)
-      .then(() => {
+    gasSave(projectsRef.current, { baseRev: projectsRevRef.current, force })
+      .then((res) => {
+        if (res && res.rev != null) projectsRevRef.current = res.rev;
+        if (force) { saveConflictRef.current = false; setSaveConflict(false); }
+        if (!pendingProjectsSaveRef.current) projectsDirtyRef.current = false;
         setSaveState("saved");
         setTimeout(() => setSaveState("idle"), 2000);
       })
-      .catch(() => setSaveState("error"))
+      .catch((err) => {
+        if (err && err.conflict) {
+          saveConflictRef.current = true;
+          setSaveConflict(true);
+          setSaveState("idle");
+        } else {
+          setSaveState("error");
+        }
+      })
       .finally(() => {
         savingProjectsRef.current = false;
-        if (pendingProjectsSaveRef.current) {
+        if (pendingProjectsSaveRef.current && !saveConflictRef.current) {
           pendingProjectsSaveRef.current = false;
           runProjectsSave();
         }
@@ -2108,6 +2164,8 @@ export default function App() {
   useEffect(() => {
     if (projects === null || !hasLoadedRef.current) return;
     if (skipNextSaveRef.current) { skipNextSaveRef.current = false; return; }
+    projectsDirtyRef.current = true;
+    if (saveConflictRef.current) return;
     setSaveState("saving");
     clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(runProjectsSave, 800);
@@ -3303,6 +3361,32 @@ export default function App() {
         }
       `}</style>
 
+      {saveConflict && (
+        <div style={{ ...styles.modalOverlay, zIndex: 70 }}>
+          <div style={styles.modalBox} role="alertdialog" aria-labelledby="save-conflict-title">
+            <div style={styles.modalHeader}>
+              <h3 id="save-conflict-title" style={styles.modalTitle}>他の端末で更新されています</h3>
+            </div>
+            <p style={{ fontSize: 13, color: "#2C3645", lineHeight: 1.7, margin: "8px 0" }}>
+              この画面を開いている間に、別の端末(または会話からの登録)でタスクが更新されました。
+              この画面での最後の変更は<b>まだ保存されていません</b>。
+            </p>
+            <p style={{ fontSize: 12, color: "#7A7A7A", lineHeight: 1.7, margin: "0 0 8px" }}>
+              ふつうは「最新を読み込む」を選んでください。この画面の変更は消えるので、必要ならもう一度入力します。
+              「この画面の内容で上書き」は、別の端末で足した分を消してしまいます。
+            </p>
+            <div style={{ ...styles.modalActions, gap: 8, flexWrap: "wrap" }}>
+              <button type="button" onClick={() => { if (window.confirm("別の端末で足した・変えた分が消えます。上書きしますか？")) runProjectsSave(true); }} style={styles.reloadBtn}>
+                この画面の内容で上書き
+              </button>
+              <button type="button" onClick={() => handleLoad()} style={{ ...styles.reloadBtn, background: "#2C3645", color: "#FFFFFF", borderColor: "#2C3645", fontWeight: 700 }}>
+                最新を読み込む
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {saveState === "loading" && (
         <div style={styles.loadingOverlay}>
           <img src={`${import.meta.env.BASE_URL}icon-512.png`} alt="読み込み中" className="loading-wobble" style={styles.loadingOverlayIcon} />
@@ -3360,7 +3444,7 @@ export default function App() {
                   PJ追加
                 </button>
               )}
-              <button type="button" onClick={handleLoad} disabled={saveState === "loading"} style={styles.reloadBtn}>
+              <button type="button" onClick={() => handleLoad()} disabled={saveState === "loading"} style={styles.reloadBtn}>
                 読込
               </button>
             </div>
@@ -3468,7 +3552,7 @@ export default function App() {
                           <span style={styles.calNavLabel}>{calLabel}</span>
                           <button type="button" onClick={() => calShift(1)} aria-label="次へ" style={styles.calNavBtn}>▶</button>
                           <button type="button" onClick={calGoToday} style={styles.inlineAddBtn}>今日</button>
-                          <button type="button" onClick={handleLoad} disabled={saveState === "loading"} aria-label="カレンダーを更新" style={styles.calNavBtn}>
+                          <button type="button" onClick={() => handleLoad()} disabled={saveState === "loading"} aria-label="カレンダーを更新" style={styles.calNavBtn}>
                             <span className={saveState === "loading" ? "spin-loading" : ""} style={{ display: "inline-block" }}>🔄</span>
                           </button>
                         </div>
