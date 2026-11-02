@@ -2376,6 +2376,11 @@ export default function App() {
   }
   const editAssignees = () => setAssigneeListOpen(true);
 
+  const viewGroups = useMemo(() => (
+    PERSON_KEYS.includes(topTab) && subTab === "総合"
+      ? REAL_SUBS.map((s) => ({ key: s.key, label: s.label, color: s.color, owner: topTab, subcategory: s.key }))
+      : null
+  ), [topTab, subTab]);
   const visibleThemes = useMemo(() => {
     if (topTab === "総合") return themes;
     if (topTab === "家族") return themes.filter((t) => t.owner === "家族");
@@ -3843,7 +3848,7 @@ export default function App() {
                 <h3 style={{ ...styles.sectionTitleFlush, fontWeight: 900 }}>ロードマップ（月×PJ）</h3>
               </div>
               <p style={styles.ganttHint}>矢羽根＝タスク(開始日〜終了日)。矢羽根を押すとタスク編集、PJ名を押すとPJ詳細、＋でタスク追加。</p>
-              <RoadmapView projects={visibleProjects.filter((p) => !p.status)} themes={visibleThemes} onOpenPJ={setPjDetailModal} onMovePJ={movePJTo} onMoveTheme={moveThemeTo} onOpenTask={(pjId, taskId) => setTaskEditModal({ pjId, taskId })} onAddTask={(pjId) => { const p = projects.find((pp) => pp.id === pjId); if (p) openAddTaskModal(p.id, pjLabel(p)); }} />
+              <RoadmapView projects={visibleProjects.filter((p) => !p.status)} themes={visibleThemes} onOpenPJ={setPjDetailModal} onMovePJ={movePJTo} onMoveTheme={moveThemeTo} sections={viewGroups} onOpenTask={(pjId, taskId) => setTaskEditModal({ pjId, taskId })} onAddTask={(pjId) => { const p = projects.find((pp) => pp.id === pjId); if (p) openAddTaskModal(p.id, pjLabel(p)); }} />
             </>
           )}
 
@@ -3862,6 +3867,7 @@ export default function App() {
               onOpenSub={(pjId, taskId, subId) => setCalSubtaskModal({ pjId, taskId, subId })}
               onOpenTask={(pjId, taskId) => setTaskEditModal({ pjId, taskId })}
               addPJRequest={mapAddPJRequest}
+              groups={viewGroups}
               onAddPJRequestDone={() => setMapAddPJRequest(null)}
             />
           )}

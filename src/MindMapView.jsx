@@ -4,13 +4,14 @@ import "./MindMapView.css";
 // マップ画面: 根(表示中のタブ) → テーマ → PJ → タスク → サブタスク をマインドマップで表示・作成する。
 // テーマはPJの上の見出しで、PJ側の themeId で所属を持つ。保留・完了PJは出さない(俯瞰と同じ)。
 
-const W = { root: 180, theme: 170, pj: 250, task: 200, sub: 230 };
-const H = { root: 44, theme: 36, pj: 60, task: 34, sub: 28 };
+const W = { root: 180, group: 150, theme: 170, pj: 250, task: 200, sub: 230 };
+const H = { root: 44, group: 40, theme: 36, pj: 60, task: 34, sub: 28 };
 const HG = 44;
 const VG = 8;
 const BRANCH = ["#1D7179", "#3A62A8", "#84569A", "#66772A", "#A4513A", "#4D6273"];
-const CHILD_TYPE = { root: "theme", theme: "pj", pj: "task", task: "sub" };
-const ACCEPTS = { root: ["pj"], theme: ["pj"], pj: ["task"], task: ["sub"] };
+// group: kkr＞総合などで根とテーマの間に入る区分(PB / work)。サブカテゴリで振り分ける
+const CHILD_TYPE = { root: "theme", group: "theme", theme: "pj", pj: "task", task: "sub" };
+const ACCEPTS = { root: ["pj"], group: ["pj"], theme: ["pj"], pj: ["task"], task: ["sub"] };
 
 function uid() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -84,7 +85,14 @@ function checkup(pjs, todayStr) {
 }
 const hours = (m) => `${Math.round((m / 60) * 10) / 10}h`;
 
-function buildTree(rootLabel, themes, projects) {
+// n の配下から type の箱を全部集める(根・区分・テーマをまたいでPJやテーマを拾う)
+function nodesOf(n, type) {
+  return n.children.flatMap((c) => (c.type === type ? [c] : c.type === "task" || c.type === "sub" ? [] : nodesOf(c, type)));
+}
+function inGroup(x, g) {
+  return x.owner === g.owner && (x.subcategory || null) === g.subcategory;
+}
+function buildTree(rootLabel, themes, projects, groups) {
   const pjNode = (p) => ({
     id: p.id, type: "pj", text: p.name, pj: p,
     children: (p.tasks || []).map((t) => ({
@@ -93,11 +101,19 @@ function buildTree(rootLabel, themes, projects) {
     })),
   });
   const themeIds = new Set(themes.map((t) => t.id));
+  const themeNode = (t) => ({ id: t.id, type: "theme", text: t.name, theme: t, children: projects.filter((p) => p.themeId === t.id).map(pjNode) });
+  const loose = projects.filter((p) => !themeIds.has(p.themeId));
+  if (!groups) return { id: "__root", type: "root", text: rootLabel, children: [...themes.map(themeNode), ...loose.map(pjNode)] };
+  const inAny = (x) => groups.some((g) => inGroup(x, g));
   return {
     id: "__root", type: "root", text: rootLabel,
     children: [
-      ...themes.map((t) => ({ id: t.id, type: "theme", text: t.name, theme: t, children: projects.filter((p) => p.themeId === t.id).map(pjNode) })),
-      ...projects.filter((p) => !themeIds.has(p.themeId)).map(pjNode),
+      ...groups.map((g) => ({
+        id: `__group_${g.key}`, type: "group", text: g.label, group: g,
+        children: [...themes.filter((t) => inGroup(t, g)).map(themeNode), ...loose.filter((p) => inGroup(p, g)).map(pjNode)],
+      })),
+      ...themes.filter((t) => !inAny(t)).map(themeNode),
+      ...loose.filter((p) => !inAny(p)).map(pjNode),
     ],
   };
 }
@@ -106,7 +122,7 @@ function loadOpen() {
   try { return JSON.parse(localStorage.getItem("tm_map_open") || "{}"); } catch { return {}; }
 }
 
-export default function MindMapView({ rootLabel, projects, themes, allProjects, allThemes, scope, setProjects, setThemes, onOpenPJ, onToggleSub, onOpenSub, onOpenTask, addPJRequest, onAddPJRequestDone }) {
+export default function MindMapView({ rootLabel, projects, themes, allProjects, allThemes, scope, setProjects, setThemes, onOpenPJ, onToggleSub, onOpenSub, onOpenTask, addPJRequest, onAddPJRequestDone, groups }) {
   const todayStr = toDateStr(new Date());
   const [open, setOpen] = useState(loadOpen);
   const [sel, setSel] = useState(null);
@@ -128,20 +144,21 @@ export default function MindMapView({ rootLabel, projects, themes, allProjects, 
 
   useEffect(() => { try { localStorage.setItem("tm_map_open", JSON.stringify(open)); } catch { /* ignore */ } }, [open]);
 
-  const tree = useMemo(() => buildTree(rootLabel, themes, projects), [rootLabel, themes, projects]);
+  const tree = useMemo(() => buildTree(rootLabel, themes, projects, groups), [rootLabel, themes, projects, groups]);
 
   // id → {n, parent, branch}
   const index = useMemo(() => {
     const m = new Map();
+    let ci = 0;
     const walk = (n, parent, branch) => {
       m.set(n.id, { n, parent, branch });
-      n.children.forEach((c, i) => walk(c, n, n.type === "root" ? i % BRANCH.length : branch));
+      n.children.forEach((c) => walk(c, n, n.type === "root" || n.type === "group" ? (c.type === "group" ? 0 : ci++ % BRANCH.length) : branch));
     };
     walk(tree, null, 0);
     return m;
   }, [tree]);
 
-  const isOpen = (n) => (n.id in open ? open[n.id] : n.type === "root" || n.type === "theme");
+  const isOpen = (n) => (n.id in open ? open[n.id] : n.type === "root" || n.type === "group" || n.type === "theme");
 
   // ---- レイアウト(左→右の木。葉を縦に積み、親は子の中央) ----
   const { boxes, links, width, height } = useMemo(() => {
@@ -221,10 +238,12 @@ export default function MindMapView({ rootLabel, projects, themes, allProjects, 
 
   function createNode(parent, type, text) {
     const id = uid();
+    // 区分の下に作ったものはその区分(PB / work)に入れる
+    const g = parent.type === "group" ? parent.group : null;
     if (type === "theme") {
-      setThemes((prev) => [...prev, { id, owner: scope.owner, subcategory: scope.subcategory, name: text }]);
+      setThemes((prev) => [...prev, { id, owner: g ? g.owner : scope.owner, subcategory: g ? g.subcategory : scope.subcategory, name: text }]);
     } else if (type === "pj") {
-      const th = parent.type === "theme" ? parent.theme : null;
+      const th = parent.type === "theme" ? parent.theme : g;
       setProjects((prev) => [...prev, {
         id, owner: th ? th.owner : scope.owner, name: text, tasks: [], subcategory: th ? th.subcategory : scope.subcategory,
         priority: 2, status: null, completedNote: "", nextAction: "", moyamoya: false, themeId: th ? th.id : null,
@@ -289,6 +308,7 @@ export default function MindMapView({ rootLabel, projects, themes, allProjects, 
     const info = sel && index.get(sel);
     if (!info || !info.parent) return;
     const n = info.n;
+    if (n.type === "group") return;
     if ((n.type === "pj" || n.type === "task") && n.children.length) {
       flash(n.type === "pj" ? "中身があるので、PJ詳細の「PJを削除」から削除してください" : "中身があるので、タスク編集の「タスクを削除」から削除してください");
       return;
@@ -316,24 +336,28 @@ export default function MindMapView({ rootLabel, projects, themes, allProjects, 
   function reorder(drag, target, after) {
     snapshot();
     if (drag.type === "theme") {
+      const tg = target.theme;
+      const crossGroup = groups && tg && !inGroup(drag.theme, tg);
       setThemes((prev) => {
         const moving = prev.find((t) => t.id === drag.id);
         const rest = prev.filter((t) => t.id !== drag.id);
         const i = rest.findIndex((t) => t.id === target.id);
         if (!moving || i === -1) return prev;
-        rest.splice(after ? i + 1 : i, 0, moving);
+        rest.splice(after ? i + 1 : i, 0, crossGroup ? { ...moving, owner: tg.owner, subcategory: tg.subcategory } : moving);
         return rest;
       });
+      if (crossGroup) setProjects((prev) => prev.map((p) => (p.themeId === drag.id ? { ...p, owner: tg.owner, subcategory: tg.subcategory } : p)));
     } else {
       // 別テーマのPJの前後に落としたら、そのテーマへ移す
       const par = index.get(target.id)?.parent;
       const themeId = par && par.type === "theme" ? par.id : null;
+      const home = par?.type === "theme" ? par.theme : par?.type === "group" ? par.group : null;
       setProjects((prev) => {
         const moving = prev.find((p) => p.id === drag.id);
         const rest = prev.filter((p) => p.id !== drag.id);
         const i = rest.findIndex((p) => p.id === target.id);
         if (!moving || i === -1) return prev;
-        rest.splice(after ? i + 1 : i, 0, { ...moving, themeId });
+        rest.splice(after ? i + 1 : i, 0, { ...moving, themeId, ...(groups && home ? { owner: home.owner, subcategory: home.subcategory } : {}) });
         return rest;
       });
     }
@@ -361,7 +385,8 @@ export default function MindMapView({ rootLabel, projects, themes, allProjects, 
   function drop(drag, target) {
     snapshot();
     if (drag.type === "pj") {
-      setProjects((prev) => prev.map((p) => (p.id === drag.id ? { ...p, themeId: target.type === "theme" ? target.id : null } : p)));
+      const home = target.type === "theme" ? target.theme : target.type === "group" ? target.group : null;
+      setProjects((prev) => prev.map((p) => (p.id === drag.id ? { ...p, themeId: target.type === "theme" ? target.id : null, ...(groups && home ? { owner: home.owner, subcategory: home.subcategory } : {}) } : p)));
     } else if (drag.type === "task") {
       if (drag.pjId === target.id) return;
       setProjects((prev) => {
@@ -384,7 +409,7 @@ export default function MindMapView({ rootLabel, projects, themes, allProjects, 
   // すべて開く: PJまで見せる(テーマは開き、PJはたたむ) / 全てたたむ: テーマもたたむ。PJ配下は常にたたむ
   function setAll(themesOpen) {
     const next = { [tree.id]: true };
-    const walk = (x) => { x.children.forEach((c) => { if (c.type === "sub") return; next[c.id] = c.type === "theme" ? themesOpen : false; walk(c); }); };
+    const walk = (x) => { x.children.forEach((c) => { if (c.type === "sub") return; next[c.id] = c.type === "group" ? true : c.type === "theme" ? themesOpen : false; walk(c); }); };
     walk(tree);
     setOpen(next);
   }
@@ -400,8 +425,10 @@ export default function MindMapView({ rootLabel, projects, themes, allProjects, 
     if (!addPJRequest) return;
     onAddPJRequestDone && onAddPJRequestDone();
     let info = sel && index.get(sel);
-    while (info && info.n.type !== "theme" && info.n.type !== "root") info = info.parent && index.get(info.parent.id);
-    const target = info?.n.type === "theme" ? info.n : (tree.children.find((c) => c.type === "theme") || tree);
+    while (info && info.n.type !== "theme" && info.n.type !== "group" && info.n.type !== "root") info = info.parent && index.get(info.parent.id);
+    const target = info?.n.type === "theme" ? info.n
+      : info?.n.type === "group" ? (nodesOf(info.n, "theme")[0] || info.n)
+      : (nodesOf(tree, "theme")[0] || (tree.children.find((c) => c.type === "group")) || tree);
     setSel(target.id);
     setOpen((o) => ({ ...o, [target.id]: true }));
     setDraft({ parentId: target.id, type: "pj", afterId: null, token: uid() });
@@ -427,7 +454,7 @@ export default function MindMapView({ rootLabel, projects, themes, allProjects, 
     const k = e.key;
     if (k === "Tab") { e.preventDefault(); startAddChild(); }
     else if (k === "Enter") { e.preventDefault(); if (n.type === "pj" && e.shiftKey) onOpenPJ(n.id); else startAddSibling(); }
-    else if (k === "F2") { e.preventDefault(); if (n.type !== "root") setEditing(n.id); }
+    else if (k === "F2") { e.preventDefault(); if (n.type !== "root" && n.type !== "group") setEditing(n.id); }
     else if (k === "Delete" || k === "Backspace") { e.preventDefault(); remove(); }
     else if (k === " ") { e.preventDefault(); if (n.type === "sub") onToggleSub(n.pjId, n.taskId, n.id); else if (n.children.length) setOpen((o) => ({ ...o, [n.id]: !isOpen(n) })); }
     else if (k === "ArrowLeft" && info.parent) { e.preventDefault(); selectAndReveal(info.parent.id); }
@@ -451,7 +478,7 @@ export default function MindMapView({ rootLabel, projects, themes, allProjects, 
   const selNode = selInfo?.n;
 
   function renderBox(b) {
-    const style = { left: b.x, top: b.y, width: b.w, height: b.h, "--bc": BRANCH[b.branch] };
+    const style = { left: b.x, top: b.y, width: b.w, height: b.h, "--bc": b.n?.type === "group" ? b.n.group.color : BRANCH[b.branch] };
     if (b.draft) {
       return (
         <div key="__draft" className={`mm-node mm-${b.type} mm-sel`} style={style}>
@@ -474,7 +501,7 @@ export default function MindMapView({ rootLabel, projects, themes, allProjects, 
       </button>
     );
     const cls = `mm-node mm-${n.type}${isSel ? " mm-sel" : ""}${dropId === n.id ? (dropAfter === null ? " mm-drop" : dropAfter ? " mm-drop-after" : " mm-drop-before") : ""}${n.type === "sub" && n.done ? " mm-done" : ""}`;
-    const dragProps = n.type === "root" || editing === n.id ? {} : {
+    const dragProps = n.type === "root" || n.type === "group" || editing === n.id ? {} : {
       draggable: true,
       onDragStart: (e) => { dragRef.current = n; e.dataTransfer.effectAllowed = "move"; try { e.dataTransfer.setData("text/plain", n.id); } catch { /* ignore */ } },
       onDragEnd: () => { dragRef.current = null; setDropId(null); setDropAfter(null); },
@@ -526,7 +553,7 @@ export default function MindMapView({ rootLabel, projects, themes, allProjects, 
     }
     return (
       <div key={n.id} data-id={n.id} className={cls} style={style} title={n.text}
-        onClick={(e) => onNodeClick(e, n)} onDoubleClick={() => { if (n.type === "pj") onOpenPJ(n.id); else if (n.type !== "root") setEditing(n.id); }}
+        onClick={(e) => onNodeClick(e, n)} onDoubleClick={() => { if (n.type === "pj") onOpenPJ(n.id); else if (n.type !== "root" && n.type !== "group") setEditing(n.id); }}
         {...dragProps} {...dropProps}>
         {inner}
       </div>
@@ -606,7 +633,7 @@ export default function MindMapView({ rootLabel, projects, themes, allProjects, 
           <section>
             <h5>テーマ別</h5>
             <table className="mm-ck-table"><tbody>
-              {tree.children.filter((t) => t.type === "theme").map((t) => {
+              {nodesOf(tree, "theme").map((t) => {
                 const tc = checkup(t.children.map((pn) => pn.pj), todayStr);
                 return (
                   <tr key={t.id} onClick={() => selectAndReveal(t.id)}>
@@ -625,7 +652,7 @@ export default function MindMapView({ rootLabel, projects, themes, allProjects, 
 
   function renderPanel() {
     if (!selNode) {
-      const all = tree.children.flatMap((c) => (c.type === "pj" ? [c] : c.children));
+      const all = nodesOf(tree, "pj");
       return (
         <>
           <h4 className="mm-title">点検：{tree.text}</h4>
@@ -702,7 +729,7 @@ export default function MindMapView({ rootLabel, projects, themes, allProjects, 
         </>
       );
     }
-    const pjs = n.type === "theme" ? n.children : n.children.flatMap((c) => (c.type === "pj" ? [c] : c.children));
+    const pjs = nodesOf(n, "pj");
     const late = pjs.filter((pn) => stateOf(progressOf(pn, todayStr)).k === "warn").length;
     return (
       <>
@@ -726,8 +753,8 @@ export default function MindMapView({ rootLabel, projects, themes, allProjects, 
       <div className="mm-tools">
         <button type="button" onClick={startAddChild} disabled={!selNode || !CHILD_TYPE[selNode.type]}>＋子 <kbd>Tab</kbd></button>
         <button type="button" onClick={startAddSibling} disabled={!selNode}>＋兄弟 <kbd>Enter</kbd></button>
-        <button type="button" onClick={() => selNode && selNode.type !== "root" && setEditing(selNode.id)} disabled={!selNode || selNode.type === "root"}>名前 <kbd>F2</kbd></button>
-        <button type="button" onClick={remove} disabled={!selNode || selNode.type === "root"}>削除 <kbd>Del</kbd></button>
+        <button type="button" onClick={() => selNode && selNode.type !== "root" && selNode.type !== "group" && setEditing(selNode.id)} disabled={!selNode || selNode.type === "root" || selNode.type === "group"}>名前 <kbd>F2</kbd></button>
+        <button type="button" onClick={remove} disabled={!selNode || selNode.type === "root" || selNode.type === "group"}>削除 <kbd>Del</kbd></button>
         <button type="button" onClick={() => moveSel(-1)} disabled={!selMovable.up} title="テーマ・PJを上へ (Alt+↑)">▲上へ</button>
         <button type="button" onClick={() => moveSel(1)} disabled={!selMovable.down} title="テーマ・PJを下へ (Alt+↓)">▼下へ</button>
         <button type="button" onClick={undo} disabled={!undoStack.length}>戻す</button>
@@ -743,7 +770,7 @@ export default function MindMapView({ rootLabel, projects, themes, allProjects, 
             <svg className="mm-links" width={width} height={height}>
               {links.map((l, i) => {
                 const x1 = l.from.x + l.from.w, y1 = l.from.y + l.from.h / 2, x2 = l.to.x, y2 = l.to.y + l.to.h / 2, mx = (x1 + x2) / 2;
-                return <path key={i} d={`M${x1} ${y1}C${mx} ${y1} ${mx} ${y2} ${x2} ${y2}`} stroke={BRANCH[l.to.branch]} opacity={l.to.n?.type === "sub" ? 0.45 : 0.8} />;
+                return <path key={i} d={`M${x1} ${y1}C${mx} ${y1} ${mx} ${y2} ${x2} ${y2}`} stroke={l.to.n?.type === "group" ? l.to.n.group.color : BRANCH[l.to.branch]} opacity={l.to.n?.type === "sub" ? 0.45 : 0.8} />;
               })}
             </svg>
             {boxes.map(renderBox)}

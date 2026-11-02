@@ -1,4 +1,4 @@
-import { useState, useEffect, useLayoutEffect, useRef, useMemo } from "react";
+import { Fragment, useState, useEffect, useLayoutEffect, useRef, useMemo } from "react";
 import "./RoadmapView.css";
 
 // 俯瞰画面: マップと同じ全量(テーマ → PJ)を行に、月を列にしたマトリクス。
@@ -43,7 +43,7 @@ function loadSpan() {
   try { const v = Number(localStorage.getItem("tm_roadmap_span")); return SPANS.includes(v) ? v : 6; } catch { return 6; }
 }
 
-export default function RoadmapView({ projects, themes, onOpenPJ, onOpenTask, onAddTask, onMovePJ, onMoveTheme }) {
+export default function RoadmapView({ projects, themes, onOpenPJ, onOpenTask, onAddTask, onMovePJ, onMoveTheme, sections }) {
   const todayStr = toDateStr(new Date());
   const todayMonth = monthKey(todayStr);
   const [span, setSpan] = useState(loadSpan);
@@ -119,10 +119,23 @@ export default function RoadmapView({ projects, themes, onOpenPJ, onOpenTask, on
   // テーマ順 → テーマなし の順にPJを並べ、各PJの矢羽根を重ならないレーンに振り分ける
   const { groups, months } = useMemo(() => {
     const themeIds = new Set(themes.map((t) => t.id));
-    const rawGroups = [
-      ...themes.map((t, i) => ({ id: t.id, name: t.name, color: BRANCH[i % BRANCH.length], pjs: projects.filter((p) => p.themeId === t.id) })),
-      { id: "__none", name: themes.length ? "テーマなし" : null, color: "#66727F", pjs: projects.filter((p) => !themeIds.has(p.themeId)) },
-    ].filter((g) => g.pjs.length > 0);
+    // sections(kkr＞総合の PB / work)があれば、区分ごとに テーマ → テーマなし を並べ、区分の先頭に見出しを付ける。
+    // テーマの色はマップと同じ順(区分をまたいで続き、テーマなしPJの分も数える)で振る
+    const inSec = (x, sec) => x.owner === sec.owner && (x.subcategory || null) === sec.subcategory;
+    const secs = sections ? [...sections, { key: "__rest", label: null, rest: true }] : [{ key: "__all", label: null, all: true }];
+    const match = (x, sec) => (sec.all ? true : sec.rest ? !sections.some((ss) => inSec(x, ss)) : inSec(x, sec));
+    let ci = 0;
+    const rawGroups = secs.flatMap((sec) => {
+      const ths = themes.filter((t) => match(t, sec));
+      const loose = projects.filter((p) => !themeIds.has(p.themeId) && match(p, sec));
+      const gs = [
+        ...ths.map((t) => ({ id: t.id, name: t.name, color: BRANCH[ci++ % BRANCH.length], pjs: projects.filter((p) => p.themeId === t.id) })),
+        { id: `__none_${sec.key}`, none: true, name: themes.length || sections ? "テーマなし" : null, color: "#66727F", pjs: loose },
+      ].filter((g) => g.pjs.length > 0);
+      ci += loose.length;
+      if (gs.length && sec.label) gs[0].section = sec;
+      return gs;
+    });
 
     let minM = addMonths(todayMonth, -1);
     let maxM = addMonths(todayMonth, 11);
@@ -152,7 +165,7 @@ export default function RoadmapView({ projects, themes, onOpenPJ, onOpenTask, on
     const months = [];
     for (let m = minM; m <= maxM; m = addMonths(m, 1)) months.push(m);
     return { groups, months };
-  }, [projects, themes, todayStr, todayMonth]);
+  }, [projects, themes, todayStr, todayMonth, sections]);
 
   const labelW = wrapW && wrapW < 560 ? 120 : 200;
   const colW = Math.max(36, Math.floor((wrapW - labelW) / span) || 80);
@@ -232,12 +245,19 @@ export default function RoadmapView({ projects, themes, onOpenPJ, onOpenTask, on
             </div>
 
             {groups.map((g) => (
-              <div key={g.id} style={{ "--bc": g.color }} data-theme={g.id === "__none" ? undefined : g.id}
+              <Fragment key={g.id}>
+              {g.section && (
+                <div className="rm-section" style={{ "--sc": g.section.color }}>
+                  <div className="rm-section-label">{g.section.label}</div>
+                  <div className="rm-theme-track" style={{ width: trackW }} />
+                </div>
+              )}
+              <div style={{ "--bc": g.color }} data-theme={g.none ? undefined : g.id}
                 className={`rm-group${drag?.kind === "theme" && drag.id === g.id ? " dragging" : ""}${drag?.kind === "theme" && drag.overId === g.id && drag.overId !== drag.id ? (drag.after ? " drop-after" : " drop-before") : ""}`}>
                 {g.name && (
                   <div className="rm-theme">
                     <div className="rm-theme-label">
-                      {g.id !== "__none" && groups.filter((x) => x.id !== "__none").length > 1 && (
+                      {!g.none && groups.filter((x) => !x.none).length > 1 && (
                         <span className="rm-grip" title="ドラッグでテーマを並び替え" aria-label="ドラッグでテーマを並び替え"
                           onPointerDown={(e) => onGripDown(e, g.id, null, "theme")} onPointerMove={onGripMove} onPointerUp={onGripUp} onPointerCancel={onGripUp}>⋮⋮</span>
                       )}
@@ -286,6 +306,7 @@ export default function RoadmapView({ projects, themes, onOpenPJ, onOpenTask, on
                   </div>
                 ))}
               </div>
+              </Fragment>
             ))}
           </div>
         </div>

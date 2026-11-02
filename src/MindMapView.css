@@ -107,3 +107,5 @@
 .mm-actions { display: flex; gap: 6px; }
 .mm-actions .mm-primary { flex: 1; }
 .mm-secondary { border: 1.5px solid var(--mm-ink); background: #fff; color: var(--mm-ink); border-radius: 6px; padding: 6px 10px; font-weight: 700; font-size: 13px; cursor: pointer; }
+.mm-group { background: #fff; color: var(--bc); border: 2px solid var(--bc); font-weight: 800; font-size: 14px; letter-spacing: .04em; }
+.mm-group .mm-tog { background: transparent; border-color: currentColor; color: inherit; }

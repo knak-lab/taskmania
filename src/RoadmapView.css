@@ -92,3 +92,5 @@
 .rm-theme-label .rm-grip:hover { color: #fff; }
 .rm-add { margin-left: auto; color: var(--ink); border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; background: #fff; cursor: pointer; font-weight: 700; }
 .rm-add:hover { background: var(--soft); }
+.rm-section { display: flex; border-bottom: 2px solid var(--sc); background: #fff; }
+.rm-section-label { position: sticky; left: 0; z-index: 2; width: var(--lw); flex: none; box-sizing: border-box; padding: 5px 8px; font-size: 13px; font-weight: 800; letter-spacing: .04em; color: var(--sc); background: #fff; border-left: 4px solid var(--sc); }
