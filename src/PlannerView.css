@@ -1,4 +1,4 @@
-.pl { --ink: #12314F; --line: #E3E7EB; --soft: #F4F6F8; --muted: #66727F; display: flex; flex-direction: column; gap: 12px; color: #2C3645; width: calc(100vw - 44px); max-width: none; }
+.pl { --ink: #12314F; --line: #E3E7EB; --soft: #F4F6F8; --muted: #66727F; display: flex; flex-direction: column; gap: 12px; color: #2C3645; width: max(100%, calc(100vw - 120px)); max-width: none; }
 body.pl-dragging, body.pl-dragging * { cursor: grabbing !important; user-select: none !important; }
 
 .pl-tools { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
