@@ -1,4 +1,5 @@
-.pl { --ink: #12314F; --line: #E3E7EB; --soft: #F4F6F8; --muted: #66727F; display: flex; flex-direction: column; gap: 12px; color: #2C3645; width: max(100%, calc(100vw - 120px)); max-width: none; }
+.pl { --ink: #12314F; --line: #E3E7EB; --soft: #F4F6F8; --muted: #66727F; display: flex; flex-direction: column; gap: 12px; color: #2C3645; width: max(100%, calc(100vw - 48px)); max-width: none; margin-left: min(0px, calc(50% - 50vw + 24px)); box-sizing: border-box; }
+/* ↑ 中央の細いパネルからはみ出して、画面の左右24pxを残した幅いっぱいに広げる(パネルは画面中央にある前提) */
 body.pl-dragging, body.pl-dragging * { cursor: grabbing !important; user-select: none !important; }
 
 .pl-tools { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
