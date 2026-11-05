@@ -1,5 +1,5 @@
-.pl { --ink: #12314F; --line: #E3E7EB; --soft: #F4F6F8; --muted: #66727F; display: flex; flex-direction: column; gap: 12px; color: #2C3645; width: max(100%, calc(100vw - 48px)); max-width: none; margin-left: min(0px, calc(50% - 50vw + 24px)); box-sizing: border-box; }
-/* ↑ 中央の細いパネルからはみ出して、画面の左右24pxを残した幅いっぱいに広げる(パネルは画面中央にある前提) */
+.pl { --ink: #12314F; --line: #E3E7EB; --soft: #F4F6F8; --muted: #66727F; display: flex; flex-direction: column; gap: 12px; color: #2C3645; width: calc(100vw - 110px); max-width: 100%; box-sizing: border-box; }
+/* ↑ マップ画面と同じく固定幅を指定して、外側のパネルごと画面幅に広げる(パネルの幅は中身に合わせて決まるため、%指定だと広がらない) */
 body.pl-dragging, body.pl-dragging * { cursor: grabbing !important; user-select: none !important; }
 
 .pl-tools { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
@@ -73,6 +73,7 @@ body.pl-dragging, body.pl-dragging * { cursor: grabbing !important; user-select:
 .pl-tag.warn { color: #D64550; background: #FCEBEC; }
 
 @media (max-width: 640px) {
+  .pl { width: auto; }
   .pl-head, .pl-body { grid-template-columns: 36px repeat(var(--n), minmax(0, 1fr)); }
   .pl-times div { font-size: 9.5px; padding-right: 3px; }
   .pl-block { font-size: 10.5px; padding: 1px 3px; }
