@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import "./PlannerView.css";
-// 今日タブ: 週カレンダー(平日/7日) + 今日・日付なし・期限切れのサブタスク一覧。
+// 今日タブ: カレンダー(1日/平日/7日) + 今日・日付なし・期限切れのサブタスク一覧。
 // 一覧や「時刻なし」のチップをカレンダーへドラッグで置くと、予定日・開始時刻・想定時間が入る。
 // カレンダー上の予定は Outlook と同じく、つかんで移動、上端・下端で開始/終了時刻を変えられる(30分単位)。
 const H0 = 7;
@@ -47,12 +47,12 @@ function layout(items) {
 }
 
 function loadMode() {
-  try { return localStorage.getItem("tm_planner_mode") === "week" ? "week" : "weekday"; } catch { return "weekday"; }
+  try { const m = localStorage.getItem("tm_planner_mode"); return m === "week" || m === "day" ? m : "weekday"; } catch { return "weekday"; }
 }
 
 export default function PlannerView({ projects, todayStr, ownerColorOf, onUpdateFields, onOpenSub, onToggleDone, extra }) {
   const [mode, setMode] = useState(loadMode);
-  const [weekStart, setWeekStart] = useState(() => mondayOf(todayStr));
+  const [anchor, setAnchor] = useState(todayStr); // 表示の基準日(1日表示ではその日、週表示ではその日を含む週)
   const [open, setOpen] = useState({ today: true, none: true, overdue: false });
   const [drag, setDrag] = useState(null); // 表示用: {id, date, start, dur}
   const [chipOpen, setChipOpen] = useState(() => new Set());
@@ -60,7 +60,12 @@ export default function PlannerView({ projects, todayStr, ownerColorOf, onUpdate
   const bodyRef = useRef(null);
   useEffect(() => { try { localStorage.setItem("tm_planner_mode", mode); } catch { /* ignore */ } }, [mode]);
 
-  const dates = useMemo(() => Array.from({ length: mode === "week" ? 7 : 5 }, (_, i) => addDays(weekStart, i)), [weekStart, mode]);
+  const dates = useMemo(() => {
+    if (mode === "day") return [anchor];
+    const weekStart = mondayOf(anchor);
+    return Array.from({ length: mode === "week" ? 7 : 5 }, (_, i) => addDays(weekStart, i));
+  }, [anchor, mode]);
+  const step = mode === "day" ? 1 : 7;
 
   const items = useMemo(() => {
     const out = [];
@@ -182,7 +187,9 @@ export default function PlannerView({ projects, todayStr, ownerColorOf, onUpdate
   const hours = Array.from({ length: H1 - H0 }, (_, i) => H0 + i);
   const gridH = (H1 - H0) * HH;
   const nowMin = (() => { const n = new Date(); return n.getHours() * 60 + n.getMinutes(); })();
-  const label = `${md(dates[0])}〜${md(dates[dates.length - 1])}`;
+  const label = mode === "day"
+    ? `${md(anchor)}(${WD[new Date(anchor + "T00:00:00").getDay()]})`
+    : `${md(dates[0])}〜${md(dates[dates.length - 1])}`;
 
   const block = (it, start, dur, extraCls, style) => {
     const s = it.sub;
@@ -254,12 +261,13 @@ export default function PlannerView({ projects, todayStr, ownerColorOf, onUpdate
   return (
     <div className="pl">
       <div className="pl-tools">
-        <button type="button" onClick={() => setWeekStart((w) => addDays(w, -7))} aria-label="前の週">◀</button>
-        <button type="button" onClick={() => setWeekStart(mondayOf(todayStr))}>今週</button>
-        <button type="button" onClick={() => setWeekStart((w) => addDays(w, 7))} aria-label="次の週">▶</button>
+        <button type="button" onClick={() => setAnchor((a) => addDays(a, -step))} aria-label={mode === "day" ? "前の日" : "前の週"}>◀</button>
+        <button type="button" onClick={() => setAnchor(todayStr)}>{mode === "day" ? "今日" : "今週"}</button>
+        <button type="button" onClick={() => setAnchor((a) => addDays(a, step))} aria-label={mode === "day" ? "次の日" : "次の週"}>▶</button>
         <span className="pl-label">{label}</span>
         <span className="pl-sp" />
         <div className="pl-seg" role="group" aria-label="表示する日">
+          <button type="button" className={mode === "day" ? "on" : ""} onClick={() => setMode("day")}>1日</button>
           <button type="button" className={mode === "weekday" ? "on" : ""} onClick={() => setMode("weekday")}>平日</button>
           <button type="button" className={mode === "week" ? "on" : ""} onClick={() => setMode("week")}>7日</button>
         </div>
