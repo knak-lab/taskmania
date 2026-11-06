@@ -3,11 +3,13 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.jsx'
 import AuthGate from './auth/AuthGate.jsx'
+import UpdateNotice from './UpdateNotice.jsx'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <AuthGate>
       <App />
     </AuthGate>
+    <UpdateNotice />
   </StrictMode>,
 )
