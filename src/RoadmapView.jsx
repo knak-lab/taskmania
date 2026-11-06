@@ -201,7 +201,9 @@ export default function RoadmapView({ projects, themes, onOpenPJ, onOpenTask, on
 
   const stripW = sections ? 24 : 0;
   const labelW = (wrapW && wrapW < 560 ? 120 : 200) + stripW;
-  const colW = Math.max(36, Math.floor((wrapW - labelW) / span) || 80);
+  // 月の列幅は「表示する月数」が枠に収まるように決める。スマホ縦持ちでも6ヶ月と12ヶ月で見え方が変わるよう、下限は小さめ
+  const colW = Math.max(14, Math.floor((wrapW - labelW) / span) || 80);
+  const narrowMonth = colW < 34; // 列が細いときは月名を数字だけにする
   const trackW = months.length * colW;
   const xOf = (dateStr, endOfDay) => {
     const i = months.indexOf(monthKey(dateStr));
@@ -331,8 +333,8 @@ export default function RoadmapView({ projects, themes, onOpenPJ, onOpenTask, on
                 const [y, mm] = m.split("-");
                 const showYear = i === 0 || mm === "01";
                 return (
-                  <div key={m} className={`rm-month${m === todayMonth ? " now" : ""}`} style={{ width: colW }}>
-                    {showYear && <small>{y}</small>}{Number(mm)}月
+                  <div key={m} className={`rm-month${m === todayMonth ? " now" : ""}${narrowMonth ? " narrow" : ""}`} style={{ width: colW }} title={`${y}年${Number(mm)}月`}>
+                    {narrowMonth ? Number(mm) : <>{showYear && colW >= 56 && <small>{y}</small>}{Number(mm)}月</>}
                   </div>
                 );
               })}
