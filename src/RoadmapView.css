@@ -54,7 +54,7 @@
 .rm-arrow:hover { filter: brightness(1.12); }
 
 /* 全画面(Android等は横向きに固定) */
-.rm-full { background: #fff; padding: 8px 10px; box-sizing: border-box; height: 100vh; display: flex; flex-direction: column; }
+.rm-full { position: fixed; inset: 0; z-index: 40; background: #fff; padding: 8px 10px; box-sizing: border-box; display: flex; flex-direction: column; } /* タスク編集などのポップアップ(z-index 50)はこの上に出る */
 .rm-full .rm-scroll { max-height: none; flex: 1; }
 
 /* スマホ縦持ちは横向きを促す */
@@ -101,7 +101,8 @@
 .rm-sec-strip span { position: sticky; top: 44px; align-self: flex-start; writing-mode: vertical-rl; text-orientation: upright; font-size: 13px; font-weight: 800; letter-spacing: .15em; padding: 10px 0; }
 .rm-sec-body { flex: 1; min-width: 0; }
 /* 矢羽根のドラッグ(左右の端=日程変更、真ん中=移動) */
-.rm-arrow { cursor: grab; touch-action: none; user-select: none; }
+.rm-arrow { cursor: grab; user-select: none; touch-action: pan-x pan-y; } /* スマホは全画面でないとき指でスクロールできるように */
+.rm-full .rm-arrow { touch-action: none; }
 .rm-arrow.dragging { z-index: 3; filter: brightness(1.15); cursor: grabbing; }
 .rm-rz-l, .rm-rz-r { position: absolute; top: 0; bottom: 0; width: 12px; cursor: ew-resize; z-index: 2; }
 .rm-rz-l { left: 0; }

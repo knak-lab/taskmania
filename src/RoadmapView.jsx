@@ -69,6 +69,10 @@ export default function RoadmapView({ projects, themes, onOpenPJ, onOpenTask, on
   // 矢羽根のドラッグ: 真ん中で期間ごと移動、左右の端で開始日・終了日を変える(1日単位)
   const [tdrag, setTdrag] = useState(null); // 表示用 { id, start, end }
   const tdragRef = useRef(null);
+  // 矢羽根を動かさずに離したら、続く click でタスクを開く(pointerupで開くと、スマホではそのあとのタップ判定が
+  // 開いたポップアップの背景に当たってすぐ閉じてしまうため)。
+  // スマホ(タッチ)は全画面のときだけ矢羽根を動かせる。全画面でないときはタップで開くだけにして、指で普通にスクロールできるようにする
+  const openOnClickRef = useRef(false);
   // サブタスクを開いているPJ
   const [openSubs, setOpenSubs] = useState(() => new Set());
   const toggleSubs = (id) => setOpenSubs((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
@@ -126,11 +130,23 @@ export default function RoadmapView({ projects, themes, onOpenPJ, onOpenTask, on
     return () => ro.disconnect();
   }, []);
 
+  // 全画面: ページ全体を全画面にして、ロードマップをその上に重ねる(.rm-full)。
+  // ロードマップの要素だけを全画面にすると、外側に出るタスク編集などのポップアップが見えなくなるため。
   useEffect(() => {
-    const onChange = () => setIsFull(document.fullscreenElement === rootRef.current);
+    const onChange = () => { if (!document.fullscreenElement) setIsFull(false); };
     document.addEventListener("fullscreenchange", onChange);
     return () => document.removeEventListener("fullscreenchange", onChange);
   }, []);
+  useEffect(() => {
+    if (!isFull) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden"; // 後ろのページがスクロールしないように
+    const onKey = (e) => { if (e.key === "Escape" && !document.fullscreenElement) setIsFull(false); };
+    window.addEventListener("keydown", onKey);
+    return () => { document.body.style.overflow = prev; window.removeEventListener("keydown", onKey); };
+  }, [isFull]);
+  // 全画面のまま画面を切り替えたら全画面も閉じる
+  useEffect(() => () => { if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); }, []);
 
   // テーマ順 → テーマなし の順にPJを並べ、各PJの矢羽根を重ならないレーンに振り分ける
   const { groups, months } = useMemo(() => {
@@ -233,12 +249,14 @@ export default function RoadmapView({ projects, themes, onOpenPJ, onOpenTask, on
     tdragRef.current = null;
     setTdrag(null);
     if (!d) return;
-    if (!d.active) { onOpenTask(d.pjId, d.t.id); return; } // 動かさずに離した = クリック
+    if (!d.active) { openOnClickRef.current = true; return; } // 動かさずに離した = クリック(onClickで開く)
     const p = d.preview;
     if (p && onUpdateTaskDates && (p.start !== d.t.startDate || p.end !== d.t.endDate)) onUpdateTaskDates(d.pjId, d.t.id, p.start, p.end);
   }
   function startTaskDrag(e, pjId, t) {
     if (e.button !== undefined && e.button !== 0) return;
+    openOnClickRef.current = false;
+    if (e.pointerType !== "mouse" && !isFull) { openOnClickRef.current = true; return; } // スマホで全画面でないときは動かさない
     e.stopPropagation();
     const track = e.currentTarget.closest(".rm-track");
     const kind = e.target.closest(".rm-rz-l") ? "start" : e.target.closest(".rm-rz-r") ? "end" : "move";
@@ -266,15 +284,20 @@ export default function RoadmapView({ projects, themes, onOpenPJ, onOpenTask, on
   useEffect(() => { scrollToToday(false); }, [colW]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function toggleFull() {
-    const el = rootRef.current;
-    if (document.fullscreenElement) { await document.exitFullscreen().catch(() => {}); return; }
+    if (isFull) {
+      setIsFull(false);
+      if (document.fullscreenElement) await document.exitFullscreen().catch(() => {});
+      return;
+    }
+    setIsFull(true);
+    // iPhoneなど全画面APIがない端末でも、画面いっぱいに重ねる表示にはなる
+    const el = document.documentElement;
     if (!el.requestFullscreen) return;
     await el.requestFullscreen().catch(() => {});
     // Androidなどは全画面中だけ横向きに固定できる(iPhoneは非対応なので端末を横にしてもらう)
     await screen.orientation?.lock?.("landscape").catch(() => {});
   }
 
-  const canFull = typeof document !== "undefined" && !!document.documentElement.requestFullscreen;
   const totalPJ = groups.reduce((a, g) => a + g.rows.length, 0);
 
   return (
@@ -286,7 +309,7 @@ export default function RoadmapView({ projects, themes, onOpenPJ, onOpenTask, on
           ))}
         </div>
         <button type="button" onClick={() => scrollToToday(true)}>今月へ</button>
-        {canFull && <button type="button" onClick={toggleFull}>{isFull ? "全画面を閉じる" : "⤢ 全画面"}</button>}
+        <button type="button" onClick={toggleFull}>{isFull ? "全画面を閉じる" : "⤢ 全画面"}</button>
         <span className="rm-sp" />
         <span className="rm-legend">
           {Object.values(STATUS).map((s) => <span key={s.label}><i style={{ background: s.color }} />{s.label}</span>)}
@@ -376,6 +399,7 @@ export default function RoadmapView({ projects, themes, onOpenPJ, onOpenTask, on
                           <div key={t.id} role="button" tabIndex={0} className={`rm-arrow${dragging ? " dragging" : ""}`}
                             style={{ left, width: w, top: `calc(4px + (100% - 8px) * ${lane / lanes})`, height: `calc((100% - 8px) / ${lanes} - ${lanes > 1 ? 3 : 0}px)`, "--sc": st.color, "--pct": `${tp}%` }}
                             onPointerDown={(e) => startTaskDrag(e, p.id, t)}
+                            onClick={() => { if (openOnClickRef.current) { openOnClickRef.current = false; onOpenTask(p.id, t.id); } }}
                             onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpenTask(p.id, t.id); } }}
                             title={`${t.name}　${sd.slice(5).replace("-", "/")}〜${ed.slice(5).replace("-", "/")}　${st.label} ${tp}%（端をつまんで日程変更、真ん中で移動）`}>
                             <i className="rm-rz-l" />
