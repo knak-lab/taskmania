@@ -1,4 +1,4 @@
-import { Fragment, useState, useEffect, useLayoutEffect, useRef, useMemo } from "react";
+import { Fragment, useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from "react";
 import "./RoadmapView.css";
 
 // 俯瞰画面: マップと同じ全量(テーマ → PJ)を行に、月を列にしたマトリクス。
@@ -62,6 +62,9 @@ export default function RoadmapView({ projects, themes, onOpenPJ, onOpenTask, on
   const [hover, setHover] = useState(null); // PJ名にマウスを乗せたときのネクストアクション表示 { p, x, y }
   const rootRef = useRef(null);
   const scrollRef = useRef(null);
+  // 枠(.rm-scroll)はPJが読み込まれてから現れる。現れた時点で幅を測れるよう、要素をstateでも持つ
+  const [scrollEl, setScrollEl] = useState(null);
+  const setScrollRef = useCallback((el) => { scrollRef.current = el; setScrollEl(el); }, []);
   // PJ(同じテーマ内だけ)・テーマのドラッグ並び替え。⋮⋮をつまんで動かす。マウス・タッチ共通でpointerイベントを使う。
   // 並びはマップと共通(themes/projects配列の順)
   const [drag, setDrag] = useState(null); // { kind: "pj"|"theme", id, groupId, overId, after }
@@ -122,13 +125,13 @@ export default function RoadmapView({ projects, themes, onOpenPJ, onOpenTask, on
   useEffect(() => { try { localStorage.setItem("tm_roadmap_span", String(span)); } catch { /* ignore */ } }, [span]);
 
   useLayoutEffect(() => {
-    const el = scrollRef.current;
+    const el = scrollEl;
     if (!el) return;
     const ro = new ResizeObserver(() => setWrapW(el.clientWidth));
     ro.observe(el);
     setWrapW(el.clientWidth);
     return () => ro.disconnect();
-  }, []);
+  }, [scrollEl]);
 
   // 全画面: ページ全体を全画面にして、ロードマップをその上に重ねる(.rm-full)。
   // ロードマップの要素だけを全画面にすると、外側に出るタスク編集などのポップアップが見えなくなるため。
@@ -202,7 +205,7 @@ export default function RoadmapView({ projects, themes, onOpenPJ, onOpenTask, on
   const stripW = sections ? 24 : 0;
   const labelW = (wrapW && wrapW < 560 ? 120 : 200) + stripW;
   // 月の列幅は「表示する月数」が枠に収まるように決める。スマホ縦持ちでも6ヶ月と12ヶ月で見え方が変わるよう、下限は小さめ
-  const colW = Math.max(14, Math.floor((wrapW - labelW) / span) || 80);
+  const colW = wrapW ? Math.max(14, Math.floor((wrapW - labelW) / span)) : 80;
   const narrowMonth = colW < 34; // 列が細いときは月名を数字だけにする
   const trackW = months.length * colW;
   const xOf = (dateStr, endOfDay) => {
@@ -322,7 +325,7 @@ export default function RoadmapView({ projects, themes, onOpenPJ, onOpenTask, on
       {totalPJ === 0 ? (
         <p className="rm-empty">表示するPJがない。マップでテーマ・PJ・タスクを作ると、ここに並ぶ。</p>
       ) : (
-        <div className="rm-scroll" ref={scrollRef}>
+        <div className="rm-scroll" ref={setScrollRef}>
           <div className="rm-inner" style={{ width: labelW + trackW, "--lw": `${labelW - stripW}px`, "--sw": `${stripW}px`, "--cw": `${colW}px` }}>
             <div className="rm-weeks" style={{ left: labelW, width: trackW }}>
               {weekXs.map((x) => <i key={x} style={{ left: x }} />)}
