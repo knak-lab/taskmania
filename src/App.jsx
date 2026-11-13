@@ -5,6 +5,7 @@ import { loadAppData, loadRev, loadKamoTodos, saveProjects as gasSave, saveMoyam
 import MindMapView from "./MindMapView";
 import RoadmapView from "./RoadmapView";
 import PlannerView from "./PlannerView";
+import { deviceGet, deviceSet } from "./auth/deviceStore";
 
 const TOP_TABS = [
   { key: "総合", label: "総合", color: "#2C3645" },
@@ -1813,11 +1814,13 @@ export default function App() {
   useEffect(() => { try { localStorage.setItem("tm_main_view", mainView); } catch { /* ignore */ } }, [mainView]);
 
   // インボックス(クイックキャプチャ)。試作中は端末ローカルのみ(GAS同期は後日)
+  // 保存先は auth/deviceStore.js（指紋・顔認証の金庫が使えれば暗号化して保存）
   const [inbox, setInbox] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("tm_inbox") || "[]"); } catch { return []; }
+    const v = deviceGet("tm_inbox", []);
+    return Array.isArray(v) ? v : [];
   });
   const [inboxText, setInboxText] = useState("");
-  useEffect(() => { try { localStorage.setItem("tm_inbox", JSON.stringify(inbox)); } catch { /* ignore */ } }, [inbox]);
+  useEffect(() => { deviceSet("tm_inbox", inbox); }, [inbox]);
   function addInboxItem(e) {
     if (e && e.preventDefault) e.preventDefault();
     const t = inboxText.trim();
@@ -1828,15 +1831,10 @@ export default function App() {
   function updateInboxItem(id, text) { setInbox((prev) => prev.map((n) => (n.id === id ? { ...n, text } : n))); }
   function removeInboxItem(id) { setInbox((prev) => prev.filter((n) => n.id !== id)); }
 
-  const [runningTarget, setRunningTarget] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("tm_running_target") || "null"); } catch { return null; }
-  });
+  const [runningTarget, setRunningTarget] = useState(() => deviceGet("tm_running_target", null));
   const [, setTick] = useState(0);
 
-  useEffect(() => {
-    if (runningTarget) localStorage.setItem("tm_running_target", JSON.stringify(runningTarget));
-    else localStorage.removeItem("tm_running_target");
-  }, [runningTarget]);
+  useEffect(() => { deviceSet("tm_running_target", runningTarget || null); }, [runningTarget]);
 
   useEffect(() => {
     if (!runningTarget || runningTarget.paused) return;
