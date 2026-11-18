@@ -46,12 +46,23 @@ function layout(items) {
   return out;
 }
 
+const NO_ASSIGNEE = "__none__";
+function loadAssigneeFilter() {
+  try { return localStorage.getItem("tm_planner_assignee") || ""; } catch { return ""; }
+}
+// 担当はサブタスク→タスク→PJの順で、最初に付いているものを使う(新規作成時に親の担当を引き継ぐのと同じ考え方)
+const effAssignees = (p, t, s) => (s.assignees?.length ? s.assignees : t.assignees?.length ? t.assignees : p.assignees || []);
+
 function loadMode() {
   try { const m = localStorage.getItem("tm_planner_mode"); return m === "week" || m === "day" ? m : "weekday"; } catch { return "weekday"; }
 }
 
-export default function PlannerView({ projects, todayStr, ownerColorOf, onUpdateFields, onOpenSub, onToggleDone, extra }) {
+export default function PlannerView({ projects, todayStr, ownerColorOf, onUpdateFields, onOpenSub, onToggleDone, extra, assignees }) {
   const [mode, setMode] = useState(loadMode);
+  // 担当で絞り込み("" = 全員、NO_ASSIGNEE = 担当なし)。assigneesを渡されたタブ(kkr>work)だけで使う
+  const [who, setWho] = useState(loadAssigneeFilter);
+  useEffect(() => { try { localStorage.setItem("tm_planner_assignee", who); } catch { /* ignore */ } }, [who]);
+  const whoActive = assignees ? who : "";
   const [anchor, setAnchor] = useState(todayStr); // 表示の基準日(1日表示ではその日、週表示ではその日を含む週)
   const [open, setOpen] = useState({ today: true, none: true, overdue: false });
   const [drag, setDrag] = useState(null); // 表示用: {id, date, start, dur}
@@ -72,11 +83,17 @@ export default function PlannerView({ projects, todayStr, ownerColorOf, onUpdate
     for (const p of projects) {
       if (p.status) continue; // 保留・完了PJは出さない
       for (const t of p.tasks) {
-        for (const s of t.subtasks) out.push({ pjId: p.id, pjName: (p.goalTarget ? "☆" : "") + p.name, taskId: t.id, taskName: t.name, owner: p.owner, sub: s });
+        for (const s of t.subtasks) {
+          if (whoActive) {
+            const a = effAssignees(p, t, s);
+            if (whoActive === NO_ASSIGNEE ? a.length > 0 : !a.includes(whoActive)) continue;
+          }
+          out.push({ pjId: p.id, pjName: (p.goalTarget ? "☆" : "") + p.name, taskId: t.id, taskName: t.name, owner: p.owner, sub: s });
+        }
       }
     }
     return out;
-  }, [projects]);
+  }, [projects, whoActive]);
   const byDate = useMemo(() => {
     const m = {};
     items.forEach((it) => { if (it.sub.scheduledDate) (m[it.sub.scheduledDate] ||= []).push(it); });
@@ -266,6 +283,15 @@ export default function PlannerView({ projects, todayStr, ownerColorOf, onUpdate
         <button type="button" onClick={() => setAnchor((a) => addDays(a, step))} aria-label={mode === "day" ? "次の日" : "次の週"}>▶</button>
         <span className="pl-label">{label}</span>
         <span className="pl-sp" />
+        {assignees && (
+          <div className="pl-seg pl-who" role="group" aria-label="担当で絞り込み">
+            <button type="button" className={!whoActive ? "on" : ""} onClick={() => setWho("")}>全員</button>
+            {[...assignees, ...(whoActive && whoActive !== NO_ASSIGNEE && !assignees.includes(whoActive) ? [whoActive] : [])].map((n) => (
+              <button type="button" key={n} className={whoActive === n ? "on" : ""} onClick={() => setWho(n)}>{n}</button>
+            ))}
+            <button type="button" className={whoActive === NO_ASSIGNEE ? "on" : ""} onClick={() => setWho(NO_ASSIGNEE)}>担当なし</button>
+          </div>
+        )}
         <div className="pl-seg" role="group" aria-label="表示する日">
           <button type="button" className={mode === "day" ? "on" : ""} onClick={() => setMode("day")}>1日</button>
           <button type="button" className={mode === "weekday" ? "on" : ""} onClick={() => setMode("weekday")}>平日</button>

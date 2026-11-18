@@ -12,6 +12,8 @@ body.pl-dragging, body.pl-dragging * { cursor: grabbing !important; user-select:
 .pl-seg button:last-child { border-radius: 0 6px 6px 0; }
 .pl-seg button + button { border-left: 0; }
 .pl-seg button.on { background: var(--ink); color: #fff; }
+.pl-who button.on { background: #F39800; border-color: #F39800; }
+.pl-who + .pl-seg { margin-left: 6px; }
 
 .pl-grid { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: #fff; }
 .pl-head, .pl-body { display: grid; grid-template-columns: 48px repeat(var(--n), minmax(0, 1fr)); }

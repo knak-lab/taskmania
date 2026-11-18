@@ -3662,6 +3662,7 @@ export default function App() {
               onUpdateFields={updateSubtaskFields}
               onOpenSub={(pjId, taskId, subId) => setCalSubtaskModal({ pjId, taskId, subId })}
               onToggleDone={toggleSubtaskDone}
+              assignees={showWorkSummary ? assignees : undefined}
               extra={(
                 <section style={styles.todayView}>
                   <div style={styles.sectionTitleRow}>
