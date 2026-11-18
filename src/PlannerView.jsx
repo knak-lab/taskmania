@@ -73,9 +73,13 @@ export default function PlannerView({ projects, todayStr, ownerColorOf, onUpdate
   useEffect(() => { try { localStorage.setItem("tm_planner_outlook", showOl ? "1" : "0"); } catch { /* ignore */ } }, [showOl]);
   const olByDate = useMemo(() => {
     const m = {};
-    if (outlook && showOl) outlook.events.forEach((ev) => { (m[ev.date] ||= []).push(ev); });
+    // 担当ボタンと連動: 全員なら全部、担当者を選んでいたらその人の予定表だけ(担当なしでは出さない)
+    if (outlook && showOl) outlook.events.forEach((ev) => {
+      if (whoActive && whoActive !== (ev.who || "")) return;
+      (m[ev.date] ||= []).push(ev);
+    });
     return m;
-  }, [outlook, showOl]);
+  }, [outlook, showOl, whoActive]);
   const [anchor, setAnchor] = useState(todayStr); // 表示の基準日(1日表示ではその日、週表示ではその日を含む週)
   const [open, setOpen] = useState({ today: true, none: true, overdue: false });
   const [drag, setDrag] = useState(null); // 表示用: {id, date, start, dur}

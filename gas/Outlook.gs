@@ -5,9 +5,11 @@
 //  指定期間の予定を { date, start, end, title, location } の形で返す。
 //  画面は kkr > work のカレンダーに表示するだけで、Outlook へは書き込まない。
 //
-//  スクリプトプロパティ
-//    OUTLOOK_ICS_URL : 公開した ICS のリンク（https://outlook.office365.com/owa/calendar/…/calendar.ics）
-//                      このリンクを知っていれば誰でも予定を読めるので、画面側のコードには置かない
+//  スクリプトプロパティ（ICS のリンクは知っていれば誰でも予定を読めるので、画面側のコードには置かない）
+//    OUTLOOK_ICS_URL   : 公開した ICS のリンク（https://outlook.office365.com/owa/calendar/…/calendar.ics）
+//    OUTLOOK_ICS_OWNER : 上のリンクが誰の予定表か（担当者名。未設定なら「永井」）
+//    OUTLOOK_CALENDARS : ほかの人の予定表。1行に「担当者名=ICSのリンク」（例: 田之上=https://…/calendar.ics）
+//  画面では担当ボタンと連動し、「全員」かその担当者を選んでいるときだけ表示する
 //
 //  時刻はすべて日本時間として扱う（UTC 指定の時刻だけ +9 時間する）。
 //  ICS は1日ごとの区切りに分け、繰り返し予定（RRULE）も展開する。
@@ -18,36 +20,64 @@ const OUTLOOK_CACHE_SEC_ = 600 // 同じ期間の問い合わせは10分間キ�
 const DAY_MS_ = 24 * 60 * 60 * 1000
 const JST_MS_ = 9 * 60 * 60 * 1000
 
+// 読む予定表の一覧 [{ who, url }]。who は担当者名（画面の担当ボタンと同じ名前）
+function outlookCalendars_() {
+  const props = PropertiesService.getScriptProperties()
+  const list = []
+  const first = String(props.getProperty('OUTLOOK_ICS_URL') || '').trim()
+  if (first) list.push({ who: String(props.getProperty('OUTLOOK_ICS_OWNER') || '永井').trim(), url: first })
+  String(props.getProperty('OUTLOOK_CALENDARS') || '').split(/[\r\n]+/).forEach(function (line) {
+    const eq = line.indexOf('=')
+    if (eq <= 0) return
+    const who = line.slice(0, eq).trim()
+    const url = line.slice(eq + 1).trim()
+    if (who && /^(https?|webcal):\/\//i.test(url)) list.push({ who: who, url: url })
+  })
+  return list
+}
+
 function outlookEvents_(from, to) {
-  const url = String(PropertiesService.getScriptProperties().getProperty('OUTLOOK_ICS_URL') || '').trim()
-  if (!url) return { events: [], outlook: 'unset' }
+  const cals = outlookCalendars_()
+  if (!cals.length) return { events: [], outlook: 'unset' }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(from)) || !/^\d{4}-\d{2}-\d{2}$/.test(String(to))) return { events: [], outlook: 'bad_range' }
   const cache = CacheService.getScriptCache()
-  const key = 'ol_' + from + '_' + to
+  const key = 'ol2_' + from + '_' + to + '_' + Utilities.base64EncodeWebSafe(cals.map(function (c) { return c.who }).join(','), Utilities.Charset.UTF_8)
   const hit = cache.get(key)
-  if (hit) return { events: JSON.parse(hit), outlook: 'ok' }
-  let res
-  try {
-    res = UrlFetchApp.fetch(url.replace(/^webcal:/i, 'https:'), { muteHttpExceptions: true, followRedirects: true })
-  } catch (e) {
-    console.warn('[outlook] 取得に失敗: ' + e)
-    return { events: [], outlook: 'fetch_failed' }
-  }
-  if (res.getResponseCode() !== 200) {
-    console.warn('[outlook] HTTP ' + res.getResponseCode())
-    return { events: [], outlook: 'fetch_failed' }
-  }
-  const events = expandIcs_(res.getContentText('UTF-8'), dateStrToMs_(from), dateStrToMs_(to) + DAY_MS_)
-  try { cache.put(key, JSON.stringify(events), OUTLOOK_CACHE_SEC_) } catch (_) { /* 大きすぎるときはキャッシュしない */ }
-  return { events: events, outlook: 'ok' }
+  if (hit) return JSON.parse(hit)
+  const events = []
+  let failed = false
+  cals.forEach(function (c) {
+    let res
+    try {
+      res = UrlFetchApp.fetch(c.url.replace(/^webcal:/i, 'https:'), { muteHttpExceptions: true, followRedirects: true })
+    } catch (e) {
+      console.warn('[outlook] ' + c.who + ' の取得に失敗: ' + e)
+      failed = true
+      return
+    }
+    if (res.getResponseCode() !== 200) {
+      console.warn('[outlook] ' + c.who + ' HTTP ' + res.getResponseCode())
+      failed = true
+      return
+    }
+    expandIcs_(res.getContentText('UTF-8'), dateStrToMs_(from), dateStrToMs_(to) + DAY_MS_).forEach(function (ev) {
+      ev.who = c.who
+      ev.id = c.who + '|' + ev.id
+      events.push(ev)
+    })
+  })
+  const result = { events: events, outlook: failed ? 'fetch_failed' : 'ok' }
+  if (!failed) { try { cache.put(key, JSON.stringify(result), OUTLOOK_CACHE_SEC_) } catch (_) { /* 大きすぎるときはキャッシュしない */ } }
+  return result
 }
 
 // GASエディタで実行して、ICSリンクが読めるか・何件取れるかを確かめる
 function outlookSelfCheck() {
   const today = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd')
   const r = outlookEvents_(today, Utilities.formatDate(new Date(Date.now() + 14 * DAY_MS_), 'Asia/Tokyo', 'yyyy-MM-dd'))
+  Logger.log('予定表: ' + outlookCalendars_().map(function (c) { return c.who }).join(', '))
   Logger.log('状態: ' + r.outlook + ' / 今日から2週間の予定: ' + r.events.length + '件')
-  r.events.slice(0, 10).forEach(function (e) { Logger.log(e.date + ' ' + (e.start || '終日') + ' ' + e.title) })
+  r.events.slice(0, 10).forEach(function (e) { Logger.log(e.who + ' ' + e.date + ' ' + (e.start || '終日') + ' ' + e.title) })
 }
 
 // ---- ここから ICS の読み取り ----
