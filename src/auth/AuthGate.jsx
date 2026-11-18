@@ -37,8 +37,8 @@ const setSkippedPasskey = (v) => {
 
 // アプリ全体を包むゲート。
 //  ・初回：Googleでログイン → 登録メールか確認 → 指紋・顔認証（パスキー）を登録 → 開く
-//  ・2回目以降：指紋・顔認証で開く。最後の操作から1時間以内なら認証なしで開く
-//  ・無操作1時間で鍵をかける（vault.js）。鍵がかかるとアプリ本体を画面から外す
+//  ・2回目以降：指紋・顔認証で開く。最後の操作から4時間以内なら認証なしで開く
+//  ・無操作4時間で鍵をかける（vault.js）。鍵がかかるとアプリ本体を画面から外す
 //  ・開いている間にGoogleのログインが切れたら、画面の上にログイン画面を重ねる
 export default function AuthGate({ children }) {
   const [auth, setAuth] = useState(getAuthState())
@@ -155,7 +155,7 @@ function SetupScreen({ auth }) {
     <Screen>
       <p style={s.title}>指紋・顔認証で開く</p>
       <p style={s.lead}>
-        次回から指紋・顔認証だけで開けるようにします。{DATA_LABEL}は、この認証でしか開けない鍵で暗号化して端末に保存するので、開くのも速くなります。最後の操作から1時間たつと鍵がかかります。
+        次回から指紋・顔認証だけで開けるようにします。{DATA_LABEL}は、この認証でしか開けない鍵で暗号化して端末に保存するので、開くのも速くなります。最後の操作から4時間たつと鍵がかかります。
       </p>
       <button type="button" style={s.primary} disabled={busy} onClick={adopt}>
         {busy ? '確認中…' : 'ほかのアプリと同じ指紋・顔認証を使う'}

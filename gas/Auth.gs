@@ -36,9 +36,67 @@ function allowedEmails_() {
     .filter(Boolean)
 }
 
-// 正しいIDトークンなら メールアドレス、だめなら null を返す
+// =============================================================
+//  ログインの持ち時間（セッション）
+//    Google の IDトークンは約1時間で切れるため、そのままだと1時間ごとにログインし直しになる。
+//    IDトークンが通ったら、GAS が署名した「入場券」（SESSION_TTL_SEC_ 有効）を返し、
+//    画面は以後それを id_token の代わりに送る。署名の鍵はスクリプトプロパティ SESSION_SECRET
+//    （無ければ自動で作る。消す・変えると発行済みの入場券はすべて無効になり、ログインし直しになる）
+//    入場券でも毎回 ALLOWED_EMAILS を確かめるので、許可リストから外せばすぐ使えなくなる。
+// =============================================================
+const SESSION_TTL_SEC_ = 4 * 60 * 60
+const SESSION_PREFIX_ = 'tms1.'
+let ISSUED_SESSION_ = ''
+
+function sessionSecret_() {
+  const props = PropertiesService.getScriptProperties()
+  let secret = String(props.getProperty('SESSION_SECRET') || '')
+  if (secret.length < 32) {
+    secret = Utilities.getUuid() + Utilities.getUuid()
+    props.setProperty('SESSION_SECRET', secret)
+  }
+  return secret
+}
+
+function signSession_(body) {
+  return Utilities.base64EncodeWebSafe(Utilities.computeHmacSha256Signature(body, sessionSecret_()))
+}
+
+function issueSession_(email) {
+  const exp = Math.floor(Date.now() / 1000) + SESSION_TTL_SEC_
+  const body = Utilities.base64EncodeWebSafe(JSON.stringify({ e: email, x: exp }), Utilities.Charset.UTF_8)
+  return SESSION_PREFIX_ + body + '.' + signSession_(body)
+}
+
+function verifySession_(token) {
+  const parts = token.slice(SESSION_PREFIX_.length).split('.')
+  if (parts.length !== 2) return authFail_('login_required', '入場券の形が不正')
+  const expected = signSession_(parts[0])
+  const sig = parts[1]
+  if (sig.length !== expected.length) return authFail_('login_required', '入場券の署名が不正')
+  let diff = 0
+  for (let i = 0; i < expected.length; i++) diff |= expected.charCodeAt(i) ^ sig.charCodeAt(i)
+  if (diff !== 0) return authFail_('login_required', '入場券の署名が不正')
+  let info
+  try { info = JSON.parse(Utilities.newBlob(Utilities.base64DecodeWebSafe(parts[0])).getDataAsString('UTF-8')) } catch (_) { return authFail_('login_required', '入場券を読めない') }
+  if (!info || !(Number(info.x) > Math.floor(Date.now() / 1000))) return authFail_('login_required', '入場券の期限切れ')
+  const email = String(info.e || '').toLowerCase()
+  if (allowedEmails_().indexOf(email) < 0) return authFail_('not_allowed', '許可リスト外: ' + email)
+  return email
+}
+
+// 正しいIDトークン（または入場券）なら メールアドレス、だめなら null を返す。
+// Google の IDトークンで通ったときは、返事に付ける入場券を ISSUED_SESSION_ に用意する（jsonResponse_ が付ける）
 function verifyIdToken_(idToken) {
   AUTH_FAIL_CODE_ = ''
+  ISSUED_SESSION_ = ''
+  if (typeof idToken === 'string' && idToken.indexOf(SESSION_PREFIX_) === 0 && idToken.length <= 4096) return verifySession_(idToken)
+  const email = verifyGoogleIdToken_(idToken)
+  if (email) ISSUED_SESSION_ = issueSession_(email)
+  return email
+}
+
+function verifyGoogleIdToken_(idToken) {
   if (!idToken || typeof idToken !== 'string' || idToken.length > 4096) return authFail_('login_required')
   const clientId = String(PropertiesService.getScriptProperties().getProperty('GOOGLE_CLIENT_ID') || '').trim()
   const allowed = allowedEmails_()

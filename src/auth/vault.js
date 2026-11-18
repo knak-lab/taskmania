@@ -17,7 +17,7 @@
 
 import { APP_ID } from './appConfig'
 
-export const LOCK_AFTER_MS = 60 * 60 * 1000 // 無操作でこの時間たったら鍵をかける
+export const LOCK_AFTER_MS = 4 * 60 * 60 * 1000 // 無操作でこの時間たったら鍵をかける
 
 const DB_NAME = `${APP_ID}-vault`
 const LAST_ACTIVE_KEY = `${APP_ID}:vault:lastActive`

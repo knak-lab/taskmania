@@ -620,6 +620,8 @@ function writeRowsReplacing_(sheet, rows, numCols) {
 }
 
 function jsonResponse_(obj) {
+  // Googleログインで通った返事には入場券（Auth.gs）を添える。画面は以後これで4時間ログインなしで使える
+  if (ISSUED_SESSION_ && obj && typeof obj === "object" && !Array.isArray(obj) && obj.ok !== false) obj = Object.assign({}, obj, { session_token: ISSUED_SESSION_ });
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
 }
 

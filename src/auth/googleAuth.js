@@ -6,8 +6,11 @@
 //  ・GAS 側で「本物のトークンか」「登録されたメールか」を確認する
 //    → サイトのJSを読まれても、データにはアクセスできない
 //
+//  IDトークンが通ると GAS が「入場券」（4時間有効、GAS が署名）を返すので、以後はそれを送る。
+//  → Googleログインし直しは4時間に1回で済む（Google の IDトークン自体は約1時間で切れる）
+//
 //  IDトークンは他アプリと共有しない。このアプリの金庫（vault）に暗号化して置き、
-//  鍵がかかったら（無操作1時間など）メモリからも消す。
+//  鍵がかかったら（無操作4時間など）メモリからも消す。
 //  同じアカウントで自動ログインできるよう、前回のメールを login_hint に使う。
 // =============================================================
 
@@ -16,7 +19,10 @@ import { vaultGet, vaultSet, vaultRemove, subscribeVault, getVaultState } from '
 export const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || ''
 
 const VAULT_TOKEN_KEY = 'google:idToken'
+const VAULT_SESSION_KEY = 'gas:session'
+const SESSION_PREFIX = 'tms1.'
 let memToken = '' // 金庫を開く前（初回ログイン直後）だけ使う
+let memSession = ''
 const GIS_SRC = 'https://accounts.google.com/gsi/client'
 const EXPIRY_MARGIN_SEC = 120
 
@@ -77,9 +83,33 @@ function decodePayload(token) {
 }
 
 // 鍵がかかったらトークンも忘れる
-subscribeVault((v) => { if (v.status !== 'unlocked') memToken = '' })
+subscribeVault((v) => { if (v.status !== 'unlocked') { memToken = ''; memSession = '' } })
+
+// GAS の入場券（tms1.<本文>.<署名>）。本文の期限とメールだけ読む（確かめるのはサーバー）
+function readSessionToken() {
+  const token = (getVaultState().status === 'unlocked' && vaultGet(VAULT_SESSION_KEY)) || memSession
+  if (!token || !token.startsWith(SESSION_PREFIX)) return null
+  try {
+    const part = token.slice(SESSION_PREFIX.length).split('.')[0].replace(/-/g, '+').replace(/_/g, '/')
+    const info = JSON.parse(decodeURIComponent(escape(atob(part))))
+    if (!info || !(Number(info.x) - EXPIRY_MARGIN_SEC > Date.now() / 1000)) return null
+    return { token, email: info.e || '' }
+  } catch {
+    return null
+  }
+}
+
+function storeSession(token) {
+  if (typeof token !== 'string' || !token.startsWith(SESSION_PREFIX)) return
+  memSession = token
+  if (getVaultState().status === 'unlocked') vaultSet(VAULT_SESSION_KEY, token)
+}
 
 function readStoredToken() {
+  return readSessionToken() || readGoogleToken()
+}
+
+function readGoogleToken() {
   const token = (getVaultState().status === 'unlocked' && vaultGet(VAULT_TOKEN_KEY)) || memToken
   if (!token) return null
   const payload = decodePayload(token)
@@ -96,11 +126,14 @@ function storeToken(token) {
 // 金庫を開いたら、初回ログインで受け取ったトークンを金庫へ移す
 export function persistTokenToVault() {
   if (memToken && getVaultState().status === 'unlocked') vaultSet(VAULT_TOKEN_KEY, memToken)
+  if (memSession && getVaultState().status === 'unlocked') vaultSet(VAULT_SESSION_KEY, memSession)
 }
 
 function clearStoredToken() {
   memToken = ''
+  memSession = ''
   try { vaultRemove(VAULT_TOKEN_KEY) } catch { /* noop */ }
+  try { vaultRemove(VAULT_SESSION_KEY) } catch { /* noop */ }
 }
 
 function loadGis() {
@@ -187,8 +220,9 @@ export async function requireIdToken() {
 
 // 保存済みの有効なIDトークンを返す（なければ null）。ログイン画面は出さない。
 // 他アプリのデータをついでに読むときなど、失敗しても困らない読み込みで使う。
+// 他アプリには入場券が通じないので、Google の IDトークン（ログインから約1時間）だけを返す。
 export function peekIdToken() {
-  const stored = readStoredToken()
+  const stored = readGoogleToken()
   return stored ? stored.token : null
 }
 
@@ -244,11 +278,13 @@ function rejectionCode(json) {
 export async function withIdToken(fn) {
   const token = await requireIdToken()
   let json = await fn(token)
+  if (json && json.session_token) storeSession(json.session_token)
   let code = rejectionCode(json)
   if (!code) return json
   handleRejection(code)
   const retryToken = await requireIdToken()
   json = await fn(retryToken)
+  if (json && json.session_token) storeSession(json.session_token)
   code = rejectionCode(json)
   if (code) {
     handleRejection(code)
