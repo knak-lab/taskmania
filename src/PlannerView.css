@@ -14,6 +14,12 @@ body.pl-dragging, body.pl-dragging * { cursor: grabbing !important; user-select:
 .pl-seg button.on { background: var(--ink); color: #fff; }
 .pl-who button.on { background: #F39800; border-color: #F39800; }
 .pl-who + .pl-seg { margin-left: 6px; }
+.pl-tools > .pl-ol-toggle { border-color: #0F6CBD; color: #0F6CBD; }
+.pl-tools > .pl-ol-toggle.on { background: #0F6CBD; color: #fff; }
+.pl-tools > .pl-ol-toggle.warn { border-color: #D64550; }
+/* Outlook の予定: 薄い青地に青の縁取りで、タスク(塗りつぶし)と見分ける。動かせない */
+.pl-block.ol { background: #EAF3FC; color: #0B4F8C; border: 1px solid #9CC3E8; border-left: 4px solid #0F6CBD; cursor: default; box-shadow: none; }
+.pl-chip.ol { background: #EAF3FC; color: #0B4F8C; border: 1px solid #9CC3E8; border-left: 3px solid #0F6CBD; cursor: default; }
 
 .pl-grid { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: #fff; }
 .pl-head, .pl-body { display: grid; grid-template-columns: 48px repeat(var(--n), minmax(0, 1fr)); }

@@ -53,16 +53,29 @@ function loadAssigneeFilter() {
 // 担当はサブタスク→タスク→PJの順で、最初に付いているものを使う(新規作成時に親の担当を引き継ぐのと同じ考え方)
 const effAssignees = (p, t, s) => (s.assignees?.length ? s.assignees : t.assignees?.length ? t.assignees : p.assignees || []);
 
+function loadShowOutlook() {
+  try { return localStorage.getItem("tm_planner_outlook") !== "0"; } catch { return true; }
+}
+const OUTLOOK_STATUS = { unset: "Outlookのリンクが未設定です", fetch_failed: "Outlookの予定を読み込めませんでした", bad_range: "Outlookの予定を読み込めませんでした" };
+
 function loadMode() {
   try { const m = localStorage.getItem("tm_planner_mode"); return m === "week" || m === "day" ? m : "weekday"; } catch { return "weekday"; }
 }
 
-export default function PlannerView({ projects, todayStr, ownerColorOf, onUpdateFields, onOpenSub, onToggleDone, extra, assignees }) {
+export default function PlannerView({ projects, todayStr, ownerColorOf, onUpdateFields, onOpenSub, onToggleDone, extra, assignees, outlook }) {
   const [mode, setMode] = useState(loadMode);
   // 担当で絞り込み("" = 全員、NO_ASSIGNEE = 担当なし)。assigneesを渡されたタブ(kkr>work)だけで使う
   const [who, setWho] = useState(loadAssigneeFilter);
   useEffect(() => { try { localStorage.setItem("tm_planner_assignee", who); } catch { /* ignore */ } }, [who]);
   const whoActive = assignees ? who : "";
+  // Outlook の予定(読み取り専用)。outlook を渡されたタブ(kkr>work)だけ。表示/非表示は端末ごとに覚える
+  const [showOl, setShowOl] = useState(loadShowOutlook);
+  useEffect(() => { try { localStorage.setItem("tm_planner_outlook", showOl ? "1" : "0"); } catch { /* ignore */ } }, [showOl]);
+  const olByDate = useMemo(() => {
+    const m = {};
+    if (outlook && showOl) outlook.events.forEach((ev) => { (m[ev.date] ||= []).push(ev); });
+    return m;
+  }, [outlook, showOl]);
   const [anchor, setAnchor] = useState(todayStr); // 表示の基準日(1日表示ではその日、週表示ではその日を含む週)
   const [open, setOpen] = useState({ today: true, none: true, overdue: false });
   const [drag, setDrag] = useState(null); // 表示用: {id, date, start, dur}
@@ -231,6 +244,28 @@ export default function PlannerView({ projects, todayStr, ownerColorOf, onUpdate
     );
   };
 
+  // Outlook の予定(動かせない・押しても何もしない)。表示範囲(7:00〜20:00)の外にかかる分は端に寄せて切る
+  const olBlock = (ev, start, end, style) => {
+    const s0 = clamp(start, H0 * 60, H1 * 60 - 15);
+    const e0 = clamp(end, s0 + 15, H1 * 60);
+    const dur = e0 - s0;
+    const time = `${ev.start}〜${ev.end}`;
+    return (
+      <div key={ev.id} className="pl-block ol" style={{ top: ((s0 - H0 * 60) / 60) * HH, height: Math.max(14, (dur / 60) * HH), ...style }}
+        title={`Outlook ${time} ${ev.title}${ev.location ? `（${ev.location}）` : ""}`}>
+        {dur <= 30 ? (
+          <div className="pl-block-n"><span className="pl-block-t">{ev.start} </span>{ev.title}</div>
+        ) : (
+          <>
+            <div className="pl-block-t">{time}</div>
+            <div className="pl-block-n">{ev.title}</div>
+          </>
+        )}
+        {dur >= 45 && ev.location && <div className="pl-block-p">{ev.location}</div>}
+      </div>
+    );
+  };
+
   const section = (key, title, list, opts = {}) => {
     const groups = [];
     const idx = {};
@@ -283,6 +318,12 @@ export default function PlannerView({ projects, todayStr, ownerColorOf, onUpdate
         <button type="button" onClick={() => setAnchor((a) => addDays(a, step))} aria-label={mode === "day" ? "次の日" : "次の週"}>▶</button>
         <span className="pl-label">{label}</span>
         <span className="pl-sp" />
+        {outlook && (
+          <button type="button" className={`pl-ol-toggle${showOl ? " on" : ""}${outlook.status !== "ok" ? " warn" : ""}`} onClick={() => setShowOl((v) => !v)}
+            aria-pressed={showOl} title={OUTLOOK_STATUS[outlook.status] || (showOl ? "Outlookの予定を隠す" : "Outlookの予定を表示")}>
+            Outlook{outlook.status !== "ok" ? " ⚠" : ""}
+          </button>
+        )}
         {assignees && (
           <div className="pl-seg pl-who" role="group" aria-label="担当で絞り込み">
             <button type="button" className={!whoActive ? "on" : ""} onClick={() => setWho("")}>全員</button>
@@ -310,6 +351,9 @@ export default function PlannerView({ projects, todayStr, ownerColorOf, onUpdate
             return (
               <div key={d} className={`pl-dayh${d === todayStr ? " today" : ""}${dt.getDay() === 0 ? " sun" : dt.getDay() === 6 ? " sat" : ""}`}>
                 <div className="pl-dayh-d">{md(d)}<small>({WD[dt.getDay()]})</small></div>
+                {(olByDate[d] || []).filter((ev) => !ev.start).map((ev) => (
+                  <div key={ev.id} className="pl-chip ol" title={`Outlook（終日） ${ev.title}${ev.location ? `（${ev.location}）` : ""}`}>{ev.title}</div>
+                ))}
                 {shown.map((it) => (
                   <div key={it.sub.id} className={`pl-chip${it.sub.done ? " done" : ""}${drag?.id === it.sub.id ? " dragging" : ""}`} style={{ "--oc": ownerColorOf(it.owner) }}
                     onPointerDown={(e) => startDrag(e, it, "move")} title={`${it.sub.text}（時刻なし。下へドラッグで時間を決める）`}>
@@ -330,17 +374,27 @@ export default function PlannerView({ projects, todayStr, ownerColorOf, onUpdate
             {hours.map((h) => <div key={h} style={{ height: HH }}>{h}:00</div>)}
           </div>
           {dates.map((d) => {
-            const timed = layout((byDate[d] || []).filter((it) => it.sub.startTime).map((it) => {
-              const start = toMin(it.sub.startTime);
-              return { it, start, end: start + durOf(it.sub) };
-            }));
+            const timed = layout([
+              ...(byDate[d] || []).filter((it) => it.sub.startTime).map((it) => {
+                const start = toMin(it.sub.startTime);
+                return { it, start, end: start + durOf(it.sub) };
+              }),
+              ...(olByDate[d] || []).filter((ev) => ev.start).map((ev) => {
+                const start = toMin(ev.start);
+                return { ev, start, end: Math.max(start + 15, toMin(ev.end)) };
+              }),
+            ]);
             return (
               <div key={d} className={`pl-col${d === todayStr ? " today" : ""}`} data-pl-date={d}>
                 {hours.map((h) => <div key={h} className="pl-hline" style={{ top: (h - H0) * HH }} />)}
                 {hours.map((h) => <div key={`${h}h`} className="pl-hline half" style={{ top: (h - H0 + 0.5) * HH }} />)}
                 {d === todayStr && nowMin >= H0 * 60 && nowMin <= H1 * 60 && <div className="pl-now" style={{ top: ((nowMin - H0 * 60) / 60) * HH }} />}
-                {timed.map(({ it, start, end, col, cols }) => { const s0 = clamp(start, H0 * 60, H1 * 60 - SNAP); const e0 = clamp(end, s0 + SNAP, H1 * 60); return block(it, s0, e0 - s0, drag?.id === it.sub.id ? "ghost" : "",
-                  { left: `calc(${(col / cols) * 100}% + 2px)`, width: `calc(${100 / cols}% - 4px)` }); })}
+                {timed.map(({ it, ev, start, end, col, cols }) => {
+                  const pos = { left: `calc(${(col / cols) * 100}% + 2px)`, width: `calc(${100 / cols}% - 4px)` };
+                  if (ev) return olBlock(ev, start, end, pos);
+                  const s0 = clamp(start, H0 * 60, H1 * 60 - SNAP); const e0 = clamp(end, s0 + SNAP, H1 * 60);
+                  return block(it, s0, e0 - s0, drag?.id === it.sub.id ? "ghost" : "", pos);
+                })}
                 {drag && drag.date === d && (() => {
                   const it = items.find((x) => x.sub.id === drag.id);
                   return it ? block(it, drag.start, drag.dur, "preview", { left: 2, right: 2 }) : null;

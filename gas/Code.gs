@@ -191,6 +191,8 @@ function doGet(e) {
   const scope = scopeFor_(email);
   // 開き直した画面が「自分の持っている版は古いか」だけ確かめるための軽い問い合わせ
   if (e.parameter.revOnly) return jsonResponse_({ rev: getProjectsRev_() });
+  // Outlook の予定（Outlook.gs）。自分の予定なので、全体を見られる人にだけ返す
+  if (e.parameter.outlook) return jsonResponse_(scope === "work" ? { events: [], outlook: "unset" } : outlookEvents_(e.parameter.from, e.parameter.to));
   // 版はデータより先に読む（読む間に書き込みがあっても「古い版」側に倒れ、上書きはされない）
   const rev = getProjectsRev_();
   const projects = readProjects_();

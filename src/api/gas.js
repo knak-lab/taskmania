@@ -67,6 +67,16 @@ export async function loadAppData() {
   return { projects: data.projects || [], moyamoyaNotes: data.moyamoyaNotes || [], workAdj: data.workAdj || [], themes: data.themes || [], assignees: data.assignees || [], rev: data.rev ?? null };
 }
 
+// Outlook の予定(読み取り専用)。from/to は YYYY-MM-DD。outlook: ok | unset(未設定) | fetch_failed など
+export async function loadOutlookEvents(from, to) {
+  const url = new URL(GAS_URL);
+  url.searchParams.set('outlook', '1');
+  url.searchParams.set('from', from);
+  url.searchParams.set('to', to);
+  const data = await getJson(url.toString(), 0);
+  return { events: data.events || [], status: data.outlook || 'unset' };
+}
+
 // サーバー側の今の版だけを聞く（開き直した画面が古くなっていないか確かめる用）
 export async function loadRev() {
   const url = new URL(GAS_URL);

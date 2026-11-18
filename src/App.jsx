@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import * as XLSX from "xlsx";
-import { loadAppData, loadRev, loadKamoTodos, saveProjects as gasSave, saveMoyamoyaNotes as gasSaveMoyamoyaNotes, saveWorkAdj as gasSaveWorkAdj, saveThemes as gasSaveThemes, saveAssignees as gasSaveAssignees, sendToCalendar as gasSendToCalendar } from "./api/gas";
+import { loadAppData, loadOutlookEvents, loadRev, loadKamoTodos, saveProjects as gasSave, saveMoyamoyaNotes as gasSaveMoyamoyaNotes, saveWorkAdj as gasSaveWorkAdj, saveThemes as gasSaveThemes, saveAssignees as gasSaveAssignees, sendToCalendar as gasSendToCalendar } from "./api/gas";
 import MindMapView from "./MindMapView";
 import RoadmapView from "./RoadmapView";
 import PlannerView from "./PlannerView";
@@ -1916,6 +1916,20 @@ export default function App() {
   const assigneesSaveTimer = useRef(null);
   const skipNextAssigneesSaveRef = useRef(false);
 
+  // Outlook の予定(kkr>work のカレンダーに読み取り専用で出す)。今日の5週間前〜4ヶ月後を読む
+  const [outlook, setOutlook] = useState({ events: [], status: "" });
+  const loadOutlook = async () => {
+    try {
+      const now = new Date();
+      const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      const from = new Date(now); from.setDate(from.getDate() - 35);
+      const to = new Date(now); to.setDate(to.getDate() + 120);
+      setOutlook(await loadOutlookEvents(ymd(from), ymd(to)));
+    } catch {
+      setOutlook((prev) => ({ ...prev, status: "fetch_failed" }));
+    }
+  };
+
   // 初回ロード
   // quiet: 開き直した時の自動読み込み。全画面の読み込み表示を出さず、失敗しても今の表示のまま
   const handleLoad = async ({ quiet = false } = {}) => {
@@ -1945,6 +1959,7 @@ export default function App() {
       }
       hasLoadedRef.current = true;
       setSaveState("idle");
+      if (data.viewerScope !== "work") loadOutlook();
       try {
         const kamo = await loadKamoTodos();
         setProjects((prev) => mergeKamoSync(prev, kamo.todos, kamo.subtasks));
@@ -3663,6 +3678,7 @@ export default function App() {
               onOpenSub={(pjId, taskId, subId) => setCalSubtaskModal({ pjId, taskId, subId })}
               onToggleDone={toggleSubtaskDone}
               assignees={showWorkSummary ? assignees : undefined}
+              outlook={showWorkSummary && outlook.status ? outlook : undefined}
               extra={(
                 <section style={styles.todayView}>
                   <div style={styles.sectionTitleRow}>
