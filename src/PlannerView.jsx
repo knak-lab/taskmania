@@ -52,6 +52,10 @@ function loadAssigneeFilter() {
 }
 // 担当はサブタスク→タスク→PJの順で、最初に付いているものを使う(新規作成時に親の担当を引き継ぐのと同じ考え方)
 const effAssignees = (p, t, s) => (s.assignees?.length ? s.assignees : t.assignees?.length ? t.assignees : p.assignees || []);
+// 担当者ごとの色(kkr>work のカレンダーだけ)。Outlookの予定はこの色で塗り、サブタスクは少し薄く塗る。
+// 担当が複数なら、先に並んでいる色ありの人の色。色が無い人・担当なしは従来どおり(所有者の色)
+const PERSON_COLORS = { "永井": "#EE8A12", "田之上": "#2F9E5E" };
+const personColor = (names) => { for (const n of names || []) if (PERSON_COLORS[n]) return PERSON_COLORS[n]; return ""; };
 
 function loadShowOutlook() {
   try { return localStorage.getItem("tm_planner_outlook") !== "0"; } catch { return true; }
@@ -101,16 +105,14 @@ export default function PlannerView({ projects, todayStr, ownerColorOf, onUpdate
       if (p.status) continue; // 保留・完了PJは出さない
       for (const t of p.tasks) {
         for (const s of t.subtasks) {
-          if (whoActive) {
-            const a = effAssignees(p, t, s);
-            if (whoActive === NO_ASSIGNEE ? a.length > 0 : !a.includes(whoActive)) continue;
-          }
-          out.push({ pjId: p.id, pjName: (p.goalTarget ? "☆" : "") + p.name, taskId: t.id, taskName: t.name, owner: p.owner, sub: s });
+          const a = effAssignees(p, t, s);
+          if (whoActive && (whoActive === NO_ASSIGNEE ? a.length > 0 : !a.includes(whoActive))) continue;
+          out.push({ pjId: p.id, pjName: (p.goalTarget ? "☆" : "") + p.name, taskId: t.id, taskName: t.name, owner: p.owner, sub: s, pc: assignees ? personColor(a) : "" });
         }
       }
     }
     return out;
-  }, [projects, whoActive]);
+  }, [projects, whoActive, assignees]);
   const byDate = useMemo(() => {
     const m = {};
     items.forEach((it) => { if (it.sub.scheduledDate) (m[it.sub.scheduledDate] ||= []).push(it); });
@@ -228,8 +230,8 @@ export default function PlannerView({ projects, todayStr, ownerColorOf, onUpdate
   const block = (it, start, dur, extraCls, style) => {
     const s = it.sub;
     return (
-      <div key={s.id + (extraCls || "")} className={`pl-block${s.done ? " done" : ""}${extraCls ? " " + extraCls : ""}`}
-        style={{ top: ((start - H0 * 60) / 60) * HH, height: Math.max(14, (dur / 60) * HH), "--oc": ownerColorOf(it.owner), ...style }}
+      <div key={s.id + (extraCls || "")} className={`pl-block${s.done ? " done" : ""}${it.pc ? " person" : ""}${extraCls ? " " + extraCls : ""}`}
+        style={{ top: ((start - H0 * 60) / 60) * HH, height: Math.max(14, (dur / 60) * HH), "--oc": ownerColorOf(it.owner), "--pc": it.pc || undefined, ...style }}
         onPointerDown={(e) => startDrag(e, it, e.target.closest(".pl-rz-top") ? "start" : e.target.closest(".pl-rz-bot") ? "end" : "move")}
         title={`${toTime(start)}〜${toTime(start + dur)} ${s.text}（${it.pjName} ／ ${it.taskName}）`}>
         <div className="pl-rz-top" />
@@ -255,7 +257,7 @@ export default function PlannerView({ projects, todayStr, ownerColorOf, onUpdate
     const dur = e0 - s0;
     const time = `${ev.start}〜${ev.end}`;
     return (
-      <div key={ev.id} className="pl-block ol" style={{ top: ((s0 - H0 * 60) / 60) * HH, height: Math.max(14, (dur / 60) * HH), ...style }}
+      <div key={ev.id} className={`pl-block ol${PERSON_COLORS[ev.who] ? " person" : ""}`} style={{ top: ((s0 - H0 * 60) / 60) * HH, height: Math.max(14, (dur / 60) * HH), "--pc": PERSON_COLORS[ev.who] || undefined, ...style }}
         title={`Outlook ${time} ${ev.title}${ev.location ? `（${ev.location}）` : ""}`}>
         {dur <= 30 ? (
           <div className="pl-block-n"><span className="pl-block-t">{ev.start} </span>{ev.title}</div>
@@ -356,10 +358,10 @@ export default function PlannerView({ projects, todayStr, ownerColorOf, onUpdate
               <div key={d} className={`pl-dayh${d === todayStr ? " today" : ""}${dt.getDay() === 0 ? " sun" : dt.getDay() === 6 ? " sat" : ""}`}>
                 <div className="pl-dayh-d">{md(d)}<small>({WD[dt.getDay()]})</small></div>
                 {(olByDate[d] || []).filter((ev) => !ev.start).map((ev) => (
-                  <div key={ev.id} className="pl-chip ol" title={`Outlook（終日） ${ev.title}${ev.location ? `（${ev.location}）` : ""}`}>{ev.title}</div>
+                  <div key={ev.id} className={`pl-chip ol${PERSON_COLORS[ev.who] ? " person" : ""}`} style={{ "--pc": PERSON_COLORS[ev.who] || undefined }} title={`Outlook（終日） ${ev.title}${ev.location ? `（${ev.location}）` : ""}`}>{ev.title}</div>
                 ))}
                 {shown.map((it) => (
-                  <div key={it.sub.id} className={`pl-chip${it.sub.done ? " done" : ""}${drag?.id === it.sub.id ? " dragging" : ""}`} style={{ "--oc": ownerColorOf(it.owner) }}
+                  <div key={it.sub.id} className={`pl-chip${it.sub.done ? " done" : ""}${it.pc ? " person" : ""}${drag?.id === it.sub.id ? " dragging" : ""}`} style={{ "--oc": ownerColorOf(it.owner), "--pc": it.pc || undefined }}
                     onPointerDown={(e) => startDrag(e, it, "move")} title={`${it.sub.text}（時刻なし。下へドラッグで時間を決める）`}>
                     {it.sub.text}
                   </div>

@@ -89,3 +89,8 @@ body.pl-dragging, body.pl-dragging * { cursor: grabbing !important; user-select:
 }
 .pl-more { border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; padding: 0; text-align: left; }
 .pl-more:hover { color: var(--ink); }
+
+/* 担当者の色(kkr>work、PERSON_COLORS)。Outlookの予定は濃く、サブタスクは同じ色を少し薄く */
+.pl-block.person, .pl-chip.person { background: color-mix(in srgb, var(--pc) 50%, #fff); color: #24303C; border-left: 4px solid var(--pc); }
+.pl-chip.person { border-left-width: 3px; }
+.pl-block.ol.person, .pl-chip.ol.person { background: var(--pc); color: #fff; border: 1px solid var(--pc); border-left: 4px solid color-mix(in srgb, var(--pc) 70%, #000); }
