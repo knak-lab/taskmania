@@ -20,6 +20,8 @@ body.pl-dragging, body.pl-dragging * { cursor: grabbing !important; user-select:
 /* Outlook の予定: 薄い青地に青の縁取りで、タスク(塗りつぶし)と見分ける。動かせない */
 .pl-block.ol { background: #EAF3FC; color: #0B4F8C; border: 1px solid #9CC3E8; border-left: 4px solid #0F6CBD; cursor: default; box-shadow: none; }
 .pl-chip.ol { background: #EAF3FC; color: #0B4F8C; border: 1px solid #9CC3E8; border-left: 3px solid #0F6CBD; cursor: default; }
+.pl-block.ol, .pl-chip.ol { cursor: pointer; } /* 押すとPJ・タスクに紐づけ */
+.pl-block.ol:hover, .pl-chip.ol:hover { filter: brightness(0.96); }
 
 .pl-grid { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: #fff; }
 .pl-head, .pl-body { display: grid; grid-template-columns: 48px repeat(var(--n), minmax(0, 1fr)); }

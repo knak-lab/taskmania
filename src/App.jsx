@@ -1869,6 +1869,9 @@ export default function App() {
   const [dashboardOpen, setDashboardOpen] = useState(false);
   const [moveDateModal, setMoveDateModal] = useState(null);
   const [calSubtaskModal, setCalSubtaskModal] = useState(null);
+  // Outlookの予定をPJ・タスクに紐づける(サブタスクとして取り込む)画面。{ ev, pjId, taskId }
+  const [olLinkModal, setOlLinkModal] = useState(null);
+  const lastOlLinkRef = useRef({ pjId: "", taskId: "" });
   // 俯瞰ガントからタスクを押したときの編集モーダル({ pjId, taskId })
   const [taskEditModal, setTaskEditModal] = useState(null);
   const [calGranularity, setCalGranularity] = useState("week");
@@ -3679,6 +3682,13 @@ export default function App() {
               onToggleDone={toggleSubtaskDone}
               assignees={showWorkSummary ? assignees : undefined}
               outlook={showWorkSummary && outlook.status ? outlook : undefined}
+              onLinkOutlook={(ev) => {
+                // 前回選んだPJ・タスクがこのタブにまだあれば、それを最初から選んでおく
+                const last = lastOlLinkRef.current;
+                const p = visibleProjects.find((x) => x.id === last.pjId && !x.status);
+                const t = p && p.tasks.find((x) => x.id === last.taskId);
+                setOlLinkModal({ ev, pjId: p ? p.id : "", taskId: t ? t.id : "" });
+              }}
               extra={(
                 <section style={styles.todayView}>
                   <div style={styles.sectionTitleRow}>
@@ -4017,6 +4027,48 @@ export default function App() {
                   </label>
                   <div style={styles.modalActions}>
                     <button type="button" onClick={() => { updateSubtaskSchedule(p.id, t.id, s.id, "scheduledDate", moveDateModal.date || null); updateSubtaskSchedule(p.id, t.id, s.id, "startTime", moveDateModal.time || null); setMoveDateModal(null); }} style={styles.addBtn}>変更</button>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
+          {olLinkModal && (() => {
+            const { ev, pjId, taskId } = olLinkModal;
+            const pjs = visibleProjects.filter((p) => !p.status);
+            const p = pjs.find((x) => x.id === pjId);
+            const dur = ev.start ? Math.max(15, timeToMinutes(ev.end) - timeToMinutes(ev.start)) : null;
+            const link = () => {
+              if (!p || !taskId) return;
+              const s = { ...sub(ev.title, false, 2, ev.date, ev.start, dur), outlookId: ev.id, assignees: ev.who ? [ev.who] : [] };
+              setProjects((prev) => prev.map((pp) => (pp.id !== pjId ? pp : { ...pp, tasks: pp.tasks.map((t) => (t.id !== taskId ? t : { ...t, subtasks: [...t.subtasks, s] })) })));
+              lastOlLinkRef.current = { pjId, taskId };
+              setOlLinkModal(null);
+            };
+            return (
+              <div style={styles.modalOverlay} onClick={() => setOlLinkModal(null)}>
+                <div style={styles.modalBox} onClick={(e) => e.stopPropagation()}>
+                  <div style={styles.modalHeader}>
+                    <h3 style={styles.modalTitle}>Outlookの予定をPJ・タスクに紐づける</h3>
+                    <button type="button" onClick={() => setOlLinkModal(null)} aria-label="閉じる" style={styles.modalCloseBtn}>×</button>
+                  </div>
+                  <p style={styles.modalContext}>選んだタスクの下にサブタスクとして取り込みます(件名・日時・時間をコピー)。カレンダーにはOutlookの予定の代わりにそのサブタスクが出ます。</p>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: "#2C3645", marginBottom: 2 }}>{ev.title}</div>
+                  <div style={{ fontSize: 12, color: "#66727F", marginBottom: 12 }}>
+                    {ev.date.slice(5).replace("-", "/")} {ev.start ? `${ev.start}〜${ev.end}（${dur}分）` : "終日"}{ev.location ? ` ／ ${ev.location}` : ""}
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    <select value={pjId} onChange={(e) => setOlLinkModal({ ...olLinkModal, pjId: e.target.value, taskId: "" })} style={styles.select} aria-label="PJ">
+                      <option value="">PJを選ぶ…</option>
+                      {pjs.map((x) => <option key={x.id} value={x.id}>{pjLabel(x)}</option>)}
+                    </select>
+                    <select value={taskId} onChange={(e) => setOlLinkModal({ ...olLinkModal, taskId: e.target.value })} style={styles.select} aria-label="タスク" disabled={!p}>
+                      <option value="">{p ? (p.tasks.length ? "タスクを選ぶ…" : "このPJにはタスクがありません") : "先にPJを選んでください"}</option>
+                      {(p ? p.tasks : []).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                    </select>
+                  </div>
+                  <div style={styles.modalActions}>
+                    <button type="button" onClick={link} disabled={!p || !taskId} style={{ ...styles.addBtn, opacity: !p || !taskId ? 0.4 : 1 }}>紐づける</button>
                   </div>
                 </div>
               </div>

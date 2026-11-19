@@ -66,7 +66,7 @@ function loadMode() {
   try { const m = localStorage.getItem("tm_planner_mode"); return m === "week" || m === "day" ? m : "weekday"; } catch { return "weekday"; }
 }
 
-export default function PlannerView({ projects, todayStr, ownerColorOf, onUpdateFields, onOpenSub, onToggleDone, extra, assignees, outlook }) {
+export default function PlannerView({ projects, todayStr, ownerColorOf, onUpdateFields, onOpenSub, onToggleDone, extra, assignees, outlook, onLinkOutlook }) {
   const [mode, setMode] = useState(loadMode);
   // 担当で絞り込み("" = 全員、NO_ASSIGNEE = 担当なし)。assigneesを渡されたタブ(kkr>work)だけで使う
   const [who, setWho] = useState(loadAssigneeFilter);
@@ -78,12 +78,16 @@ export default function PlannerView({ projects, todayStr, ownerColorOf, onUpdate
   const olByDate = useMemo(() => {
     const m = {};
     // 担当ボタンと連動: 全員なら全部、担当者を選んでいたらその人の予定表だけ(担当なしでは出さない)
+    // サブタスクとして取り込み済み(outlookId)の回は、そのサブタスクが出るので重ねて出さない
+    const linked = new Set();
+    projects.forEach((p) => p.tasks.forEach((t) => t.subtasks.forEach((s) => { if (s.outlookId) linked.add(s.outlookId); })));
     if (outlook && showOl) outlook.events.forEach((ev) => {
+      if (linked.has(ev.id)) return;
       if (whoActive && whoActive !== (ev.who || "")) return;
       (m[ev.date] ||= []).push(ev);
     });
     return m;
-  }, [outlook, showOl, whoActive]);
+  }, [outlook, showOl, whoActive, projects]);
   const [anchor, setAnchor] = useState(todayStr); // 表示の基準日(1日表示ではその日、週表示ではその日を含む週)
   const [open, setOpen] = useState({ today: true, none: true, overdue: false });
   const [drag, setDrag] = useState(null); // 表示用: {id, date, start, dur}
@@ -258,7 +262,8 @@ export default function PlannerView({ projects, todayStr, ownerColorOf, onUpdate
     const time = `${ev.start}〜${ev.end}`;
     return (
       <div key={ev.id} className={`pl-block ol${PERSON_COLORS[ev.who] ? " person" : ""}`} style={{ top: ((s0 - H0 * 60) / 60) * HH, height: Math.max(14, (dur / 60) * HH), "--pc": PERSON_COLORS[ev.who] || undefined, ...style }}
-        title={`Outlook ${time} ${ev.title}${ev.location ? `（${ev.location}）` : ""}`}>
+        onClick={() => onLinkOutlook?.(ev)}
+        title={`Outlook ${time} ${ev.title}${ev.location ? `（${ev.location}）` : ""}${onLinkOutlook ? "\n押すとPJ・タスクに紐づけ" : ""}`}>
         {dur <= 30 ? (
           <div className="pl-block-n"><span className="pl-block-t">{ev.start} </span>{ev.title}</div>
         ) : (
@@ -358,7 +363,8 @@ export default function PlannerView({ projects, todayStr, ownerColorOf, onUpdate
               <div key={d} className={`pl-dayh${d === todayStr ? " today" : ""}${dt.getDay() === 0 ? " sun" : dt.getDay() === 6 ? " sat" : ""}`}>
                 <div className="pl-dayh-d">{md(d)}<small>({WD[dt.getDay()]})</small></div>
                 {(olByDate[d] || []).filter((ev) => !ev.start).map((ev) => (
-                  <div key={ev.id} className={`pl-chip ol${PERSON_COLORS[ev.who] ? " person" : ""}`} style={{ "--pc": PERSON_COLORS[ev.who] || undefined }} title={`Outlook（終日） ${ev.title}${ev.location ? `（${ev.location}）` : ""}`}>{ev.title}</div>
+                  <div key={ev.id} className={`pl-chip ol${PERSON_COLORS[ev.who] ? " person" : ""}`} style={{ "--pc": PERSON_COLORS[ev.who] || undefined }} onClick={() => onLinkOutlook?.(ev)}
+                    title={`Outlook（終日） ${ev.title}${ev.location ? `（${ev.location}）` : ""}${onLinkOutlook ? "\n押すとPJ・タスクに紐づけ" : ""}`}>{ev.title}</div>
                 ))}
                 {shown.map((it) => (
                   <div key={it.sub.id} className={`pl-chip${it.sub.done ? " done" : ""}${it.pc ? " person" : ""}${drag?.id === it.sub.id ? " dragging" : ""}`} style={{ "--oc": ownerColorOf(it.owner), "--pc": it.pc || undefined }}

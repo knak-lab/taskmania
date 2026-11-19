@@ -4,7 +4,7 @@
  * シート構成:
  *   Projects: id | owner | name | subcategory | priority | status
  *   Tasks:    id | projectId | name | startDate | endDate | estimatedMinutes
- *   Subtasks: id | taskId | text | done | priority | scheduledDate | startTime | estimatedMinutes | actualMinutes | createdAt | repeatWeekday | sourceSubtaskId | doneUpdatedAt | repeatEndDate
+ *   Subtasks: id | taskId | text | done | priority | scheduledDate | startTime | estimatedMinutes | actualMinutes | createdAt | repeatWeekday | sourceSubtaskId | doneUpdatedAt | repeatEndDate | assignee | outlookId
  *   Steps:    id | subtaskId | text | done
  *
  * API:
@@ -112,6 +112,7 @@ const SUBTASKS_HEADERS = [
   "doneUpdatedAt",
   "repeatEndDate",
   "assignee",
+  "outlookId", // Outlookの予定から取り込んだサブタスクなら、その予定(回)のid。カレンダーで元の予定を重ねて出さないために使う
 ];
 const STEPS_HEADERS = ["id", "subtaskId", "text", "done"];
 const MOYAMOYA_HEADERS = ["id", "text"];
@@ -336,7 +337,8 @@ function readProjects_() {
       sourceSubtaskId = r[11],
       doneUpdatedAt = r[12],
       repeatEndDate = r[13],
-      subAssignee = r[14];
+      subAssignee = r[14],
+      outlookId = r[15];
     if (!id || !taskId) return;
     if (!subtasksByTask[taskId]) subtasksByTask[taskId] = [];
     subtasksByTask[taskId].push({
@@ -360,6 +362,7 @@ function readProjects_() {
       doneUpdatedAt: doneUpdatedAt ? Number(doneUpdatedAt) : 0,
       repeatEndDate: repeatEndDate ? String(repeatEndDate) : null,
       assignees: splitAssignees_(subAssignee),
+      outlookId: outlookId ? String(outlookId) : null,
     });
   });
 
@@ -506,6 +509,7 @@ function writeProjects_(projects) {
           s.doneUpdatedAt || "",
           s.repeatEndDate || "",
           (s.assignees || []).join(","),
+          s.outlookId || "",
         ]);
         (s.steps || []).forEach(function (st) {
           stepRows.push([st.id, s.id, st.text || "", !!st.done]);
