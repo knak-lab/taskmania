@@ -90,7 +90,7 @@ body.pl-dragging, body.pl-dragging * { cursor: grabbing !important; user-select:
 .pl-more { border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; padding: 0; text-align: left; }
 .pl-more:hover { color: var(--ink); }
 
-/* 担当者の色(kkr>work、PERSON_COLORS)。Outlookの予定は濃く、サブタスクは同じ色を少し薄く */
-.pl-block.person, .pl-chip.person { background: color-mix(in srgb, var(--pc) 50%, #fff); color: #24303C; border-left: 4px solid var(--pc); }
+/* 担当者の色(kkr>work、PERSON_COLORS)。どちらもパステル: Outlookの予定は少し濃いめ、サブタスクはさらに薄く。文字は同じ色の濃い版 */
+.pl-block.person, .pl-chip.person { background: color-mix(in srgb, var(--pc) 16%, #fff); color: color-mix(in srgb, var(--pc) 45%, #1F2A37); border: 1px solid color-mix(in srgb, var(--pc) 30%, #fff); border-left: 4px solid color-mix(in srgb, var(--pc) 55%, #fff); box-shadow: none; }
 .pl-chip.person { border-left-width: 3px; }
-.pl-block.ol.person, .pl-chip.ol.person { background: var(--pc); color: #fff; border: 1px solid var(--pc); border-left: 4px solid color-mix(in srgb, var(--pc) 70%, #000); }
+.pl-block.ol.person, .pl-chip.ol.person { background: color-mix(in srgb, var(--pc) 32%, #fff); border-color: color-mix(in srgb, var(--pc) 45%, #fff); border-left-color: var(--pc); }
